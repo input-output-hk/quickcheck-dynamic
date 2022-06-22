@@ -155,8 +155,8 @@ forAllUniqueScripts :: (DynLogicModel s, Testable a) =>
 forAllUniqueScripts n s f k =
   QC.withSize $ \sz -> let d = unDynFormula f sz in
   case generate chooseUniqueNextStep d n s 500 [] of
-  Nothing   -> counterexample "Generating Non-unique script in forAllUniqueScripts" False
-  Just test -> validDLTest d test .&&. (applyMonitoring d test . property $ k (scriptFromDL test))
+   Nothing   -> counterexample "Generating Non-unique script in forAllUniqueScripts" False
+   Just test -> validDLTest d test .&&. (applyMonitoring d test . property $ k (scriptFromDL test))
 
 forAllScripts :: (DynLogicModel s, Testable a) =>
                    DynFormula s -> (Actions s -> a) -> Property
