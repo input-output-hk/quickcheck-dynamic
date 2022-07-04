@@ -79,12 +79,12 @@ class
   -- observable output from the SUT a given action is expected to produce. For example, here
   -- is a fragment of the `Action RegState` (taken from the `Spec.Dynamic.RegistryModel`  module) :
   --
-  -- @@
+  -- @
   --   data Action RegState a where
   --     Spawn      ::                           Action RegState ThreadId
   --     Register   :: String -> Var ThreadId -> Action RegState (Either ErrorCall ())
   --     KillThread :: Var ThreadId           -> Action RegState ()
-  -- @@
+  -- @
   --
   -- The `Spawn` action should produce a  `ThreadId`, whereas the `KillThread` action does not return
   -- anything.
@@ -97,13 +97,13 @@ class
   -- monad `m` then use this `m` as `ActionMonad` definition with some specific typeclasses constraints
   -- on the `StateModel` instance to restrict the set of possible side-effects, for example:
   --
-  -- @@
+  -- @
   -- data MyState (m :: Type -> Type) = MyState
   --
   -- instance (MonadState Foo m) => MyState m where
   --   ...
   --   type ActionMonad (MyState m) = m
-  -- @@
+  -- @
   type ActionMonad state :: * -> *
 
   -- | Display name for `Action`.
@@ -225,7 +225,7 @@ newtype Var a = Var Int
 
 instance Eq (Step state) where
   (Var i := act) == (Var j := act') =
-    (i == j) && Some act == Some act'
+    i == j && Some act == Some act'
 
 -- Action sequences use Smart shrinking, but this is invisible to
 -- client code because the extra Smart constructor is concealed by a
@@ -252,14 +252,14 @@ instance Eq (Actions state) where
 
 instance (forall a. Show (Action state a)) => Show (Actions state) where
   showsPrec d (Actions as)
-    | d > 10 = ("(" ++) . showsPrec 0 (Actions as) . (")" ++)
+    | d > 10 = ("(" ++) . shows (Actions as) . (")" ++)
     | null as = ("Actions []" ++)
     | otherwise =
-      (("Actions \n [") ++)
+      ("Actions \n [" ++)
         . foldr
           (.)
-          (showsPrec 0 (last as) . ("]" ++))
-          [showsPrec 0 a . (",\n  " ++) | a <- init as]
+          (shows (last as) . ("]" ++))
+          [shows a . (",\n  " ++) | a <- init as]
 
 instance (StateModel state) => Arbitrary (Actions state) where
   arbitrary = do
@@ -300,7 +300,7 @@ instance (StateModel state) => Arbitrary (Actions state) where
   shrink (Actions_ rs as) =
     map (Actions_ rs) (shrinkSmart (map (prune . map fst) . shrinkList shrinker . withStates) as)
     where
-      shrinker ((Var i := act), s) = [((Var i := act'), s) | Some act' <- shrinkAction s act]
+      shrinker (Var i := act, s) = [(Var i := act', s) | Some act' <- shrinkAction s act]
 
 prune :: StateModel state => [Step state] -> [Step state]
 prune = loop initialState
@@ -317,7 +317,7 @@ withStates = loop initialState
   where
     loop _s [] = []
     loop s ((var := act) : as) =
-      ((var := act), s) : loop (nextState s act var) as
+      (var := act, s) : loop (nextState s act var) as
 
 stateAfter :: StateModel state => Actions state -> state
 stateAfter (Actions actions) = loop initialState actions
@@ -339,7 +339,7 @@ runActionsInState ::
 runActionsInState state (Actions_ rejected (Smart _ actions)) = loop state [] actions
   where
     loop _s env [] = do
-      when (not . null $ rejected) $
+      unless (null rejected) $
         monitor (tabulate "Actions rejected by precondition" rejected)
       return (_s, reverse env)
     loop s env ((Var n := act) : as) = do

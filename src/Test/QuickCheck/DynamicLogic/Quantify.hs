@@ -43,7 +43,7 @@ data Quantification a = Quantification
   }
 
 isEmptyQ :: Quantification a -> Bool
-isEmptyQ = not . isJust . genQ
+isEmptyQ = isNothing . genQ
 
 generateQ :: Quantification a -> Gen a
 generateQ q = fromJust (genQ q) `suchThat` isaQ q
@@ -72,7 +72,7 @@ exactlyQ a =
 chooseQ :: (Arbitrary a, Random a, Ord a) => (a, a) -> Quantification a
 chooseQ r@(a, b) =
   Quantification
-    (guard (a <= b) >> (Just $ choose r))
+    (guard (a <= b) >> Just (choose r))
     is
     (filter is . shrink)
   where
@@ -211,7 +211,7 @@ instance Quantifiable a => Quantifiable [a] where
   type Quantifies [a] = [Quantifies a]
   quantify [] = Quantification (Just $ return []) null (const [])
   quantify (a : as) =
-    (mapQ (to, from) $ pairQ (quantify a) (quantify as))
+    mapQ (to, from) (pairQ (quantify a) (quantify as))
       `whereQ` (not . null)
     where
       to (x, xs) = x : xs

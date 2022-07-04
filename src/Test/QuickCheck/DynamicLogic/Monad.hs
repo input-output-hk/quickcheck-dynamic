@@ -120,21 +120,21 @@ forAllUniqueDL ::
   DL s () ->
   (Actions s -> a) ->
   Property
-forAllUniqueDL nextVar initialState d prop = DL.forAllUniqueScripts nextVar initialState (runDL initialState d) prop
+forAllUniqueDL nextVar initState d = DL.forAllUniqueScripts nextVar initState (runDL initState d)
 
 forAllDL ::
   (DL.DynLogicModel s, Testable a) =>
   DL s () ->
   (Actions s -> a) ->
   Property
-forAllDL d prop = DL.forAllScripts (runDL initialState d) prop
+forAllDL d = DL.forAllScripts (runDL initialState d)
 
 forAllDL_ ::
   (DL.DynLogicModel s, Testable a) =>
   DL s () ->
   (Actions s -> a) ->
   Property
-forAllDL_ d prop = DL.forAllScripts_ (runDL initialState d) prop
+forAllDL_ d = DL.forAllScripts_ (runDL initialState d)
 
 forAllMappedDL ::
   (DL.DynLogicModel s, Testable a, Show rep) =>
@@ -159,4 +159,4 @@ forAllMappedDL_ to from fromScript d prop =
   DL.forAllMappedScripts_ to from (runDL initialState d) (prop . fromScript)
 
 withDLTest :: (DL.DynLogicModel s, Testable a) => DL s () -> (Actions s -> a) -> DL.DynLogicTest s -> Property
-withDLTest d prop test = DL.withDLScriptPrefix (runDL initialState d) prop test
+withDLTest d = DL.withDLScriptPrefix (runDL initialState d)
