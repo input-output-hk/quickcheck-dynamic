@@ -54,6 +54,10 @@ something merged we usually require:
 + Change is related to an issue, feature (idea) or bug report - ideally discussed beforehand
 + Well-scoped - we prefer multiple PRs, rather than a big one
 
+### Coding Standards
+
+* Ensure your code is formatted using [ormolu](https://github.com/tweag/ormolu)
+
 ### Versioning & Changelog
 
 During development

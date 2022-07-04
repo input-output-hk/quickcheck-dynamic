@@ -3,37 +3,33 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
-{- This module defines Quantifications, which are used together with
-   forAllQ in DynamicLogic. A Quantification t can be used to generate
-   an t, shrink a t, and recognise a generated t.
--}
-
-module Test.QuickCheck.DynamicLogic.Quantify (
-  Quantification (isaQ),
-  isEmptyQ,
-  generateQ,
-  shrinkQ,
-  arbitraryQ,
-  exactlyQ,
-  elementsQ,
-  oneofQ,
-  frequencyQ,
-  mapQ,
-  whereQ,
-  chooseQ,
-  withGenQ,
-  validQuantification,
-  Quantifiable (..),
-) where
-
-import Data.Maybe
-import Data.Typeable
+-- | This module defines Quantifications, which are used together with
+--   forAllQ in DynamicLogic. A Quantification t can be used to generate
+--   an t, shrink a t, and recognise a generated t.
+module Test.QuickCheck.DynamicLogic.Quantify
+  ( Quantification (isaQ),
+    isEmptyQ,
+    generateQ,
+    shrinkQ,
+    arbitraryQ,
+    exactlyQ,
+    elementsQ,
+    oneofQ,
+    frequencyQ,
+    mapQ,
+    whereQ,
+    chooseQ,
+    withGenQ,
+    validQuantification,
+    Quantifiable (..),
+  )
+where
 
 import Control.Monad
-
+import Data.Maybe
+import Data.Typeable
 import System.Random
 import Test.QuickCheck
-
 import Test.QuickCheck.DynamicLogic.CanGenerate
 
 -- | A `Quantification` over a type @a@ is a generator that can be used with
@@ -41,9 +37,9 @@ import Test.QuickCheck.DynamicLogic.CanGenerate
 --   DL scenarios. In addition to a QuickCheck generator a `Quantification` contains a shrinking
 --   strategy that ensures that shrunk values stay in the range of the generator.
 data Quantification a = Quantification
-  { genQ :: Maybe (Gen a)
-  , isaQ :: a -> Bool
-  , shrQ :: a -> [a]
+  { genQ :: Maybe (Gen a),
+    isaQ :: a -> Bool,
+    shrQ :: a -> [a]
   }
 
 isEmptyQ :: Quantification a -> Bool
@@ -79,8 +75,8 @@ chooseQ r@(a, b) =
     (guard (a <= b) >> (Just $ choose r))
     is
     (filter is . shrink)
- where
-  is x = a <= x && x <= b
+  where
+    is x = a <= x && x <= b
 
 -- | Pick a random value from a list. Treated as an empty choice if the list is empty:
 --
@@ -89,10 +85,10 @@ chooseQ r@(a, b) =
 -- @
 elementsQ :: Eq a => [a] -> Quantification a
 elementsQ as = Quantification g (`elem` as) (\a -> takeWhile (/= a) as)
- where
-  g
-    | null as = Nothing
-    | otherwise = Just (elements as)
+  where
+    g
+      | null as = Nothing
+      | otherwise = Just (elements as)
 
 -- | Choose from a weighted list of quantifications. Treated as an `Control.Applicative.empty`
 --   choice if no quantification has weight > 0.
@@ -105,13 +101,13 @@ frequencyQ iqs =
     )
     (isa iqs)
     (shr iqs)
- where
-  isa [] _ = False
-  isa ((i, q) : iqs) a = (i > 0 && isaQ q a) || isa iqs a
-  shr [] _ = []
-  shr ((i, q) : iqs) a =
-    [a' | i > 0, isaQ q a, a' <- shrQ q a]
-    ++ shr iqs a
+  where
+    isa [] _ = False
+    isa ((i, q) : iqs) a = (i > 0 && isaQ q a) || isa iqs a
+    shr [] _ = []
+    shr ((i, q) : iqs) a =
+      [a' | i > 0, isaQ q a, a' <- shrQ q a]
+        ++ shr iqs a
 
 -- | Choose from a list of quantifications. Same as `frequencyQ` with all weights the same (and >
 --   0).
@@ -184,9 +180,9 @@ instance (Quantifiable a, Quantifiable b) => Quantifiable (a, b) where
 instance (Quantifiable a, Quantifiable b, Quantifiable c) => Quantifiable (a, b, c) where
   type Quantifies (a, b, c) = (Quantifies a, Quantifies b, Quantifies c)
   quantify (a, b, c) = mapQ (to, from) (quantify a `pairQ` (quantify b `pairQ` quantify c))
-   where
-    to (a, (b, c)) = (a, b, c)
-    from (a, b, c) = (a, (b, c))
+    where
+      to (a, (b, c)) = (a, b, c)
+      from (a, b, c) = (a, (b, c))
 
 instance (Quantifiable a, Quantifiable b, Quantifiable c, Quantifiable d) => Quantifiable (a, b, c, d) where
   type
@@ -194,9 +190,9 @@ instance (Quantifiable a, Quantifiable b, Quantifiable c, Quantifiable d) => Qua
       (Quantifies a, Quantifies b, Quantifies c, Quantifies d)
   quantify (a, b, c, d) =
     mapQ (to, from) (quantify a `pairQ` (quantify b `pairQ` (quantify c `pairQ` quantify d)))
-   where
-    to (a, (b, (c, d))) = (a, b, c, d)
-    from (a, b, c, d) = (a, (b, (c, d)))
+    where
+      to (a, (b, (c, d))) = (a, b, c, d)
+      from (a, b, c, d) = (a, (b, (c, d)))
 
 instance
   (Quantifiable a, Quantifiable b, Quantifiable c, Quantifiable d, Quantifiable e) =>
@@ -207,9 +203,9 @@ instance
       (Quantifies a, Quantifies b, Quantifies c, Quantifies d, Quantifies e)
   quantify (a, b, c, d, e) =
     mapQ (to, from) (quantify a `pairQ` (quantify b `pairQ` (quantify c `pairQ` (quantify d `pairQ` quantify e))))
-   where
-    to (a, (b, (c, (d, e)))) = (a, b, c, d, e)
-    from (a, b, c, d, e) = (a, (b, (c, (d, e))))
+    where
+      to (a, (b, (c, (d, e)))) = (a, b, c, d, e)
+      from (a, b, c, d, e) = (a, (b, (c, (d, e))))
 
 instance Quantifiable a => Quantifiable [a] where
   type Quantifies [a] = [Quantifies a]
@@ -217,10 +213,10 @@ instance Quantifiable a => Quantifiable [a] where
   quantify (a : as) =
     (mapQ (to, from) $ pairQ (quantify a) (quantify as))
       `whereQ` (not . null)
-   where
-    to (x, xs) = x : xs
-    from (x : xs) = (x, xs)
-    from [] = error "quantify: impossible"
+    where
+      to (x, xs) = x : xs
+      from (x : xs) = (x, xs)
+      from [] = error "quantify: impossible"
 
 validQuantification :: Show a => Quantification a -> Property
 validQuantification q =

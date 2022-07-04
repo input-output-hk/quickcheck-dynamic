@@ -9,35 +9,33 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
 -- | Simple (stateful) Model-Based Testing library for use with Haskell QuickCheck.
 --
 -- This module provides the basic machinery to define a `StateModel` from which /traces/ can
 -- be generated and executed against some /actual/ implementation code to define monadic `Property`
 -- to be asserted by QuickCheck.
-module Test.QuickCheck.StateModel (
-  StateModel (..),
-  Any (..),
-  Step (..),
-  LookUp,
-  Var (..), -- we export the constructors so that users can construct test cases
-  Actions (..),
-  pattern Actions,
-  EnvEntry (..),
-  Env,
-  stateAfter,
-  runActions,
-  runActionsInState,
-  lookUpVar,
-  lookUpVarMaybe,
-  invertLookupVarMaybe,
-) where
+module Test.QuickCheck.StateModel
+  ( StateModel (..),
+    Any (..),
+    Step (..),
+    LookUp,
+    Var (..), -- we export the constructors so that users can construct test cases
+    Actions (..),
+    pattern Actions,
+    EnvEntry (..),
+    Env,
+    stateAfter,
+    runActions,
+    runActionsInState,
+    lookUpVar,
+    lookUpVarMaybe,
+    invertLookupVarMaybe,
+  )
+where
 
 import Control.Monad
-
 import Data.Data
-
 import Test.QuickCheck as QC
 import Test.QuickCheck.DynamicLogic.SmartShrinking
 import Test.QuickCheck.Monadic
@@ -67,9 +65,9 @@ import Test.QuickCheck.Monadic
 --  * `monitoring`: Allows using various reporting and monitoring functions from QuickCheck framework like `label`,
 --    `tabulate` or `counterexample`.
 class
-  ( forall a. Show (Action state a)
-  , Monad (ActionMonad state)
-  , Show state
+  ( forall a. Show (Action state a),
+    Monad (ActionMonad state),
+    Show state
   ) =>
   StateModel state
   where
@@ -267,66 +265,65 @@ instance (StateModel state) => Arbitrary (Actions state) where
   arbitrary = do
     (as, rejected) <- arbActions initialState 1
     return $ Actions_ rejected (Smart 0 as)
-   where
-    arbActions :: state -> Int -> Gen ([Step state], [String])
-    arbActions s step = sized $ \n ->
-      let w = n `div` 2 + 1
-       in frequency
-            [ (1, return ([], []))
-            ,
-              ( w
-              , do
-                  (mact, rej) <- satisfyPrecondition
-                  case mact of
-                    Just (Some act) -> do
-                      (as, rejected) <- arbActions (nextState s act (Var step)) (step + 1)
-                      return ((Var step := act) : as, rej ++ rejected)
-                    Just Error{} -> error "impossible"
-                    Nothing ->
-                      return ([], [])
-              )
-            ]
-     where
-      satisfyPrecondition = sized $ \n -> go n (2 * n) [] -- idea copied from suchThatMaybe
-      go m n rej
-        | m > n = return (Nothing, rej)
-        | otherwise = do
-          a <- resize m $ arbitraryAction s
-          case a of
-            Some act ->
-              if precondition s act
-                then return (Just (Some act), rej)
-                else go (m + 1) n (actionName act : rej)
-            Error _ ->
-              go (m + 1) n rej
+    where
+      arbActions :: state -> Int -> Gen ([Step state], [String])
+      arbActions s step = sized $ \n ->
+        let w = n `div` 2 + 1
+         in frequency
+              [ (1, return ([], [])),
+                ( w,
+                  do
+                    (mact, rej) <- satisfyPrecondition
+                    case mact of
+                      Just (Some act) -> do
+                        (as, rejected) <- arbActions (nextState s act (Var step)) (step + 1)
+                        return ((Var step := act) : as, rej ++ rejected)
+                      Just Error {} -> error "impossible"
+                      Nothing ->
+                        return ([], [])
+                )
+              ]
+        where
+          satisfyPrecondition = sized $ \n -> go n (2 * n) [] -- idea copied from suchThatMaybe
+          go m n rej
+            | m > n = return (Nothing, rej)
+            | otherwise = do
+              a <- resize m $ arbitraryAction s
+              case a of
+                Some act ->
+                  if precondition s act
+                    then return (Just (Some act), rej)
+                    else go (m + 1) n (actionName act : rej)
+                Error _ ->
+                  go (m + 1) n rej
 
   shrink (Actions_ rs as) =
     map (Actions_ rs) (shrinkSmart (map (prune . map fst) . shrinkList shrinker . withStates) as)
-   where
-    shrinker ((Var i := act), s) = [((Var i := act'), s) | Some act' <- shrinkAction s act]
+    where
+      shrinker ((Var i := act), s) = [((Var i := act'), s) | Some act' <- shrinkAction s act]
 
 prune :: StateModel state => [Step state] -> [Step state]
 prune = loop initialState
- where
-  loop _s [] = []
-  loop s ((var := act) : as)
-    | precondition s act =
-      (var := act) : loop (nextState s act var) as
-    | otherwise =
-      loop s as
+  where
+    loop _s [] = []
+    loop s ((var := act) : as)
+      | precondition s act =
+        (var := act) : loop (nextState s act var) as
+      | otherwise =
+        loop s as
 
 withStates :: StateModel state => [Step state] -> [(Step state, state)]
 withStates = loop initialState
- where
-  loop _s [] = []
-  loop s ((var := act) : as) =
-    ((var := act), s) : loop (nextState s act var) as
+  where
+    loop _s [] = []
+    loop s ((var := act) : as) =
+      ((var := act), s) : loop (nextState s act var) as
 
 stateAfter :: StateModel state => Actions state -> state
 stateAfter (Actions actions) = loop initialState actions
- where
-  loop s [] = s
-  loop s ((var := act) : as) = loop (nextState s act var) as
+  where
+    loop s [] = s
+    loop s ((var := act) : as) = loop (nextState s act var) as
 
 runActions ::
   StateModel state =>
@@ -340,18 +337,18 @@ runActionsInState ::
   Actions state ->
   PropertyM (ActionMonad state) (state, Env)
 runActionsInState state (Actions_ rejected (Smart _ actions)) = loop state [] actions
- where
-  loop _s env [] = do
-    when (not . null $ rejected) $
-      monitor (tabulate "Actions rejected by precondition" rejected)
-    return (_s, reverse env)
-  loop s env ((Var n := act) : as) = do
-    pre $ precondition s act
-    ret <- run (perform s act (lookUpVar env))
-    let name = actionName act
-    monitor (tabulate "Actions" [name])
-    let s' = nextState s act (Var n)
-        env' = (Var n :== ret) : env
-    monitor (monitoring (s, s') act (lookUpVar env') ret)
-    assert $ postcondition s act (lookUpVar env) ret
-    loop s' env' as
+  where
+    loop _s env [] = do
+      when (not . null $ rejected) $
+        monitor (tabulate "Actions rejected by precondition" rejected)
+      return (_s, reverse env)
+    loop s env ((Var n := act) : as) = do
+      pre $ precondition s act
+      ret <- run (perform s act (lookUpVar env))
+      let name = actionName act
+      monitor (tabulate "Actions" [name])
+      let s' = nextState s act (Var n)
+          env' = (Var n :== ret) : env
+      monitor (monitoring (s, s') act (lookUpVar env') ret)
+      assert $ postcondition s act (lookUpVar env) ret
+      loop s' env' as
