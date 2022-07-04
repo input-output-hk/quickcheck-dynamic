@@ -1,4 +1,4 @@
-# Contributing to Hydra
+# Contributing to quickcheck-dynamic
 
 Thanks for considering contributing to the development of quickcheck-dynamic.
 
@@ -7,7 +7,7 @@ but we also accept contributions to the documentation and the obviously to the
 code itself.
 
 This document contains guidelines to help you get started and how to make sure
-your contribution gets accepted, making you our newest Hydra contributor!
+your contribution gets accepted.
 
 ## Communication channels
 
@@ -17,10 +17,6 @@ to reach out to the team before submitting issues.
 ## Your first contribution
 
 Contributing to the documentation, reporting bugs or proposing features are awesome ways to get started.
-
-### Documentation
-
-TBD
 
 ### Issues
 
@@ -48,10 +44,6 @@ how something is implemented in a feature idea or bug ticket beforehand.
 ### Building & Testing
 
 See the [README.md](./README.md#building) file for instructions on how to build and test this package.
-
-### Coding standards
-
-TBD
 
 ### Creating a pull request
 
