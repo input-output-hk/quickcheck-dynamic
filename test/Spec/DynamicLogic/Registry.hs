@@ -1,54 +1,62 @@
+{-# LANGUAGE ConstraintKinds  #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeApplications #-}
 -- A simple local name service for threads... behaves like the Erlang
 -- process registry.
-
 module Spec.DynamicLogic.Registry where
 
-import Control.Concurrent
+-- import Control.Concurrent
 import Control.Monad
-import Data.IORef
-import GHC.Conc
-import System.IO.Unsafe
+import Control.Monad.Class.MonadFork
+import Control.Monad.Class.MonadSTM
+import Control.Monad.Class.MonadThrow
+-- import Data.IORef
+-- import GHC.Conc hiding (TVar)
+-- import System.IO.Unsafe
 
-alive :: ThreadId -> IO Bool
-alive tid = do
-  s <- threadStatus tid
-  return $ s /= ThreadFinished && s /= ThreadDied
+type Registry m = TVar m [(String, ThreadId m)]
 
-{-# NOINLINE registry #-}
-registry :: IORef [(String,ThreadId)]
-registry = unsafePerformIO (newIORef [])
+type MonadRegistry m = (MonadSTM m, MonadFork m, MonadThrow m, MonadFail m, MonadFail (STM m))
 
-whereis :: String -> IO (Maybe ThreadId)
-whereis name = do
-  reg <- readRegistry
+alive :: MonadRegistry m => ThreadId m -> m Bool
+alive _ = do
+  return True
+  -- s <- threadStatus tid
+  -- return $ s /= ThreadFinished && s /= ThreadDied
+
+setupRegistry :: forall m. MonadRegistry m => m (Registry m)
+setupRegistry = atomically $ newTVar @m []
+
+whereis :: MonadRegistry m => Registry m -> String -> m (Maybe (ThreadId m))
+whereis registry name = do
+  reg <- readRegistry registry
   return $ lookup name reg
 
-register :: String -> ThreadId -> IO ()
-register name tid = do
+register :: MonadRegistry m => Registry m -> String -> ThreadId m -> m ()
+register registry name tid = do
   ok <- alive tid
-  reg <- readRegistry
+  reg <- readRegistry registry
   if ok && name `notElem` map fst reg && tid `notElem` map snd reg
-    then atomicModifyIORef registry $ \reg' ->
+    then atomically $ do
+           reg' <- readTVar registry
            if name `notElem` map fst reg' && tid `notElem` map snd reg'
-             then ((name,tid):reg',())
-             else (reg',badarg)
-    else badarg
+             then writeTVar registry ((name, tid) : reg')
+             else fail "badarg"
+    else fail "badarg"
 
-unregister :: String -> IO ()
-unregister name = do
-  reg <- readRegistry
+unregister :: MonadRegistry m => Registry m -> String -> m ()
+unregister registry name = do
+  reg <- readRegistry registry
   if name `elem` map fst reg
-    then atomicModifyIORef registry $ \reg' ->
-           (filter ((/=name).fst) reg',
-            ())
-    else badarg
+    then atomically $ modifyTVar registry $ filter ((/= name) . fst)
+    else fail "badarg"
 
-readRegistry :: IO [(String, ThreadId)]
-readRegistry = do
-  reg <- readIORef registry
-  garbage <- filterM (fmap not.alive) (map snd reg)
-  atomicModifyIORef' registry $ \reg' ->
-    let reg'' = filter ((`notElem` garbage).snd) reg' in (reg'',reg'')
+readRegistry :: MonadRegistry m => Registry m -> m [(String, ThreadId m)]
+readRegistry registry = garbageCollect registry *> atomically (readTVar registry)
 
-badarg :: a
-badarg = error "bad argument"
+garbageCollect :: forall m. MonadRegistry m => Registry m -> m ()
+garbageCollect registry = do
+  reg <- atomically $ readTVar @m registry
+  garbage <- filterM (fmap not . alive) (map snd reg)
+  atomically $ modifyTVar registry $ filter ((`notElem` garbage) . snd)
+  return ()

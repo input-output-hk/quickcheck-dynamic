@@ -39,10 +39,16 @@ library
         Test.QuickCheck.DynamicLogic.SmartShrinking
         Test.QuickCheck.DynamicLogic.Utils
         Test.QuickCheck.StateModel
+        Test.QuickCheck.StateModel.IOSim
     build-depends:
         QuickCheck -any,
         base >=4.7 && <5,
         random -any,
+        io-classes,
+        io-sim,
+        lens,
+        containers,
+        mtl
 
 test-suite quickcheck-dynamic-test
     import: lang
@@ -61,3 +67,6 @@ test-suite quickcheck-dynamic-test
         quickcheck-dynamic -any,
         tasty -any,
         tasty-quickcheck -any,
+        io-classes,
+        io-sim,
+        mtl
