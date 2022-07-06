@@ -4,8 +4,8 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
 -- | This module defines Quantifications, which are used together with
---   forAllQ in DynamicLogic. A Quantification t can be used to generate
---   an t, shrink a t, and recognise a generated t.
+--   forAllQ in DynamicLogic. A `Quantification t` can be used to generate
+--   a `t`, shrink a `t`, and recognise a generated `t`.
 module Test.QuickCheck.DynamicLogic.Quantify
   ( Quantification (isaQ),
     isEmptyQ,

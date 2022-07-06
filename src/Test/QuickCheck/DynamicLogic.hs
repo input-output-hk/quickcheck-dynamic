@@ -46,7 +46,15 @@ import Test.QuickCheck.DynamicLogic.SmartShrinking
 import Test.QuickCheck.DynamicLogic.Utils qualified as QC
 import Test.QuickCheck.StateModel
 
--- | Dynamic logic formulae.
+-- | A `DynFormula` may depend on the QuickCheck size parameter
+newtype DynFormula s = DynFormula {unDynFormula :: Int -> DynLogic s}
+
+{- | Base Dynamic logic formulae language.
+ Formulae are parameterised
+ over the type of state `s` to which they apply. A `DynLogic` value
+ cannot be constructed directly, one has to use the various "smart
+ constructors" provided, see the /Building formulae/ section.
+-}
 data DynLogic s
     = -- | False
       EmptySpec
@@ -74,26 +82,46 @@ data ChoiceType = Angelic | Demonic
 
 type DynPred s = s -> DynLogic s
 
-newtype DynFormula s = DynFormula {unDynFormula :: Int -> DynLogic s}
+-- * Building formulae
 
--- a DynFormula may depend on the QuickCheck size parameter
-
--- API for building formulae
-
+-- | `False` for DL formulae.
 ignore :: DynFormula s
+
+-- | `True` for DL formulae.
 passTest :: DynFormula s
+
+-- | Given `f` must be `True` given /any/ state.
 afterAny :: (s -> DynFormula s) -> DynFormula s
+
+{- | Given `f` must be `True` after /some/ action.
+ `f` is passed the state resulting from executing the `Action`.
+-}
 after ::
     (Show a, Typeable a, Eq (Action s a)) =>
     Action s a ->
     (s -> DynFormula s) ->
     DynFormula s
+
+{- | Disjunction for DL formulae.
+ Is `True` if either formula is `True`. The choice is `Angelic`, ie. it is
+ always made by the "caller". This is  mostly important in case a test is
+ `stuck`.
+-}
 (|||) :: DynFormula s -> DynFormula s -> DynFormula s
+
+{- | First-order quantification of variables.
+ Formula `f` is `True` iff. it is `True` /for all/ possible values of `q`. The
+ underlying framework will `generate` values of `q` and check the formula holds
+ for those values. `Quantifiable` values are thus values that can be generated
+ and checked and the `Test.QuickCheck.DynamicLogic.Quantify` module defines
+ basic combinators to build those from building blocks.
+-}
 forAllQ ::
     Quantifiable q =>
     q ->
     (Quantifies q -> DynFormula s) ->
     DynFormula s
+--
 weight :: Double -> DynFormula s -> DynFormula s
 withSize :: (Int -> DynFormula s) -> DynFormula s
 toStop :: DynFormula s -> DynFormula s
@@ -101,6 +129,7 @@ done :: s -> DynFormula s
 errorDL :: String -> DynFormula s
 monitorDL :: (Property -> Property) -> DynFormula s -> DynFormula s
 always :: (s -> DynFormula s) -> (s -> DynFormula s)
+
 ignore = DynFormula . const $ EmptySpec
 
 passTest = DynFormula . const $ Stop
