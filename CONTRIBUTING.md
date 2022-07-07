@@ -56,7 +56,7 @@ something merged we usually require:
 
 ### Coding Standards
 
-* Ensure your code is formatted using [ormolu](https://github.com/tweag/ormolu)
+* Ensure your code is formatted using [fourmolu](https://github.com/fourmolu/fourmolu) with the provided [configuration file](./fourmolu.yaml).
 
 ### Versioning & Changelog
 
