@@ -100,9 +100,19 @@ class (forall a. Show (Action state a),
   -- @@
   -- data MyState (m :: Type -> Type) = MyState
   --
-  -- instance (MonadState Foo m) => MyState m where
+  -- instance (MonadState Foo m) => StateModel (MyState m) where
   --   ...
-  --   type ActionMonad (MyState m) = m
+  --   type ActionMonad (MyState m) s = m
+  -- @@
+  --
+  -- Yet a third option is to use ST or IOSim as the target monad:
+  --
+  -- @@
+  -- data MyState = MyState
+  --
+  -- instance StateModel MyState where
+  --   ...
+  --   type ActionMonad MyState s = IOSim s
   -- @@
   type ActionMonad state s :: * -> *
 
