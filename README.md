@@ -33,6 +33,8 @@ research paper.
 
 ## Building
 
+### Without nix
+
 This package uses a simple [Cabal](https://www.haskell.org/cabal/)-based build. To build from source:
 
 * Ensure both `ghc` and `cabal` executables are in your `PATH`.
@@ -45,4 +47,22 @@ This package uses a simple [Cabal](https://www.haskell.org/cabal/)-based build. 
 * To run tests:
   ```
   cabal test
+  ```
+
+### With nix
+
+This repository comes with some [nix](https://nixos.org) files which might or might not help hacking on quickcheck-dynamic simpler.
+Before you start using nix, please make sure you've configured haskell.nix caching as per [those instructions](https://input-output-hk.github.io/haskell.nix/tutorials/getting-started.html#setting-up-the-binary-cache).
+
+* Building with nix should be as simple as:
+  ```
+  nix-build -A quickcheck-dynamic.components.library
+  ```
+* To enter a shell providing basic development tool:
+  ```
+  nix-shell
+  ```
+  This can automated using [direnv](https://direnv.net/):
+  ```
+  direnv allow
   ```
