@@ -1,32 +1,31 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module Test.QuickCheck.DynamicLogic.Monad
-  ( DL,
-    action,
-    anyAction,
-    anyActions,
-    anyActions_,
-    stopping,
-    weight,
-    getSize,
-    getModelStateDL,
-    assert,
-    assertModel,
-    monitorDL,
-    forAllQ,
-    forAllDL,
-    forAllDL_,
-    forAllMappedDL,
-    forAllMappedDL_,
-    forAllUniqueDL,
-    withDLTest,
-    DL.DynLogic,
-    DL.DynLogicModel (..),
-    DL.DynLogicTest (..),
-    DL.TestStep (..),
-    module Test.QuickCheck.DynamicLogic.Quantify,
-  )
-where
+module Test.QuickCheck.DynamicLogic.Monad (
+  DL,
+  action,
+  anyAction,
+  anyActions,
+  anyActions_,
+  stopping,
+  weight,
+  getSize,
+  getModelStateDL,
+  assert,
+  assertModel,
+  monitorDL,
+  forAllQ,
+  forAllDL,
+  forAllDL_,
+  forAllMappedDL,
+  forAllMappedDL_,
+  forAllUniqueDL,
+  withDLTest,
+  DL.DynLogic,
+  DL.DynLogicModel (..),
+  DL.DynLogicTest (..),
+  DL.TestStep (..),
+  module Test.QuickCheck.DynamicLogic.Quantify,
+) where
 
 import Control.Applicative
 import Control.Monad
@@ -58,7 +57,8 @@ anyAction = DL $ \_ k -> DL.afterAny $ k ()
 
 anyActions :: Int -> DL s ()
 anyActions n =
-  stopping <|> pure ()
+  stopping
+    <|> pure ()
     <|> (weight (fromIntegral n) >> anyAction >> anyActions n)
 
 -- average number of actions same as average length of a list

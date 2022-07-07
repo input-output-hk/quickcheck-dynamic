@@ -8,14 +8,14 @@ import Test.QuickCheck
 --   otherwise @True@ (and we know such an x can be generated).
 canGenerate :: Double -> Gen a -> (a -> Bool) -> Bool
 canGenerate prob g p = unsafePerformIO $ tryToGenerate 1
-  where
-    tryToGenerate luck
-      | luck < eps = return False
-      | otherwise = do
+ where
+  tryToGenerate luck
+    | luck < eps = return False
+    | otherwise = do
         x <- generate g
         if p x
           then return True
           else tryToGenerate (luck * (1 - prob))
 
-    -- Our confidence level is 1-eps
-    eps = 1.0e-9
+  -- Our confidence level is 1-eps
+  eps = 1.0e-9
