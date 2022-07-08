@@ -1,6 +1,7 @@
-{-# LANGUAGE ConstraintKinds  #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeApplications #-}
+
 -- A simple local name service for threads... behaves like the Erlang
 -- process registry.
 module Spec.DynamicLogic.Registry where
@@ -10,6 +11,7 @@ import Control.Monad
 import Control.Monad.Class.MonadFork
 import Control.Monad.Class.MonadSTM
 import Control.Monad.Class.MonadThrow
+
 -- import Data.IORef
 -- import GHC.Conc hiding (TVar)
 -- import System.IO.Unsafe
@@ -21,8 +23,9 @@ type MonadRegistry m = (MonadSTM m, MonadFork m, MonadThrow m, MonadFail m, Mona
 alive :: MonadRegistry m => ThreadId m -> m Bool
 alive _ = do
   return True
-  -- s <- threadStatus tid
-  -- return $ s /= ThreadFinished && s /= ThreadDied
+
+-- s <- threadStatus tid
+-- return $ s /= ThreadFinished && s /= ThreadDied
 
 setupRegistry :: forall m. MonadRegistry m => m (Registry m)
 setupRegistry = atomically $ newTVar @m []
@@ -38,10 +41,10 @@ register registry name tid = do
   reg <- readRegistry registry
   if ok && name `notElem` map fst reg && tid `notElem` map snd reg
     then atomically $ do
-           reg' <- readTVar registry
-           if name `notElem` map fst reg' && tid `notElem` map snd reg'
-             then writeTVar registry ((name, tid) : reg')
-             else fail "badarg"
+      reg' <- readTVar registry
+      if name `notElem` map fst reg' && tid `notElem` map snd reg'
+        then writeTVar registry ((name, tid) : reg')
+        else fail "badarg"
     else fail "badarg"
 
 unregister :: MonadRegistry m => Registry m -> String -> m ()

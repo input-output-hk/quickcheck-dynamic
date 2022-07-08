@@ -111,7 +111,7 @@ frequencyQ iqs =
   shr [] _ = []
   shr ((i, q) : iqs) a =
     [a' | i > 0, isaQ q a, a' <- shrQ q a]
-    ++ shr iqs a
+      ++ shr iqs a
 
 -- | Choose from a list of quantifications. Same as `frequencyQ` with all weights the same (and >
 --   0).

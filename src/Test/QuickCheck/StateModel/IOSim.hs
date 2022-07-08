@@ -1,17 +1,18 @@
-{-# LANGUAGE DataKinds             #-}
-{-# LANGUAGE DerivingStrategies    #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE GADTs                 #-}
-{-# LANGUAGE KindSignatures        #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE PolyKinds             #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE QuantifiedConstraints #-}
-{-# LANGUAGE TemplateHaskell       #-}
-{-# LANGUAGE TupleSections         #-}
-{-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
+
 module Test.QuickCheck.StateModel.IOSim where
 
 -- TODO: It's possible that we can get away with only using `io-classes` as a dependency here. That would greatly help.
@@ -32,7 +33,7 @@ import Test.QuickCheck.Monadic
 -- Utility functions
 
 invert :: Eq v => Map k v -> v -> Maybe k
-invert map v = lookup v [ (v, k) | (k, v) <- Map.toList map ]
+invert map v = lookup v [(v, k) | (k, v) <- Map.toList map]
 
 data FEnvEntry f where
   (:==) :: (Typeable a, Eq (f a)) => Int -> f a -> FEnvEntry f
@@ -56,15 +57,18 @@ invertFEnv ((i :== fa) : env) fa'
 data MThreadId
 data MTVar (a :: *)
 
-data ModelEnv s = ModelEnv { _threadIdEnv :: Map Int (ThreadId (IOSim s))
-                           , _tvarEnv     :: FEnv (TVar (IOSim s))
-                           }
+data ModelEnv s = ModelEnv
+  { _threadIdEnv :: Map Int (ThreadId (IOSim s))
+  , _tvarEnv :: FEnv (TVar (IOSim s))
+  }
 makeLenses 'ModelEnv
 
 initialModelEnv :: ModelEnv s
-initialModelEnv = ModelEnv { _threadIdEnv = mempty
-                           , _tvarEnv     = mempty
-                           }
+initialModelEnv =
+  ModelEnv
+    { _threadIdEnv = mempty
+    , _tvarEnv = mempty
+    }
 
 newtype Model (t :: k) = Model Int deriving (Eq, Ord)
 
@@ -86,26 +90,29 @@ instance Instantiate (Model MThreadId) where
   instantiate (Model idx) env = fromJust $ env ^. threadIdEnv . at idx -- TODO error message
   encapsulate t env =
     case invert (env ^. threadIdEnv) t of
-      Nothing -> let idx | null $ env ^. threadIdEnv = 0
-                         | otherwise                 = 1 + fst (Map.findMax (env ^. threadIdEnv))
-                     env' = env & threadIdEnv . at idx .~ Just t
-                 in (Model idx, env')
-      Just k  -> (Model k, env)
+      Nothing ->
+        let idx
+              | null $ env ^. threadIdEnv = 0
+              | otherwise = 1 + fst (Map.findMax (env ^. threadIdEnv))
+            env' = env & threadIdEnv . at idx .~ Just t
+         in (Model idx, env')
+      Just k -> (Model k, env)
 
 instance (Typeable a) => Instantiate (Model (MTVar a)) where
   type Instantiated (Model (MTVar a)) s = TVar (IOSim s) a
-  instantiate (Model idx) env = fromJust . lookupFEnv idx  $ env ^. tvarEnv -- TODO error message
+  instantiate (Model idx) env = fromJust . lookupFEnv idx $ env ^. tvarEnv -- TODO error message
   encapsulate t env =
     case invertFEnv (env ^. tvarEnv) t of
-      Nothing -> let idx = length (env ^. tvarEnv)
-                     env' = env & tvarEnv %~ (idx :== t :)
-                 in (Model idx, env')
-      Just k  -> (Model k, env)
+      Nothing ->
+        let idx = length (env ^. tvarEnv)
+            env' = env & tvarEnv %~ (idx :== t :)
+         in (Model idx, env')
+      Just k -> (Model k, env)
 
 instance Instantiate (Concrete t) where
   type Instantiated (Concrete t) s = t
   instantiate (Concrete t) _ = t
-  encapsulate t env          = (Concrete t, env)
+  encapsulate t env = (Concrete t, env)
 
 -- TODO: this is all a bit awkward and not necessarily
 -- the final version of this. For example, the Instantiate instance for Maybe means that
@@ -117,10 +124,10 @@ instance Instantiate (Concrete t) where
 
 instance Instantiate t => Instantiate (Maybe t) where
   type Instantiated (Maybe t) s = Maybe (Instantiated t s)
-  instantiate Nothing _    = Nothing
+  instantiate Nothing _ = Nothing
   instantiate (Just t) env = Just (instantiate t env)
 
-  encapsulate Nothing env  = (Nothing, env)
+  encapsulate Nothing env = (Nothing, env)
   encapsulate (Just t) env = let (t', env') = encapsulate t env in (Just t', env')
 
 data ModelEnvState st s = ModelEnvState st (ModelEnv s)
@@ -129,18 +136,18 @@ initialModelEnvState :: st -> ModelEnvState st s
 initialModelEnvState st = ModelEnvState st initialModelEnv
 
 -- TODO: make synonym with proper state instance
-newtype IOSimModel st s a = IOSimModel { unIOSimModel :: StateT (ModelEnvState st s) (IOSim s) a }
+newtype IOSimModel st s a = IOSimModel {unIOSimModel :: StateT (ModelEnvState st s) (IOSim s) a}
   deriving newtype (Functor, Applicative, Monad)
 
 instance MonadState st (IOSimModel st s) where
   get = IOSimModel $ do ModelEnvState st _ <- get; return st
-  put st = IOSimModel $ do modify $ \ (ModelEnvState _ env) -> ModelEnvState st env
+  put st = IOSimModel $ do modify $ \(ModelEnvState _ env) -> ModelEnvState st env
 
 liftIOSim :: IOSim s a -> IOSimModel st s a
 liftIOSim m = IOSimModel $ lift m
 
 runPropertyIOSim :: PropertyM (IOSimModel st s) a -> st -> PropertyM (IOSim s) (a, st)
-runPropertyIOSim p st = MkPropertyM $ \ k -> do
+runPropertyIOSim p st = MkPropertyM $ \k -> do
   m <- unPropertyM (do a <- p; st <- run get; return (a, st)) $ fmap liftIOSim . k
   return $ evalStateT (unIOSimModel m) (initialModelEnvState st)
 
