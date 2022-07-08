@@ -22,10 +22,9 @@ type MonadRegistry m = (MonadSTM m, MonadFork m, MonadThrow m, MonadFail m, Mona
 
 alive :: MonadRegistry m => ThreadId m -> m Bool
 alive _ = do
+  -- s <- threadStatus tid
+  -- return $ s /= ThreadFinished && s /= ThreadDied
   return True
-
--- s <- threadStatus tid
--- return $ s /= ThreadFinished && s /= ThreadDied
 
 setupRegistry :: forall m. MonadRegistry m => m (Registry m)
 setupRegistry = atomically $ newTVar @m []

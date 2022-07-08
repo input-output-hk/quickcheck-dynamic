@@ -1,5 +1,5 @@
 cabal-version:   2.2
-name:            quickcheck-dynamic
+name:            quickcheck-io-sim-compat
 version:         0.1.0.0
 license:         Apache-2.0
 license-files:
@@ -47,25 +47,17 @@ library
     import: lang
     hs-source-dirs: src
     exposed-modules:
-        Test.QuickCheck.DynamicLogic
-        Test.QuickCheck.DynamicLogic.CanGenerate
-        Test.QuickCheck.DynamicLogic.Monad
-        Test.QuickCheck.DynamicLogic.Quantify
-        Test.QuickCheck.DynamicLogic.SmartShrinking
-        Test.QuickCheck.DynamicLogic.Utils
-        Test.QuickCheck.StateModel
         Test.QuickCheck.StateModel.IOSim
     build-depends:
         QuickCheck -any,
         base >=4.7 && <5,
-        random -any,
         io-classes,
         io-sim,
         lens,
         containers,
         mtl
 
-test-suite quickcheck-dynamic-test
+test-suite quickcheck-io-sim-compat-test
     import: lang
     type: exitcode-stdio-1.0
     main-is: Spec.hs
@@ -74,12 +66,11 @@ test-suite quickcheck-dynamic-test
         Spec.DynamicLogic.Registry
         Spec.DynamicLogic.RegistryModel
     ghc-options: -rtsopts
-                 -- See Plutus Tx readme
-                 -fobject-code -fno-ignore-interface-pragmas -fno-omit-interface-pragmas
     build-depends:
         QuickCheck -any,
         base >=4.7 && <5,
         quickcheck-dynamic -any,
+        quickcheck-io-sim-compat -any,
         tasty -any,
         tasty-quickcheck -any,
         io-classes,

@@ -13,6 +13,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 
+-- TODO: move to its own statemodel-iosim-compat package (in this repo)?
 module Test.QuickCheck.StateModel.IOSim where
 
 -- TODO: It's possible that we can get away with only using `io-classes` as a dependency here. That would greatly help.
