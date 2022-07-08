@@ -3,11 +3,9 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
-{- This module defines Quantifications, which are used together with
-   forAllQ in DynamicLogic. A Quantification t can be used to generate
-   an t, shrink a t, and recognise a generated t.
--}
-
+-- | This module defines Quantifications, which are used together with
+--   forAllQ in DynamicLogic. A `Quantification t` can be used to generate
+--   a `t`, shrink a `t`, and recognise a generated `t`.
 module Test.QuickCheck.DynamicLogic.Quantify (
   Quantification (isaQ),
   isEmptyQ,
@@ -26,14 +24,11 @@ module Test.QuickCheck.DynamicLogic.Quantify (
   Quantifiable (..),
 ) where
 
+import Control.Monad
 import Data.Maybe
 import Data.Typeable
-
-import Control.Monad
-
 import System.Random
 import Test.QuickCheck
-
 import Test.QuickCheck.DynamicLogic.CanGenerate
 
 -- | A `Quantification` over a type @a@ is a generator that can be used with
@@ -47,7 +42,7 @@ data Quantification a = Quantification
   }
 
 isEmptyQ :: Quantification a -> Bool
-isEmptyQ = not . isJust . genQ
+isEmptyQ = isNothing . genQ
 
 generateQ :: Quantification a -> Gen a
 generateQ q = fromJust (genQ q) `suchThat` isaQ q
@@ -76,7 +71,7 @@ exactlyQ a =
 chooseQ :: (Arbitrary a, Random a, Ord a) => (a, a) -> Quantification a
 chooseQ r@(a, b) =
   Quantification
-    (guard (a <= b) >> (Just $ choose r))
+    (guard (a <= b) >> Just (choose r))
     is
     (filter is . shrink)
  where
@@ -215,7 +210,7 @@ instance Quantifiable a => Quantifiable [a] where
   type Quantifies [a] = [Quantifies a]
   quantify [] = Quantification (Just $ return []) null (const [])
   quantify (a : as) =
-    (mapQ (to, from) $ pairQ (quantify a) (quantify as))
+    mapQ (to, from) (pairQ (quantify a) (quantify as))
       `whereQ` (not . null)
    where
     to (x, xs) = x : xs

@@ -1,2 +1,4 @@
 /dist-newstyle/
 cabal.project.local
+*~
+/.direnv/

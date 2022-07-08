@@ -1,5 +1,4 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
 module Test.QuickCheck.DynamicLogic.Monad (
   DL,
@@ -31,12 +30,10 @@ module Test.QuickCheck.DynamicLogic.Monad (
 import Control.Applicative
 import Control.Monad
 import Data.Typeable
-
+import Test.QuickCheck hiding (getSize)
 import Test.QuickCheck.DynamicLogic qualified as DL
 import Test.QuickCheck.DynamicLogic.Quantify
 import Test.QuickCheck.StateModel
-
-import Test.QuickCheck hiding (getSize)
 
 -- | The `DL` monad provides a nicer interface to dynamic logic formulae than the plain API.
 --   It's a continuation monad producing a `DL.DynFormula` formula, with a state component threaded
@@ -123,21 +120,21 @@ forAllUniqueDL ::
   DL s () ->
   (Actions s -> a) ->
   Property
-forAllUniqueDL nextVar initialState d prop = DL.forAllUniqueScripts nextVar initialState (runDL initialState d) prop
+forAllUniqueDL nextVar initState d = DL.forAllUniqueScripts nextVar initState (runDL initState d)
 
 forAllDL ::
   (DL.DynLogicModel s, Testable a) =>
   DL s () ->
   (Actions s -> a) ->
   Property
-forAllDL d prop = DL.forAllScripts (runDL initialState d) prop
+forAllDL d = DL.forAllScripts (runDL initialState d)
 
 forAllDL_ ::
   (DL.DynLogicModel s, Testable a) =>
   DL s () ->
   (Actions s -> a) ->
   Property
-forAllDL_ d prop = DL.forAllScripts_ (runDL initialState d) prop
+forAllDL_ d = DL.forAllScripts_ (runDL initialState d)
 
 forAllMappedDL ::
   (DL.DynLogicModel s, Testable a, Show rep) =>
@@ -162,4 +159,4 @@ forAllMappedDL_ to from fromScript d prop =
   DL.forAllMappedScripts_ to from (runDL initialState d) (prop . fromScript)
 
 withDLTest :: (DL.DynLogicModel s, Testable a) => DL s () -> (Actions s -> a) -> DL.DynLogicTest s -> Property
-withDLTest d prop test = DL.withDLScriptPrefix (runDL initialState d) prop test
+withDLTest d = DL.withDLScriptPrefix (runDL initialState d)

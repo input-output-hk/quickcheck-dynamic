@@ -1,11 +1,9 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
-{-# OPTIONS_GHC -Wno-name-shadowing #-}
-{-# OPTIONS_GHC -Wno-unused-matches #-}
 
 module Test.QuickCheck.DynamicLogic (
   module Test.QuickCheck.DynamicLogic.Quantify,
@@ -38,20 +36,24 @@ module Test.QuickCheck.DynamicLogic (
   propPruningGeneratedScriptIsNoop,
 ) where
 
+import Control.Applicative
 import Data.List
 import Data.Typeable
-
-import Control.Applicative
-
 import Test.QuickCheck hiding (generate)
-
 import Test.QuickCheck.DynamicLogic.CanGenerate
 import Test.QuickCheck.DynamicLogic.Quantify
 import Test.QuickCheck.DynamicLogic.SmartShrinking
 import Test.QuickCheck.DynamicLogic.Utils qualified as QC
 import Test.QuickCheck.StateModel
 
--- | Dynamic logic formulae.
+-- | A `DynFormula` may depend on the QuickCheck size parameter
+newtype DynFormula s = DynFormula {unDynFormula :: Int -> DynLogic s}
+
+-- | Base Dynamic logic formulae language.
+-- Formulae are parameterised
+-- over the type of state `s` to which they apply. A `DynLogic` value
+-- cannot be constructed directly, one has to use the various "smart
+-- constructors" provided, see the /Building formulae/ section.
 data DynLogic s
   = -- | False
     EmptySpec
@@ -79,33 +81,69 @@ data ChoiceType = Angelic | Demonic
 
 type DynPred s = s -> DynLogic s
 
-newtype DynFormula s = DynFormula {unDynFormula :: Int -> DynLogic s}
+-- * Building formulae
 
--- a DynFormula may depend on the QuickCheck size parameter
-
--- API for building formulae
-
+-- | `False` for DL formulae.
 ignore :: DynFormula s
+
+-- | `True` for DL formulae.
 passTest :: DynFormula s
+
+-- | Given `f` must be `True` given /any/ state.
 afterAny :: (s -> DynFormula s) -> DynFormula s
+
+-- | Given `f` must be `True` after /some/ action.
+-- `f` is passed the state resulting from executing the `Action`.
 after ::
   (Show a, Typeable a, Eq (Action s a)) =>
   Action s a ->
   (s -> DynFormula s) ->
   DynFormula s
+
+-- | Disjunction for DL formulae.
+-- Is `True` if either formula is `True`. The choice is `Angelic`, ie. it is
+-- always made by the "caller". This is  mostly important in case a test is
+-- `stuck`.
 (|||) :: DynFormula s -> DynFormula s -> DynFormula s
+
+-- | First-order quantification of variables.
+-- Formula `f` is `True` iff. it is `True` /for all/ possible values of `q`. The
+-- underlying framework will `generate` values of `q` and check the formula holds
+-- for those values. `Quantifiable` values are thus values that can be generated
+-- and checked and the `Test.QuickCheck.DynamicLogic.Quantify` module defines
+-- basic combinators to build those from building blocks.
 forAllQ ::
   Quantifiable q =>
   q ->
   (Quantifies q -> DynFormula s) ->
   DynFormula s
+
+-- | Adjust weight for selecting formula.
+-- This is mostly useful in relation with `(|||)` combinator, in order to tweak the
+-- priority for generating the next step(s) of the test that matches the formula.
 weight :: Double -> DynFormula s -> DynFormula s
+-- ??
 withSize :: (Int -> DynFormula s) -> DynFormula s
+-- ??
 toStop :: DynFormula s -> DynFormula s
+
+-- | Successfully ends the test.
 done :: s -> DynFormula s
+
+-- | Ends test with given error message.
 errorDL :: String -> DynFormula s
+
+-- | Embed QuickCheck's monitoring functions (eg. `label`, `tabulate`) in
+-- a formula.
+-- This is useful to improve the reporting from test execution, esp. in the
+-- case of failures.
 monitorDL :: (Property -> Property) -> DynFormula s -> DynFormula s
+
+-- | Formula should hold at any state.
+-- In effect this leads to exploring alternatives from a given state `s` and ensuring
+-- formula holds in all those states.
 always :: (s -> DynFormula s) -> (s -> DynFormula s)
+
 ignore = DynFormula . const $ EmptySpec
 passTest = DynFormula . const $ Stop
 afterAny f = DynFormula $ \n -> AfterAny $ \s -> unDynFormula (f s) n
@@ -122,10 +160,13 @@ forAllQ q f
   q' = quantify q
 
 weight w f = DynFormula $ Weight w . unDynFormula f
+
 withSize f = DynFormula $ \n -> unDynFormula (f n) n
+
 toStop (DynFormula f) = DynFormula $ Stopping . f
 
 done _ = passTest
+
 errorDL s = DynFormula . const $ After (Error s) (const EmptySpec)
 
 monitorDL m (DynFormula f) = DynFormula $ Monitor m . f
@@ -162,11 +203,11 @@ instance StateModel s => Show (DynLogicTest s) where
         ++ ["  " ++ show (nub bads)]
         ++ ["  " ++ showsPrec 11 s ""]
   show (Looping as) =
-    unlines $ ["Looping"] ++ bracket (map show as)
+    unlines $ "Looping" : bracket (map show as)
   show (Stuck as s) =
     unlines $ ["Stuck"] ++ bracket (map show as) ++ ["  " ++ showsPrec 11 s ""]
   show (DLScript as) =
-    unlines $ ["DLScript"] ++ bracket (map show as)
+    unlines $ "DLScript" : bracket (map show as)
 
 bracket :: [String] -> [String]
 bracket [] = ["  []"]
@@ -176,15 +217,28 @@ bracket (first : rest) =
     ++ map (("   " ++) . (++ ", ")) (init rest)
     ++ ["   " ++ last rest ++ "]"]
 
--- Restricted calls are not generated by "AfterAny"; they are included
+-- | Restricted calls are not generated by "AfterAny"; they are included
 -- in tests explicitly using "After" in order to check specific
 -- properties at controlled times, so they are likely to fail if
 -- invoked at other times.
-
 class StateModel s => DynLogicModel s where
   restricted :: Action s a -> Bool
   restricted _ = False
 
+-- * Generate Properties
+
+-- | Simplest "execution" function for `DynFormula`.
+-- Turns a given a `DynFormula` paired with an interpreter function to produce some result from an
+
+--- `Actions` sequence into a proper `Property` than can then be run by QuickCheck.
+forAllScripts ::
+  (DynLogicModel s, Testable a) =>
+  DynFormula s ->
+  (Actions s -> a) ->
+  Property
+forAllScripts = forAllMappedScripts id id
+
+-- | `Property` function suitable for formulae without choice.
 forAllUniqueScripts ::
   (DynLogicModel s, Testable a) =>
   Int ->
@@ -199,14 +253,6 @@ forAllUniqueScripts n s f k =
           Nothing -> counterexample "Generating Non-unique script in forAllUniqueScripts" False
           Just test -> validDLTest d test .&&. (applyMonitoring d test . property $ k (scriptFromDL test))
 
-forAllScripts ::
-  (DynLogicModel s, Testable a) =>
-  DynFormula s ->
-  (Actions s -> a) ->
-  Property
-forAllScripts f k =
-  forAllMappedScripts id id f k
-
 forAllScripts_ ::
   (DynLogicModel s, Testable a) =>
   DynFormula s ->
@@ -218,6 +264,8 @@ forAllScripts_ f k =
      in forAll (sized $ generateDLTest d) $
           withDLScript d k
 
+-- | Creates a `Property` from `DynFormula` with some specialised isomorphism for shrinking purpose.
+-- ??
 forAllMappedScripts ::
   (DynLogicModel s, Testable a, Show rep) =>
   (rep -> DynLogicTest s) ->
@@ -229,7 +277,7 @@ forAllMappedScripts to from f k =
   QC.withSize $ \n ->
     let d = unDynFormula f n
      in forAllShrink
-          (Smart 0 <$> (sized $ (from <$>) . generateDLTest d))
+          (Smart 0 <$> sized ((from <$>) . generateDLTest d))
           (shrinkSmart ((from <$>) . shrinkDLTest d . to))
           $ \(Smart _ script) ->
             withDLScript d k (to script)
@@ -349,7 +397,7 @@ nextSteps (Alt _ d d') = nextSteps d ++ nextSteps d'
 nextSteps (Stopping d) = nextSteps d
 nextSteps (Weight w d) = [(w * w', s) | (w', s) <- nextSteps d, w * w' > never]
 nextSteps (ForAll q f) = [(1, ForAll q f)]
-nextSteps (Monitor f d) = nextSteps d
+nextSteps (Monitor _f d) = nextSteps d
 
 chooseOneOf :: [(Double, DynLogic s)] -> Gen (DynLogic s)
 chooseOneOf steps = frequency [(round (w / never), return s) | (w, s) <- steps]
@@ -375,7 +423,7 @@ chooseNextStep s n d =
           return $ Stepping (Do $ Var n := a) (k (nextState s a (Var n)))
         AfterAny k -> do
           m <- keepTryingUntil 100 (arbitraryAction s) $
-            \a -> case a of
+            \case
               Some act -> precondition s act && not (restricted act)
               Error _ -> False
           case m of
@@ -422,12 +470,12 @@ shrinkDLTest d tc =
   ]
 
 shrinkScript :: DynLogicModel t => DynLogic t -> [TestStep t] -> [[TestStep t]]
-shrinkScript d as = shrink' d as initialState
+shrinkScript dl steps = shrink' dl steps initialState
  where
   shrink' _ [] _ = []
   shrink' d (step : as) s =
-    []
-      : reverse (takeWhile (not . null) [drop (n - 1) as | n <- iterate (* 2) 1])
+    [] :
+    reverse (takeWhile (not . null) [drop (n - 1) as | n <- iterate (* 2) 1])
       ++ case step of
         Do (Var i := act) ->
           [Do (Var i := act') : as | Some act' <- shrinkAction s act]
@@ -459,19 +507,19 @@ shrinkWitness _ _ = []
 -- The result of pruning a list of actions is a list of actions that
 -- could have been generated by the dynamic logic.
 pruneDLTest :: DynLogicModel s => DynLogic s -> [TestStep s] -> [TestStep s]
-pruneDLTest d test = prune [d] initialState test
+pruneDLTest dl = prune [dl] initialState
  where
   prune [] _ _ = []
   prune _ _ [] = []
   prune ds s (Do (var := act) : rest)
     | precondition s act =
-        case [d' | d <- ds, d' <- stepDL d s (Do $ var := act)] of
-          [] -> prune ds s rest
-          ds' ->
-            Do (var := act)
-              : prune ds' (nextState s act var) rest
+      case [d' | d <- ds, d' <- stepDL d s (Do $ var := act)] of
+        [] -> prune ds s rest
+        ds' ->
+          Do (var := act) :
+          prune ds' (nextState s act var) rest
     | otherwise =
-        prune ds s rest
+      prune ds s rest
   prune ds s (Witness a : rest) =
     case [d' | d <- ds, d' <- stepDL d s (Witness a)] of
       [] -> prune ds s rest
@@ -489,7 +537,7 @@ stepDL (ForAll (q :: Quantification a) f) _ (Witness (a :: a')) =
   case eqT @a @a' of
     Just Refl -> [f a | isaQ q a]
     Nothing -> []
-stepDL (Monitor f d) s step = stepDL d s step
+stepDL (Monitor _f d) s step = stepDL d s step
 stepDL _ _ _ = []
 
 stepDLtoDL :: DynLogicModel s => DynLogic s -> s -> TestStep s -> DynLogic s
@@ -514,7 +562,7 @@ getScript (Stuck s _) = s
 getScript (DLScript s) = s
 
 makeTestFromPruned :: DynLogicModel s => DynLogic s -> [TestStep s] -> DynLogicTest s
-makeTestFromPruned d test = make d initialState test
+makeTestFromPruned dl = make dl initialState
  where
   make d s as | not (null bad) = BadPrecondition as bad s
    where
@@ -522,14 +570,14 @@ makeTestFromPruned d test = make d initialState test
   make d s []
     | stuck d s = Stuck [] s
     | otherwise = DLScript []
-  make d s (step : as) =
+  make d curStep (step : steps) =
     case make
-      (stepDLtoDL d s step)
+      (stepDLtoDL d curStep step)
       ( case step of
-          Do (var := act) -> nextState s act var
-          Witness _ -> s
+          Do (var := act) -> nextState curStep act var
+          Witness _ -> curStep
       )
-      as of
+      steps of
       BadPrecondition as bad s -> BadPrecondition (step : as) bad s
       Stuck as s -> Stuck (step : as) s
       DLScript as -> DLScript (step : as)
@@ -538,9 +586,9 @@ makeTestFromPruned d test = make d initialState test
 -- | If failed, return the prefix up to the failure. Also prunes the test in case the model has
 --   changed.
 unfailDLTest :: DynLogicModel s => DynLogic s -> DynLogicTest s -> DynLogicTest s
-unfailDLTest d test = makeTestFromPruned d $ pruneDLTest d as
+unfailDLTest d test = makeTestFromPruned d $ pruneDLTest d steps
  where
-  as = case test of
+  steps = case test of
     BadPrecondition as _ _ -> as
     Stuck as _ -> as
     DLScript as -> as
@@ -555,7 +603,7 @@ stuck (AfterAny _) s =
     canGenerate
       0.01
       (arbitraryAction s)
-      ( \a -> case a of
+      ( \case
           Some act ->
             precondition s act
               && not (restricted act)
@@ -572,7 +620,7 @@ validDLTest :: StateModel s => DynLogic s -> DynLogicTest s -> Property
 validDLTest _ (DLScript _) = property True
 validDLTest _ (Stuck as _) = counterexample ("Stuck\n" ++ (unlines . map ("  " ++) . lines $ show as)) False
 validDLTest _ (Looping as) = counterexample ("Looping\n" ++ (unlines . map ("  " ++) . lines $ show as)) False
-validDLTest _ (BadPrecondition as bads s) = counterexample ("BadPrecondition\n" ++ show as ++ "\n" ++ unlines (showBad <$> bads)) $ False
+validDLTest _ (BadPrecondition as bads _s) = counterexample ("BadPrecondition\n" ++ show as ++ "\n" ++ unlines (showBad <$> bads)) False
  where
   showBad (Error s) = s
   showBad a = show a
@@ -587,7 +635,7 @@ badActions Stop _ = []
 badActions (After (Some a) _) s
   | precondition s a = []
   | otherwise = [Some a]
-badActions (After (Error m) _) s = [Error m]
+badActions (After (Error m) _) _s = [Error m]
 badActions (AfterAny _) _ = []
 badActions (Alt _ d d') s = badActions d s ++ badActions d' s
 badActions (Stopping d) s = badActions d s
@@ -605,20 +653,20 @@ applyMonitoring _ Looping{} p = p
 applyMonitoring _ BadPrecondition{} p = p
 
 findMonitoring :: DynLogicModel s => DynLogic s -> s -> [TestStep s] -> Maybe (Property -> Property)
-findMonitoring Stop s [] = Just id
+findMonitoring Stop _s [] = Just id
 findMonitoring (After (Some a) k) s (Do (var := a') : as)
   | Some a == Some a' = findMonitoring (k s') s' as
  where
   s' = nextState s a' var
-findMonitoring (AfterAny k) s as@(Do (var := a) : _)
+findMonitoring (AfterAny k) s as@(Do (_var := a) : _)
   | not (restricted a) = findMonitoring (After (Some a) k) s as
-findMonitoring (Alt b d d') s as =
+findMonitoring (Alt _b d d') s as =
   -- Give priority to monitoring matches to the left. Combining both
   -- results in repeated monitoring from always, which is unexpected.
   findMonitoring d s as <|> findMonitoring d' s as
 findMonitoring (Stopping d) s as = findMonitoring d s as
 findMonitoring (Weight _ d) s as = findMonitoring d s as
-findMonitoring (ForAll (q :: Quantification a) k) s (Witness (a :: a') : as) =
+findMonitoring (ForAll (_q :: Quantification a) k) s (Witness (a :: a') : as) =
   case eqT @a @a' of
     Just Refl -> findMonitoring (k a) s as
     Nothing -> Nothing

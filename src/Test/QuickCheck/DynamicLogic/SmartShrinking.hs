@@ -2,9 +2,8 @@ module Test.QuickCheck.DynamicLogic.SmartShrinking (shrinkSmart) where
 
 import Test.QuickCheck
 
--- This combinator captures the 'smart shrinking' implemented for the
+-- | This combinator captures the 'smart shrinking' implemented for the
 -- Smart type wrapper in Test.QuickCheck.Modifiers.
-
 shrinkSmart :: (a -> [a]) -> Smart a -> [Smart a]
 shrinkSmart shr (Smart i x) = take i' ys `ilv` drop i' ys
  where
