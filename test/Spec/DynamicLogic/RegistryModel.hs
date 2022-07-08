@@ -91,7 +91,7 @@ instance StateModel RegState where
     s{tids = step : tids s}
   nextState s (Register name tid) _step
     | positive s (Register name tid) =
-      s{regs = (name, tid) : regs s}
+        s{regs = (name, tid) : regs s}
     | otherwise = s
   nextState s (Unregister name) _step =
     s{regs = filter ((/= name) . fst) (regs s)}
@@ -162,7 +162,7 @@ why :: RegState -> Action RegState a -> String
 why s (Register name tid) =
   unwords $
     ["name already registered" | name `elem` map fst (regs s)]
-    ++ ["tid already registered" | tid `elem` map snd (regs s)]
+      ++ ["tid already registered" | tid `elem` map snd (regs s)]
       ++ ["dead thread" | tid `elem` dead s]
 why _ _ = "(impossible)"
 
@@ -241,13 +241,13 @@ canRegister s
   | length (regs s) == 5 = ignore -- all names are in use
   | null (tids s) = after Spawn canRegister
   | otherwise = forAllQ
-    ( elementsQ (allNames \\ map fst (regs s))
-    , elementsQ (tids s)
-    )
-    $ \(name, tid) ->
-      after
-        (Successful $ Register name tid)
-        done
+      ( elementsQ (allNames \\ map fst (regs s))
+      , elementsQ (tids s)
+      )
+      $ \(name, tid) ->
+        after
+          (Successful $ Register name tid)
+          done
 
 canRegisterName :: String -> RegState -> DynFormula RegState
 canRegisterName name s = forAllQ (elementsQ availableTids) $ \tid ->
@@ -259,7 +259,7 @@ canReregister :: RegState -> DynFormula RegState
 canReregister s
   | null (regs s) = ignore
   | otherwise = forAllQ (elementsQ $ map fst (regs s)) $ \name ->
-    after (Unregister name) (canRegisterName name)
+      after (Unregister name) (canRegisterName name)
 
 canRegisterName' :: String -> RegState -> DynFormula RegState
 canRegisterName' name s = forAllQ (elementsQ availableTids) $ \tid ->
@@ -270,12 +270,12 @@ canRegisterName' name s = forAllQ (elementsQ availableTids) $ \tid ->
 canReregister' :: RegState -> DynFormula RegState
 canReregister' s
   | null (regs s) =
-    toStop $
-      if null availableTids
-        then after Spawn canReregister'
-        else after (Register "a" (head availableTids)) canReregister'
+      toStop $
+        if null availableTids
+          then after Spawn canReregister'
+          else after (Register "a" (head availableTids)) canReregister'
   | otherwise = forAllQ (elementsQ $ map fst (regs s)) $ \name ->
-    after (Unregister name) (canRegisterName' name)
+      after (Unregister name) (canRegisterName' name)
  where
   availableTids = (tids s \\ map snd (regs s)) \\ dead s
 
