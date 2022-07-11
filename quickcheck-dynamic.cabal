@@ -1,12 +1,13 @@
 cabal-version:   2.2
 name:            quickcheck-dynamic
-version:         0.1.0.0
+version:         0.1.0
 license:         Apache-2.0
 license-files:
   LICENSE
   NOTICE
+  CHANGELOG.md
 
-maintainer:      ulf.norell@quviq.com
+maintainer:      arnaud.bailly@iohk.io
 author:          Ulf Norell
 homepage:
   https://github.com/input-output-hk/quickcheck-dynamic#readme

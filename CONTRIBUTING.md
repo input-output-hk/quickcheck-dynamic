@@ -62,7 +62,7 @@ something merged we usually require:
 
 During development
 + Make sure `CHANGELOG.md` is kept up-to-date with high-level, technical, but user-focused list of changes according to [keepachangelog](https://keepachangelog.com/en/1.0.0/)
-+ Bump `UNRELEASED` version in `CHANGELOG.md` according to [Package Versioning Policy](https://pvp.haskell.org/)
++ Bump `UNRELEASED` version in `CHANGELOG.md` according to [Semantic Versioning](https://semver.org/)
 
 ### Releasing
 
