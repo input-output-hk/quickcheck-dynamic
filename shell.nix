@@ -19,4 +19,4 @@ let
     tools =   buildTools // devTools;
   };
 
-in shell { }
+in shell
