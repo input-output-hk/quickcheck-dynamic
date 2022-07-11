@@ -125,13 +125,6 @@ jobs:
       with:
         repository: input-output-hk/quickcheck-dynamic
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: 16
-        cache: 'yarn'
-        cache-dependency-path: docs/yarn.lock
-
     - name: Download generated documentation
       uses: actions/download-artifact@v3
       with:
