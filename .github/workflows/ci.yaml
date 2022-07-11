@@ -51,7 +51,7 @@ jobs:
 
     - name: Test
       run: |
-        nix-shell --arg withoutDevTools true --run 'cabal test all'
+        nix-shell --arg withoutDevTools true --run 'cabal test all --test-options "--xml=test-results.xml"'
 
     - name: Upload build & test artifacts
       uses: actions/upload-artifact@v2

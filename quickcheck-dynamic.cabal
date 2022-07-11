@@ -78,4 +78,5 @@ test-suite quickcheck-dynamic-test
     , QuickCheck
     , quickcheck-dynamic
     , tasty
+    , tasty-test-reporter
     , tasty-quickcheck

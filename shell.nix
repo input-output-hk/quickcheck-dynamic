@@ -15,8 +15,6 @@ let
     fourmolu = "latest";
   };
 
-  shell = project.shellFor {
-    tools =   buildTools // devTools;
-  };
-
-in shell
+in project.shellFor {
+    tools = buildTools // devTools;
+  }
