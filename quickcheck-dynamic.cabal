@@ -6,7 +6,10 @@ license-files:
   LICENSE
   NOTICE
   CHANGELOG.md
-
+category:  Testing
+synopsis:
+  A library to implement stateful property-based testing using dynamic logic.
+  
 maintainer:      arnaud.bailly@iohk.io
 author:          Ulf Norell
 homepage:
@@ -60,8 +63,6 @@ library
     , base        >=4.7 && <5
     , QuickCheck
     , random
-
-  ghc-options:     -Werror
 
 test-suite quickcheck-dynamic-test
   import:         lang
