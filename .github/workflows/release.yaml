@@ -1,0 +1,48 @@
+name: "Release"
+on:
+  push:
+    # trigger on version tags
+    tags:
+    - "[0-9].[0-9].[0-9]"
+
+jobs:
+  release:
+    name: "Pack & Upload"
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2.3.1
+      with:
+        repository: input-output-hk/quickcheck-dynamic
+        ref: ${{ github.ref }}
+        # Also ensure we have all history with all tags
+        fetch-depth: 0
+
+    - name: Prepare nix
+      uses: cachix/install-nix-action@v17
+      with:
+        extra_nix_config: |
+          trusted-public-keys = iohk.cachix.org-1:DpRUyj7h7V830dp/i6Nti+NEO2/nhblbov/8MW7Rqoo= hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+          substituters = https://cache.nixos.org https://cache.iog.io https://iohk.cachix.org
+
+    - name: Github cache ~/.cabal/packages, ~/.cabal/store and dist-newstyle
+      uses: actions/cache@v2.1.5
+      with:
+        path: |
+          ~/.cabal/packages
+          ~/.cabal/store
+          dist-newstyle
+        key: |
+          cabal-${{ runner.os }}-${{ hashFiles('cabal.project', 'default.nix', 'shell.nix') }}
+
+    - name: Prepare nix-shell
+      run: |
+        nix-build --arg withoutDevTools true shell.nix
+
+    - name: Package
+      run: |
+        nix-shell --pure --arg withoutDevTools true --run 'cabal sdist'
+
+    - name: Upload distribution
+      uses: actions/upload-artifact@v2
+      with:
+        path: ./dist-newstyle/sdist/quickcheck-dynamic-${{ github.ref }}.tar.gz
