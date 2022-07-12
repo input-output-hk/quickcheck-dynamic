@@ -1,7 +1,9 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE RankNTypes #-}
@@ -9,6 +11,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE RecordWildCards #-}
 
 -- | Simple (stateful) Model-Based Testing library for use with Haskell QuickCheck.
 --
@@ -17,6 +20,7 @@
 -- to be asserted by QuickCheck.
 module Test.QuickCheck.StateModel (
   StateModel (..),
+  RunModel (..),
   Any (..),
   Step (..),
   LookUp,
@@ -47,9 +51,7 @@ import Test.QuickCheck.Monadic
 --     some `initialState` to some end state,
 --   * A generator for traces of `Action`s, the `arbitraryAction` function,
 --   * An `initialState`,
---   * A /transition/ function, `nextState`, that "interprets" each `Action` and producing some new `state`,
---   * A `perform` function that runs in some `ActionMonad` to /execute/ actual implementation, interpreting
---     the generated `Action` in some `state`.
+--   * A /transition/ function, `nextState`, that "interprets" each `Action` and producing some new `state`.
 --
 -- For finer grained control over the testing process, one can also define:
 --
@@ -60,18 +62,13 @@ import Test.QuickCheck.Monadic
 --    in order to ensure that removing some `Action` still produces a valid trace. The `precondition` can be
 --    somewhat redundant with the generator's conditions,
 --  * `postcondition`: This function is evaluated during test execution after `perform`ing the action, it allows
---    the model to express expectations about the output of actual code given some "transition",
---  * `monitoring`: Allows using various reporting and monitoring functions from QuickCheck framework like `label`,
---    `tabulate` or `counterexample`.
+--    the model to express expectations about the output of actual code given some "transition".
 class
   ( forall a. Show (Action state a)
-  , Monad (ActionMonad state)
   , Show state
   ) =>
   StateModel state
   where
-  --
-
   -- | The type of `Action` relevant for this `state`.
   --
   -- This is expected to be defined as a GADT where the `a` parameter is instantiated to some
@@ -88,22 +85,6 @@ class
   -- The `Spawn` action should produce a  `ThreadId`, whereas the `KillThread` action does not return
   -- anything.
   data Action state a
-
-  -- | The monad in which actions will be `perform`ed.
-  --
-  -- The simplest option is to set it to `IO` which allows unrestricted side-effects and is the
-  -- most general solution. Another interesting option is to make the `state` parametric in some
-  -- monad `m` then use this `m` as `ActionMonad` definition with some specific typeclasses constraints
-  -- on the `StateModel` instance to restrict the set of possible side-effects, for example:
-  --
-  -- @
-  -- data MyState (m :: Type -> Type) = MyState
-  --
-  -- instance (MonadState Foo m) => MyState m where
-  --   ...
-  --   type ActionMonad (MyState m) = m
-  -- @
-  type ActionMonad state :: * -> *
 
   -- | Display name for `Action`.
   -- This is useful to provide sensible statistics about the distribution of `Action`s run
@@ -122,7 +103,7 @@ class
   -- | Shrinker for `Action`.
   -- Defaults to no-op but as usual, defining a good shrinker greatly enhances the usefulness
   -- of property-based testing.
-  shrinkAction :: (Show a) => state -> Action state a -> [Any (Action state)]
+  shrinkAction :: (Show a, Typeable a) => state -> Action state a -> [Any (Action state)]
   shrinkAction _ _ = []
 
   -- | Initial state of generated traces.
@@ -142,15 +123,6 @@ class
   precondition :: state -> Action state a -> Bool
   precondition _ _ = True
 
-  -- | Perform an `Action` in some `state` in the `ActionMonad`.
-  -- This is the function that's used to exercise the actual stateful implementation, usually through
-  -- various side-effects as permitted by the `ActionMonad`. It produces a value of type `a` that
-  -- will be kept in the environment through a `Var a` also passed to the `nextState` function.
-  --
-  -- The `Lookup` parameter provides an /environment/ to lookup `Var a` instances from previous steps.
-  perform :: state -> Action state a -> LookUp -> ActionMonad state a
-  perform _ _ _ = return undefined
-
   -- | Postcondition on the `a` value produced at some step.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
   -- to check the implementation produces expected values.
@@ -163,6 +135,18 @@ class
   -- while executing this step.
   monitoring :: (state, state) -> Action state a -> LookUp -> a -> Property -> Property
   monitoring _ _ _ _ = id
+
+-- | Perform an `Action` in some `state` in the `Monad` `m`.  This
+-- is the function that's used to exercise the actual stateful
+-- implementation, usually through various side-effects as permitted
+-- by `m`. It produces a value of type `a`, eg. some observable
+-- output from the `Action` that should later be kept in the
+-- environment through a `Var a` also passed to the `nextState`
+-- function.
+--
+-- The `Lookup` parameter provides an /environment/ to lookup `Var
+-- a` instances from previous steps.
+newtype RunModel state m = RunModel { perform :: forall a. state -> Action state a -> LookUp -> m a }
 
 type LookUp = forall a. Typeable a => Var a -> a
 
@@ -254,11 +238,11 @@ instance (forall a. Show (Action state a)) => Show (Actions state) where
     | d > 10 = ("(" ++) . shows (Actions as) . (")" ++)
     | null as = ("Actions []" ++)
     | otherwise =
-        ("Actions \n [" ++)
-          . foldr
-            (.)
-            (shows (last as) . ("]" ++))
-            [shows a . (",\n  " ++) | a <- init as]
+      ("Actions \n [" ++)
+        . foldr
+          (.)
+          (shows (last as) . ("]" ++))
+          [shows a . (",\n  " ++) | a <- init as]
 
 instance (StateModel state) => Arbitrary (Actions state) where
   arbitrary = do
@@ -288,14 +272,14 @@ instance (StateModel state) => Arbitrary (Actions state) where
       go m n rej
         | m > n = return (Nothing, rej)
         | otherwise = do
-            a <- resize m $ arbitraryAction s
-            case a of
-              Some act ->
-                if precondition s act
-                  then return (Just (Some act), rej)
-                  else go (m + 1) n (actionName act : rej)
-              Error _ ->
-                go (m + 1) n rej
+          a <- resize m $ arbitraryAction s
+          case a of
+            Some act ->
+              if precondition s act
+                then return (Just (Some act), rej)
+                else go (m + 1) n (actionName act : rej)
+            Error _ ->
+              go (m + 1) n rej
 
   shrink (Actions_ rs as) =
     map (Actions_ rs) (shrinkSmart (map (prune . map fst) . shrinkList shrinker . withStates) as)
@@ -308,9 +292,9 @@ prune = loop initialState
   loop _s [] = []
   loop s ((var := act) : as)
     | precondition s act =
-        (var := act) : loop (nextState s act var) as
+      (var := act) : loop (nextState s act var) as
     | otherwise =
-        loop s as
+      loop s as
 
 withStates :: StateModel state => [Step state] -> [(Step state, state)]
 withStates = loop initialState
@@ -326,17 +310,21 @@ stateAfter (Actions actions) = loop initialState actions
   loop s ((var := act) : as) = loop (nextState s act var) as
 
 runActions ::
-  StateModel state =>
+  forall state m.
+  (StateModel state, Monad m) =>
+  RunModel state m ->
   Actions state ->
-  PropertyM (ActionMonad state) (state, Env)
-runActions = runActionsInState initialState
+  PropertyM m (state, Env)
+runActions = runActionsInState @_ @m initialState
 
 runActionsInState ::
-  StateModel state =>
+  forall state m.
+  (StateModel state, Monad m) =>
   state ->
+  RunModel state m ->
   Actions state ->
-  PropertyM (ActionMonad state) (state, Env)
-runActionsInState state (Actions_ rejected (Smart _ actions)) = loop state [] actions
+  PropertyM m (state, Env)
+runActionsInState state RunModel{..} (Actions_ rejected (Smart _ actions)) = loop state [] actions
  where
   loop _s env [] = do
     unless (null rejected) $
