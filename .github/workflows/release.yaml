@@ -42,7 +42,11 @@ jobs:
       run: |
         nix-shell --pure --arg withoutDevTools true --run 'cabal sdist'
 
+    - name: Get the version
+      id: get_version
+      run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+
     - name: Upload distribution
       uses: actions/upload-artifact@v2
       with:
-        path: ./dist-newstyle/sdist/quickcheck-dynamic-${{ github.ref }}.tar.gz
+        path: ./dist-newstyle/sdist/quickcheck-dynamic-${{ steps.get_version.outputs.VERSION }}.tar.gz
