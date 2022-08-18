@@ -56,3 +56,4 @@ Before you start using nix, please make sure you've configured haskell.nix cachi
 ### Exernal material 
 
 * John Hughes high level talk on how to test Plutus smart contracts using this library: https://youtu.be/V9_14jjJiuQ
+* 55 minutes in to this lecure an example of using the state machine formalism: https://www.youtube.com/watch?v=zW3D2iM5uVg
