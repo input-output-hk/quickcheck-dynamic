@@ -28,9 +28,7 @@ research paper.
   comments. Checkout [StateModel](src/Test/QuickCheck/StateModel.hs)
   and [DynamicLogic](src/Test/QuickCheck/DynamicLogic.hs) modules for
   some usage instructions.
-* For a concrete standalone example, testing a registry for running
-  threads, see [Registry](test/Spec/DynamicLogic/Registry.hs) and
-  [RegistryModel](test/Spec/DynamicLogic/RegistryModel.hs).
+* For a concrete standalone example, have a look at [Registry](../quickcheck-io-sim-compat/test/Spec/DynamicLogic/Registry.hs), a multithreaded Thread registry tested
 * For more documentation on how to quickcheck-dynamic is used to test
   Plutus DApps, check this
   [tutorial](https://plutus-apps.readthedocs.io/en/latest/plutus/tutorials/contract-models.html)
