@@ -5,6 +5,10 @@
 let
   project = import ./default.nix ;
 
+  inherit (project) pkgs compiler;
+
+  libs = [ pkgs.git ] ;
+
   buildTools = {
     cabal = "latest";
   };
@@ -16,5 +20,6 @@ let
   };
 
 in project.shellFor {
-    tools = buildTools // devTools;
-  }
+  tools = buildTools // devTools;
+  buildInputs = libs ;
+}

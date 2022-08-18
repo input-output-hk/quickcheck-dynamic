@@ -145,13 +145,9 @@ monitorDL :: (Property -> Property) -> DynFormula s -> DynFormula s
 always :: (s -> DynFormula s) -> (s -> DynFormula s)
 
 ignore = DynFormula . const $ EmptySpec
-
 passTest = DynFormula . const $ Stop
-
 afterAny f = DynFormula $ \n -> AfterAny $ \s -> unDynFormula (f s) n
-
 after act f = DynFormula $ \n -> After (Some act) $ \s -> unDynFormula (f s) n
-
 DynFormula f ||| DynFormula g = DynFormula $ \n -> Alt Angelic (f n) (g n)
 
 -- In formulae, we use only angelic

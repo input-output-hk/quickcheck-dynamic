@@ -1,0 +1,15 @@
+packages:
+  quickcheck-dynamic
+  quickcheck-io-sim-compat
+
+tests: true
+
+-- TODO: remove once io-sim is on hackage
+source-repository-package
+  type: git
+  location: https://github.com/input-output-hk/io-sim
+  tag: e4fd24f9336d63e6c734801e45378edd9483a3ec
+  --sha256: 0fldzjb0wp1d692gwkfh5ikba1g03vynxb17pzhg9f370izd2ya3
+  subdir:
+    io-classes
+    io-sim

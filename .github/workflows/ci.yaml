@@ -46,8 +46,8 @@ jobs:
 
     - name: Build
       run: |
-        nix-shell --pure --arg withoutDevTools true --run 'cabal update'
-        nix-shell --pure --arg withoutDevTools true --run 'cabal build all'
+        nix-shell --arg withoutDevTools true --run 'cabal update'
+        nix-shell --arg withoutDevTools true --run 'cabal build all'
 
     - name: Test
       run: |
@@ -108,7 +108,7 @@ jobs:
 
     - name: Documentation (Haddock)
       run: |
-        nix-shell --pure --arg withoutDevTools true --run '.github/workflows/ci-haddock.sh'
+        nix-shell --arg withoutDevTools true --run '.github/workflows/ci-haddock.sh'
 
     - name: Upload build & test artifacts
       uses: actions/upload-artifact@v2
