@@ -52,3 +52,7 @@ Before you start using nix, please make sure you've configured haskell.nix cachi
   direnv allow
   ```
 * Then go back to [Without nix](#without-nix) instructions
+
+### Exernal material 
+
+* John Hughes high level talk on how to test Plutus smart contracts using this library: https://youtu.be/V9_14jjJiuQ
