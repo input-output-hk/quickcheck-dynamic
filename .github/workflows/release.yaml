@@ -40,7 +40,7 @@ jobs:
 
     - name: Package
       run: |
-        nix-shell --pure --arg withoutDevTools true --run 'cabal sdist'
+        nix-shell --arg withoutDevTools true --run 'cabal sdist'
 
     - name: Get the version
       id: get_version
