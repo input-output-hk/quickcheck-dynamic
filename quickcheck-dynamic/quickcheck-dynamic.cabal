@@ -5,7 +5,7 @@ license:         Apache-2.0
 license-files:
   LICENSE
   NOTICE
-  
+
 maintainer:      arnaud.bailly@iohk.io
 author:          Ulf Norell
 category:        Testing
@@ -61,4 +61,5 @@ library
     build-depends:
         QuickCheck -any,
         base >=4.7 && <5,
-        random -any
+        random -any,
+        mtl -any

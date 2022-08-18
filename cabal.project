@@ -1,6 +1,6 @@
 packages:
   quickcheck-dynamic
-  quickcheck-io-sim-compat
+  quickcheck-dynamic-iosim
 
 tests: true
 

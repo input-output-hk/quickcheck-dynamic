@@ -64,7 +64,7 @@ instance Monad (DL s) where
 instance MonadFail (DL s) where
   fail = errorDL
 
-action :: (Show a, Typeable a, Eq (Action s a)) => Action s a -> DL s ()
+action :: (Typeable a, Eq (Action s a)) => Action s a -> DL s ()
 action cmd = DL $ \_ k -> DL.after cmd $ k ()
 
 anyAction :: DL s ()

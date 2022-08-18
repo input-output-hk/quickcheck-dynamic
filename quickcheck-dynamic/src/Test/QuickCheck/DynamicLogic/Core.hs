@@ -95,7 +95,7 @@ afterAny :: (s -> DynFormula s) -> DynFormula s
 -- | Given `f` must be `True` after /some/ action.
 -- `f` is passed the state resulting from executing the `Action`.
 after ::
-  (Show a, Typeable a, Eq (Action s a)) =>
+  (Typeable a, Eq (Action s a)) =>
   Action s a ->
   (s -> DynFormula s) ->
   DynFormula s
