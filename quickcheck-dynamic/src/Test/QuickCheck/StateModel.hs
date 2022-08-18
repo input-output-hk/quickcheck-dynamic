@@ -12,6 +12,8 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 -- | Simple (stateful) Model-Based Testing library for use with Haskell QuickCheck.
 --
@@ -29,16 +31,19 @@ module Test.QuickCheck.StateModel (
   pattern Actions,
   EnvEntry (..),
   Env,
+  Realized,
   stateAfter,
   runActions,
   runActionsInState,
   lookUpVar,
-  lookUpVarMaybe,
-  invertLookupVarMaybe,
+  lookUpVarMaybe
 ) where
 
 import Control.Monad
+import Control.Monad.State
+import Control.Monad.Reader
 import Data.Data
+import Data.Kind
 import Test.QuickCheck as QC
 import Test.QuickCheck.DynamicLogic.SmartShrinking
 import Test.QuickCheck.Monadic
@@ -61,8 +66,6 @@ import Test.QuickCheck.Monadic
 --    the action is /rejected/ and a new one is tried. This is also useful when shrinking a trace
 --    in order to ensure that removing some `Action` still produces a valid trace. The `precondition` can be
 --    somewhat redundant with the generator's conditions,
---  * `postcondition`: This function is evaluated during test execution after `perform`ing the action, it allows
---    the model to express expectations about the output of actual code given some "transition".
 class
   ( forall a. Show (Action state a)
   , Show state
@@ -103,7 +106,7 @@ class
   -- | Shrinker for `Action`.
   -- Defaults to no-op but as usual, defining a good shrinker greatly enhances the usefulness
   -- of property-based testing.
-  shrinkAction :: (Show a, Typeable a) => state -> Action state a -> [Any (Action state)]
+  shrinkAction :: Typeable a => state -> Action state a -> [Any (Action state)]
   shrinkAction _ _ = []
 
   -- | Initial state of generated traces.
@@ -123,63 +126,60 @@ class
   precondition :: state -> Action state a -> Bool
   precondition _ _ = True
 
+-- TODO: maybe it makes sense to write
+-- out a long list of these instances
+type family Realized (m :: Type -> Type) a :: Type
+type instance Realized IO a = a
+type instance Realized (StateT s m) a = Realized m a
+type instance Realized (ReaderT r m) a = Realized m a
+
+class Monad m => RunModel state m where
+  -- | Perform an `Action` in some `state` in the `Monad` `m`.  This
+  -- is the function that's used to exercise the actual stateful
+  -- implementation, usually through various side-effects as permitted
+  -- by `m`. It produces a value of type `a`, eg. some observable
+  -- output from the `Action` that should later be kept in the
+  -- environment through a `Var a` also passed to the `nextState`
+  -- function.
+  --
+  -- The `Lookup` parameter provides an /environment/ to lookup `Var
+  -- a` instances from previous steps.
+  perform :: forall a. Typeable a => state -> Action state a -> LookUp m -> m (Realized m a)
   -- | Postcondition on the `a` value produced at some step.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
   -- to check the implementation produces expected values.
-  postcondition :: state -> Action state a -> LookUp -> a -> Bool
-  postcondition _ _ _ _ = True
-
+  postcondition :: forall a. state -> Action state a -> LookUp m -> Realized m a -> m Bool
+  postcondition _ _ _ _ = pure True
   -- | Allows the user to attach information to the `Property` at each step of the process.
   -- This function is given the full transition that's been executed, including the start and ending
   -- `state`, the `Action`, the current environment to `Lookup` and the value produced by `perform`
   -- while executing this step.
-  monitoring :: Show a => (state, state) -> Action state a -> LookUp -> a -> Property -> Property
-  monitoring _ _ _ _ = id
+  monitoring :: forall a. (state, state) -> Action state a -> LookUp m -> Realized m a -> Property -> Property
+  monitoring _ _ _ _ prop = prop
 
--- | Perform an `Action` in some `state` in the `Monad` `m`.  This
--- is the function that's used to exercise the actual stateful
--- implementation, usually through various side-effects as permitted
--- by `m`. It produces a value of type `a`, eg. some observable
--- output from the `Action` that should later be kept in the
--- environment through a `Var a` also passed to the `nextState`
--- function.
---
--- The `Lookup` parameter provides an /environment/ to lookup `Var
--- a` instances from previous steps.
-newtype RunModel state m = RunModel {perform :: forall a. state -> Action state a -> LookUp -> m a}
+type LookUp m = forall a. Typeable a => Var a -> Realized m a
 
-type LookUp = forall a. Typeable a => Var a -> a
+type Env m = [EnvEntry m]
 
-type Env = [EnvEntry]
-
-data EnvEntry where
-  (:==) :: (Show a, Typeable a) => Var a -> a -> EnvEntry
+data EnvEntry m where
+  (:==) :: Typeable a => Var a -> Realized m a -> EnvEntry m
 
 infix 5 :==
 
-deriving instance Show EnvEntry
-
-lookUpVarMaybe :: Typeable a => Env -> Var a -> Maybe a
+lookUpVarMaybe :: forall a m. Typeable a => Env m -> Var a -> Maybe (Realized m a)
 lookUpVarMaybe [] _ = Nothing
-lookUpVarMaybe ((v' :== a) : env) v =
-  case cast (v', a) of
-    Just (v'', a') | v == v'' -> Just a'
+lookUpVarMaybe (((v' :: Var b) :== a) : env) v =
+  case eqT @a @b of
+    Just Refl | v == v' -> Just a
     _ -> lookUpVarMaybe env v
 
-lookUpVar :: Typeable a => Env -> Var a -> a
+lookUpVar :: Typeable a => Env m -> Var a -> Realized m a
 lookUpVar env v = case lookUpVarMaybe env v of
   Nothing -> error $ "Variable " ++ show v ++ " is not bound!"
   Just a -> a
 
-invertLookupVarMaybe :: (Typeable a, Eq a) => Env -> a -> Maybe (Var a)
-invertLookupVarMaybe [] _ = Nothing
-invertLookupVarMaybe ((v :== a) : env) a' =
-  case cast (v, a) of
-    Just (v', a'') | a' == a'' -> Just v'
-    _ -> invertLookupVarMaybe env a'
-
 data Any f where
-  Some :: (Show a, Typeable a, Eq (f a)) => f a -> Any f
+  Some :: (Typeable a, Eq (f a)) => f a -> Any f
   Error :: String -> Any f
 
 deriving instance (forall a. Show (Action state a)) => Show (Any (Action state))
@@ -194,7 +194,7 @@ instance Eq (Any f) where
 
 data Step state where
   (:=) ::
-    (Show a, Typeable a, Eq (Action state a), Show (Action state a)) =>
+    (Typeable a, Eq (Action state a), Show (Action state a)) =>
     Var a ->
     Action state a ->
     Step state
@@ -311,20 +311,18 @@ stateAfter (Actions actions) = loop initialState actions
 
 runActions ::
   forall state m.
-  (StateModel state, Monad m) =>
-  RunModel state m ->
+  (StateModel state, RunModel state m) =>
   Actions state ->
-  PropertyM m (state, Env)
+  PropertyM m (state, Env m)
 runActions = runActionsInState @_ @m initialState
 
 runActionsInState ::
   forall state m.
-  (StateModel state, Monad m) =>
+  (StateModel state, RunModel state m) =>
   state ->
-  RunModel state m ->
   Actions state ->
-  PropertyM m (state, Env)
-runActionsInState state RunModel{..} (Actions_ rejected (Smart _ actions)) = loop state [] actions
+  PropertyM m (state, Env m)
+runActionsInState st (Actions_ rejected (Smart _ actions)) = loop st [] actions
  where
   loop _s env [] = do
     unless (null rejected) $
@@ -335,8 +333,10 @@ runActionsInState state RunModel{..} (Actions_ rejected (Smart _ actions)) = loo
     ret <- run (perform s act (lookUpVar env))
     let name = actionName act
     monitor (tabulate "Actions" [name])
-    let s' = nextState s act (Var n)
-        env' = (Var n :== ret) : env
-    monitor (monitoring (s, s') act (lookUpVar env') ret)
-    assert $ postcondition s act (lookUpVar env) ret
+    let var = Var n
+        s' = nextState s act var
+        env' = (var :== ret) : env
+    monitor (monitoring @state @m (s, s') act (lookUpVar env') ret)
+    b <- run $ postcondition s act (lookUpVar env) ret
+    assert b
     loop s' env' as

@@ -10,12 +10,14 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Spec.DynamicLogic.RegistryModel where
 
---import Control.Concurrent
+import Control.Concurrent (ThreadId)
 import Control.Exception (SomeException (..))
-import Control.Monad.Class.MonadFork
+import Control.Monad.Class.MonadFork hiding (ThreadId)
+import Control.Monad.Class.MonadFork qualified as IOClass
 
 import Control.Monad.Class.MonadThrow (try)
 import Control.Monad.Class.MonadTimer (threadDelay)
@@ -33,12 +35,12 @@ import Test.Tasty.QuickCheck (testProperty)
 import Spec.DynamicLogic.Registry
 import Test.QuickCheck.DynamicLogic.Core
 import Test.QuickCheck.StateModel
-import Test.QuickCheck.StateModel.IOSim
+import Test.QuickCheck.StateModel.IOSim()
 
 data RegState = RegState
-  { tids :: [Var ModelThreadId]
-  , regs :: [(String, Var ModelThreadId)]
-  , dead :: [Var ModelThreadId]
+  { tids  :: [Var ThreadId]
+  , regs  :: [(String, Var ThreadId)]
+  , dead  :: [Var ThreadId]
   , setup :: Bool
   }
   deriving (Show)
@@ -48,12 +50,12 @@ deriving instance Eq (Action RegState a)
 
 instance StateModel RegState where
   data Action RegState a where
-    Init :: Action RegState ()
-    Spawn :: Action RegState ModelThreadId
-    WhereIs :: String -> Action RegState (Maybe ModelThreadId)
-    Register :: String -> Var ModelThreadId -> Action RegState (Either SomeException ())
+    Init       :: Action RegState ()
+    Spawn      :: Action RegState ThreadId
+    WhereIs    :: String -> Action RegState (Maybe ThreadId)
+    Register   :: String -> Var ThreadId -> Action RegState (Either SomeException ())
     Unregister :: String -> Action RegState (Either SomeException ())
-    KillThread :: Var ModelThreadId -> Action RegState ()
+    KillThread :: Var ThreadId -> Action RegState ()
     -- not generated
     Successful :: Action RegState a -> Action RegState a
 
@@ -126,15 +128,37 @@ instance StateModel RegState where
   precondition s (Successful act) = precondition s act
   precondition _ _ = True
 
-  postcondition _ Init _ _ = True
+type RegM s = StateT (Registry (IOSim s)) (IOSim s)
+
+instance (m ~ RegM s) => RunModel RegState m where
+  perform _ Init _ = do
+    reg <- lift setupRegistry
+    put reg
+  perform _ Spawn _ = do
+    lift $ forkIO (threadDelay 10000000)
+  perform _ (Register name tid) env = do
+    reg <- get
+    lift $ try $ register reg name (env tid)
+  perform _ (Unregister name) _ = do
+    reg <- get
+    lift $ try $ unregister reg name
+  perform _ (WhereIs name) _ = do
+    reg <- get
+    lift $ whereis reg name
+  perform _ (KillThread tid) env = do
+    lift $ killThread (env tid)
+  perform s (Successful act) env = do
+    perform s act env
+
+  postcondition _ Init _ _ = pure True
   postcondition s (WhereIs name) env mtid =
-    (env <$> lookup name (regs s)) == mtid
-  postcondition _s Spawn _ _ = True
+    pure $ (env <$> lookup name (regs s)) == mtid
+  postcondition _s Spawn _ _ = pure True
   postcondition s (Register name step) _ res =
-    positive s (Register name step) == isRight res
-  postcondition _s (Unregister _name) _ _ = True
-  postcondition _s (KillThread _) _ _ = True
-  postcondition _s (Successful (Register _ _)) _ res = isRight res
+    pure $ positive s (Register name step) == isRight res
+  postcondition _s (Unregister _name) _ _ = pure True
+  postcondition _s (KillThread _) _ _ = pure True
+  postcondition _s (Successful (Register _ _)) _ res = pure $ isRight res
   postcondition s (Successful act) env res = postcondition s act env res
 
   monitoring (_s, s') act _ res =
@@ -151,35 +175,6 @@ instance StateModel RegState where
         Unregister _ -> tabu "Unregister" [case res of Left _ -> "fails"; Right () -> "succeeds"]
         WhereIs _ -> tabu "WhereIs" [case res of Nothing -> "fails"; Just _ -> "succeeds"]
         _ -> id
-
-runModelIOSim :: forall s. RunModel RegState (IOSimModel (Registry (IOSim s)) s)
-runModelIOSim = RunModel performRegistry
- where
-  performRegistry :: forall a. RegState -> Action RegState a -> LookUp -> IOSimModel (Registry (IOSim s)) s a
-  performRegistry _ Init _ = do
-    reg <- liftIOSim setupRegistry
-    put reg
-  performRegistry _ Spawn _ =
-    encapsulateM $ forkIO (threadDelay 10000000)
-  performRegistry _ (Register name tid) env =
-    do
-      reg <- get
-      tid' <- instantiateM (env tid)
-      liftIOSim $ try $ register reg name tid'
-  performRegistry _ (Unregister name) _ =
-    do
-      reg <- get
-      liftIOSim $ try $ unregister reg name
-  performRegistry _ (WhereIs name) _ =
-    do
-      reg <- get
-      encapsulateM $ whereis reg name
-  performRegistry _ (KillThread tid) env =
-    do
-      tid' <- instantiateM (env tid)
-      liftIOSim $ killThread tid'
-  performRegistry s (Successful act) env =
-    performRegistry s act env
 
 positive :: RegState -> Action RegState a -> Bool
 positive s (Register name tid) =
@@ -217,7 +212,7 @@ shrinkName name = [n | n <- allNames, n < name]
 allNames :: [String]
 allNames = ["a", "b", "c", "d", "e"]
 
-shrinkTid :: RegState -> Var ModelThreadId -> [Var ModelThreadId]
+shrinkTid :: RegState -> Var ThreadId -> [Var ThreadId]
 shrinkTid s tid = [tid' | tid' <- tids s, tid' < tid]
 
 tabu :: String -> [String] -> Property -> Property
@@ -242,15 +237,15 @@ prop_Registry :: Actions RegState -> Property
 prop_Registry s =
   property $
     runIOSimProp $ do
-      -- _ <- run cleanUp
       monitor $ counterexample "\nExecution\n"
-      _res <- runPropertyIOSim (runActions runModelIOSim s) (error "don't look at uninitialized state")
+      _res <- runPropertyStateT (runActions s) (error "don't look at uninitialized state")
       assert True
 
--- cleanUp :: IO [Either ErrorCall ()]
--- cleanUp = sequence
---   [try (unregister name) :: IO (Either ErrorCall ())
---    | name <- allNames++["x"]]
+-- TODO: put this in some extras module
+runPropertyStateT :: Monad m => PropertyM (StateT s m) a -> s -> PropertyM m (a, s)
+runPropertyStateT p s0 = MkPropertyM $ \k -> do
+  m <- unPropertyM (do a <- p; s <- run get; return (a, s)) $ fmap lift . k
+  return $ evalStateT m s0
 
 propTest :: DynFormula RegState -> Property
 propTest d = forAllScripts d prop_Registry
@@ -318,7 +313,7 @@ canRegisterName' name s = forAllQ (elementsQ availableTids) $ \tid ->
  where
   availableTids = (tids s \\ map snd (regs s)) \\ dead s
 
-canReregister' :: Show (ThreadId (IOSim s)) => RegState -> DynFormula RegState
+canReregister' :: Show (IOClass.ThreadId (IOSim s)) => RegState -> DynFormula RegState
 canReregister' s
   | null (regs s) =
     toStop $
@@ -335,4 +330,4 @@ tests =
   testGroup
     "registry model example"
     -- TODO: fix property
-    [testProperty "prop_Registry" (property True)]
+    [testProperty "prop_Registry" prop_Registry]

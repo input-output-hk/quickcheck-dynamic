@@ -59,9 +59,11 @@ library
         io-sim,
         lens,
         containers,
-        mtl
+        mtl,
+        stm,
+        quickcheck-dynamic
 
-test-suite quickcheck-io-sim-compat-test
+test-suite quickcheck-dynamic-iosim
     import: lang
     type: exitcode-stdio-1.0
     main-is: Spec.hs
