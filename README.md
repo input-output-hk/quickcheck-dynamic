@@ -1,17 +1,17 @@
 # quickcheck-dynamic
 
+<div align="center">
+  <a href='https://github.com/input-output-hk/quickcheck-dynamic/actions'><img src="https://img.shields.io/github/workflow/status/input-output-hk/hydra-poc/CI?label=Tests&style=for-the-badge" /></a>
+</div>
+
 A library for testing stateful programs using [QuickCheck](https://hackage.haskell.org/package/QuickCheck) and [dynamic logic](https://en.wikipedia.org/wiki/Dynamic_logic_(modal_logic)).
 
 The original stateful testing approach is described in John Hughes' research paper: [https://www.cs.tufts.edu/~nr/cs257/archive/john-hughes/quviq-testing.pdf ](https://publications.lib.chalmers.se/records/fulltext/232550/local_232550.pdf).
 The dynamic logic addition allows you to specify that after a generated test sequence, the system is able to reach a specific required state. In other words, you can specify that some "good" state is reachable from any possible state.
 
-<div align="center">
-  <a href='https://github.com/input-output-hk/quickcheck-dynamic/actions'><img src="https://img.shields.io/github/workflow/status/input-output-hk/hydra-poc/CI?label=Tests&style=for-the-badge" /></a>
-</div>
-
-> :warning: :warning: :warning:
->
-> This is still work-in-progress.
+The following talks provide concrete examples on how this approach is used to test smart contracts in Plutus:
+* John Hughes high level talk on how to test Plutus smart contracts using this library: https://youtu.be/V9_14jjJiuQ
+* 55 minutes in to this lecture an example of using the state machine formalism: https://www.youtube.com/watch?v=zW3D2iM5uVg&t=3300
 
 ## Introduction
 
@@ -55,8 +55,3 @@ Before you start using nix, please make sure you've configured haskell.nix cachi
   direnv allow
   ```
 * Then go back to [Without nix](#without-nix) instructions
-
-### External material 
-
-* John Hughes high level talk on how to test Plutus smart contracts using this library: https://youtu.be/V9_14jjJiuQ
-* 55 minutes in to this lecure an example of using the state machine formalism: https://www.youtube.com/watch?v=zW3D2iM5uVg
