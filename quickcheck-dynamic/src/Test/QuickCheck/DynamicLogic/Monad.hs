@@ -45,9 +45,16 @@ instance Applicative (DL s) where
   pure x = DL $ \s k -> k x s
   (<*>) = ap
 
+instance Alternative (DL s) where
+  empty = DL $ \_ _ -> DL.ignore
+  DL h <|> DL j = DL $ \s k -> h s k DL.||| j s k
+
 instance Monad (DL s) where
   return = pure
   DL h >>= j = DL $ \s k -> h s $ \x s1 -> unDL (j x) s1 k
+
+instance MonadFail (DL s) where
+  fail = errorDL
 
 action :: (Show a, Typeable a, Eq (Action s a)) => Action s a -> DL s ()
 action cmd = DL $ \_ k -> DL.after cmd $ k ()
@@ -102,13 +109,6 @@ monitorDL f = DL $ \s k -> DL.monitorDL f (k () s)
 --   Generated values will only shrink to smaller values that could also have been generated.
 forAllQ :: Quantifiable q => q -> DL s (Quantifies q)
 forAllQ q = DL $ \s k -> DL.forAllQ q $ \x -> k x s
-
-instance Alternative (DL s) where
-  empty = DL $ \_ _ -> DL.ignore
-  DL h <|> DL j = DL $ \s k -> h s k DL.||| j s k
-
-instance MonadFail (DL s) where
-  fail = errorDL
 
 runDL :: s -> DL s () -> DL.DynFormula s
 runDL s dl = unDL dl s $ \_ _ -> DL.passTest

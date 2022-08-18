@@ -31,7 +31,7 @@ import Test.Tasty hiding (after)
 import Test.Tasty.QuickCheck (testProperty)
 
 import Spec.DynamicLogic.Registry
-import Test.QuickCheck.DynamicLogic
+import Test.QuickCheck.DynamicLogic.Core
 import Test.QuickCheck.StateModel
 import Test.QuickCheck.StateModel.IOSim
 
@@ -157,7 +157,7 @@ runModelIOSim = RunModel performRegistry
  where
   performRegistry :: forall a. RegState -> Action RegState a -> LookUp -> IOSimModel (Registry (IOSim s)) s a
   performRegistry _ Init _ = do
-    reg <- liftIOSim $ setupRegistry
+    reg <- liftIOSim setupRegistry
     put reg
   performRegistry _ Spawn _ =
     encapsulateM $ forkIO (threadDelay 10000000)
