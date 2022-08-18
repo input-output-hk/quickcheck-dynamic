@@ -49,7 +49,7 @@ library
     exposed-modules:
         Test.QuickCheck.DynamicLogic
         Test.QuickCheck.DynamicLogic.CanGenerate
-        Test.QuickCheck.DynamicLogic.Monad
+        Test.QuickCheck.DynamicLogic.Core
         Test.QuickCheck.DynamicLogic.Quantify
         Test.QuickCheck.DynamicLogic.SmartShrinking
         Test.QuickCheck.DynamicLogic.Utils
