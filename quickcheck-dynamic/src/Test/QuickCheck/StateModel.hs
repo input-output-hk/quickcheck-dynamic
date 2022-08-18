@@ -82,7 +82,7 @@ class
   --     KillThread :: Var ThreadId           -> Action RegState ()
   -- @
   --
-  -- The `Spawn` action should produce a  `ThreadId`, whereas the `KillThread` action does not return
+  -- The @Spawn@ action should produce a @ThreadId@, whereas the @KillThread@ action does not return
   -- anything.
   data Action state a
 
@@ -146,7 +146,7 @@ class
 --
 -- The `Lookup` parameter provides an /environment/ to lookup `Var
 -- a` instances from previous steps.
-newtype RunModel state m = RunModel { perform :: forall a. state -> Action state a -> LookUp -> m a }
+newtype RunModel state m = RunModel {perform :: forall a. state -> Action state a -> LookUp -> m a}
 
 type LookUp = forall a. Typeable a => Var a -> a
 

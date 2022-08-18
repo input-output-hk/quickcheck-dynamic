@@ -101,14 +101,14 @@ after ::
   DynFormula s
 
 -- | Disjunction for DL formulae.
--- Is `True` if either formula is `True`. The choice is `Angelic`, ie. it is
+-- Is `True` if either formula is `True`. The choice is /angelic/, ie. it is
 -- always made by the "caller". This is  mostly important in case a test is
--- `stuck`.
+-- `Stuck`.
 (|||) :: DynFormula s -> DynFormula s -> DynFormula s
 
 -- | First-order quantification of variables.
--- Formula `f` is `True` iff. it is `True` /for all/ possible values of `q`. The
--- underlying framework will `generate` values of `q` and check the formula holds
+-- Formula @f@ is `True` iff. it is `True` /for all/ possible values of `q`. The
+-- underlying framework will generate values of `q` and check the formula holds
 -- for those values. `Quantifiable` values are thus values that can be generated
 -- and checked and the `Test.QuickCheck.DynamicLogic.Quantify` module defines
 -- basic combinators to build those from building blocks.
