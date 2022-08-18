@@ -6,3 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 As a minor extension, we also keep a semantic version for the `UNRELEASED`
 changes.
+
+## 1.0.0
+
+* Initial publication of quickcheck-dynamic library on Hackage
+* Provide base `StateModel` and `DynamicLogic` tools to write quickcheck-based models, express properties, and test them
