@@ -6,8 +6,11 @@
 
 A library for testing stateful programs using [QuickCheck](https://hackage.haskell.org/package/QuickCheck) and [dynamic logic](https://en.wikipedia.org/wiki/Dynamic_logic_(modal_logic)).
 
-The original stateful testing approach is described in John Hughes' research paper: [https://www.cs.tufts.edu/~nr/cs257/archive/john-hughes/quviq-testing.pdf ](https://publications.lib.chalmers.se/records/fulltext/232550/local_232550.pdf).
-The dynamic logic addition allows you to specify that after a generated test sequence, the system is able to reach a specific required state. In other words, you can specify that some "good" state is reachable from any possible state.
+* The original stateful testing approach is described in John Hughes' research paper: [https://www.cs.tufts.edu/~nr/cs257/archive/john-hughes/quviq-testing.pdf ](https://publications.lib.chalmers.se/records/fulltext/232550/local_232550.pdf)
+* The [Registry example](https://github.com/input-output-hk/quickcheck-dynamic/tree/main/quickcheck-io-sim-compat) is a common case study that's been explored in two papers:
+  * [How well are your requirements tested?](https://publications.lib.chalmers.se/records/fulltext/232552/local_232552.pdf)
+  * and [Understanding Formal Specifications through Good Examples](https://mengwangoxf.github.io/Papers/Erlang18.pdf)
+* The dynamic logic addition allows you to specify that after a generated test sequence, the system is able to reach a specific required state. In other words, you can specify that some "good" state is reachable from any possible state.
 
 The following talks provide concrete examples on how this approach is used to test smart contracts in Plutus:
 * John Hughes high level talk on how to test Plutus smart contracts using this library: https://youtu.be/V9_14jjJiuQ
