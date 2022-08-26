@@ -7,11 +7,11 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE RecordWildCards #-}
 
 -- | Simple (stateful) Model-Based Testing library for use with Haskell QuickCheck.
 --
@@ -133,7 +133,7 @@ class
   -- This function is given the full transition that's been executed, including the start and ending
   -- `state`, the `Action`, the current environment to `Lookup` and the value produced by `perform`
   -- while executing this step.
-  monitoring :: (state, state) -> Action state a -> LookUp -> a -> Property -> Property
+  monitoring :: Show a => (state, state) -> Action state a -> LookUp -> a -> Property -> Property
   monitoring _ _ _ _ = id
 
 -- | Perform an `Action` in some `state` in the `Monad` `m`.  This
