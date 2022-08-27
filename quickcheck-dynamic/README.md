@@ -14,8 +14,8 @@ Plutus or Cardano.
 ## Usage
 
 * Documentation is currenly mostly provided inline as Haddock
-  comments. Checkout [StateModel](https://hackage.haskell.org/package/quickcheck-dynamic-1.0.0/docs/src/Test.QuickCheck.StateModel.html)
-  and [DynamicLogic](https://hackage.haskell.org/package/quickcheck-dynamic-1.0.0/docs/Test-QuickCheck-DynamicLogic.html) modules for
+  comments. Checkout [StateModel](https://hackage.haskell.org/package/quickcheck-dynamic/docs/src/Test.QuickCheck.StateModel.html)
+  and [DynamicLogic](https://hackage.haskell.org/package/quickcheck-dynamic/docs/Test-QuickCheck-DynamicLogic.html) modules for
   some usage instructions.
 * For a concrete standalone example, have a look at `Registry` and `RegistryModel` modules from the companion [quickcheck-io-sim-compat](https://github.com/input-output-hk/quickcheck-dynamic/tree/main/quickcheck-io-sim-compat) package (not currently available on hackage), a multithreaded Thread registry inspired by the Erlang version of QuickCheck described in [this article](https://mengwangoxf.github.io/Papers/Erlang18.pdf)
 * For more documentation on how to quickcheck-dynamic is used to test
