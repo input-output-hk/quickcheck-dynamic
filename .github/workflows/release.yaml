@@ -55,10 +55,3 @@ jobs:
       with:
         name: quickcheck-dynamic.tar.gz
         path: ./dist-newstyle/sdist/quickcheck-dynamic-${{ steps.get_version.outputs.VERSION }}.tar.gz
-
-    # upload package as candidate on Hackage
-    - name: Hackage candidate
-      uses: haskell-actions/hackage-publish@v1
-      with:
-        hackageToken: ${{ secrets.HACKAGE }}
-        publish: false
