@@ -38,9 +38,13 @@ jobs:
       run: |
         nix-build --arg withoutDevTools true shell.nix
 
+    - name: Cabal check
+      run: |
+        nix-shell --arg withoutDevTools true --run 'cabal check quickcheck-dynamic'
+
     - name: Package
       run: |
-        nix-shell --arg withoutDevTools true --run 'cabal sdist'
+        nix-shell --arg withoutDevTools true --run 'cabal sdist quickcheck-dynamic'
 
     - name: Get the version
       id: get_version
@@ -49,4 +53,12 @@ jobs:
     - name: Upload distribution
       uses: actions/upload-artifact@v2
       with:
+        name: quickcheck-dynamic.tar.gz
         path: ./dist-newstyle/sdist/quickcheck-dynamic-${{ steps.get_version.outputs.VERSION }}.tar.gz
+
+    # upload package as candidate on Hackage
+    - name: Hackage candidate
+      uses: haskell-actions/hackage-publish@v1
+      with:
+        hackageToken: ${{ secrets.HACKAGE_AUTH_TOKEN }}
+        publish: false
