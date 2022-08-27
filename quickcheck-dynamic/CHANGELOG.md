@@ -7,6 +7,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 As a minor extension, we also keep a semantic version for the `UNRELEASED`
 changes.
 
+## UNRELEASED
+
+
+## 1.1.0 - 2022-08-27
+
+* Fix broken links in Hackage-generated documentation and link to other Quviq papers
+* Add `Show a` constraint on `monitoring`
+
 ## 1.0.0
 
 * Initial publication of quickcheck-dynamic library on Hackage

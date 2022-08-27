@@ -1,6 +1,6 @@
 cabal-version:   2.2
 name:            quickcheck-dynamic
-version:         1.0.0
+version:         1.1.0
 license:         Apache-2.0
 license-files:
   LICENSE
@@ -22,7 +22,8 @@ description:
 
 build-type:      Simple
 extra-doc-files: README.md
-
+extra-source-files: CHANGELOG.md
+                    
 source-repository head
   type:     git
   location: https://github.com/input-output-hk/quickcheck-dynamic
