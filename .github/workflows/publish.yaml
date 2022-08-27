@@ -13,6 +13,6 @@ jobs:
         path: ${{ matrix.project }}
     - uses: haskell-actions/hackage-publish@v1
       with:
-        hackageToken: ${{ secrets.HACKAGE_AUTH_TOKEN }}
+        hackageToken: ${{ secrets.HACKAGE }}
         packagesPath: '.'
         publish: false
