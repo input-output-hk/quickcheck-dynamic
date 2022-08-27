@@ -4,6 +4,7 @@ on:
 jobs:
   release:
     name: "Pack & Upload"
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
     - name: Download artifact
