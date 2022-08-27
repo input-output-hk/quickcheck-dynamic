@@ -40,7 +40,7 @@ jobs:
 
     - name: Cabal check
       run: |
-        nix-shell --arg withoutDevTools true --run 'cabal check quickcheck-dynamic'
+        nix-shell --arg withoutDevTools true --run 'cd quickcheck-dynamic && cabal check'
 
     - name: Package
       run: |
