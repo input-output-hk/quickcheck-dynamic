@@ -16,3 +16,4 @@ jobs:
       with:
         hackageToken: ${{ secrets.HACKAGE }}
         packagesPath: '.'
+        publish: true
