@@ -126,15 +126,15 @@ instance StateModel RegState where
   precondition s (Successful act) = precondition s act
   precondition _ _ = True
 
-  postcondition _ Init _ _ = True
-  postcondition s (WhereIs name) env mtid =
+  postcondition _ Init _ _ = checkBool $ True
+  postcondition s (WhereIs name) env mtid = checkBool $
     (env <$> lookup name (regs s)) == mtid
-  postcondition _s Spawn _ _ = True
-  postcondition s (Register name step) _ res =
+  postcondition _s Spawn _ _ = checkBool $ True
+  postcondition s (Register name step) _ res = checkBool $
     positive s (Register name step) == isRight res
-  postcondition _s (Unregister _name) _ _ = True
-  postcondition _s (KillThread _) _ _ = True
-  postcondition _s (Successful (Register _ _)) _ res = isRight res
+  postcondition _s (Unregister _name) _ _ = checkBool $ True
+  postcondition _s (KillThread _) _ _ = checkBool $ True
+  postcondition _s (Successful (Register _ _)) _ res = checkBool $ isRight res
   postcondition s (Successful act) env res = postcondition s act env res
 
   monitoring (_s, s') act _ res =
@@ -151,6 +151,10 @@ instance StateModel RegState where
         Unregister _ -> tabu "Unregister" [case res of Left _ -> "fails"; Right () -> "succeeds"]
         WhereIs _ -> tabu "WhereIs" [case res of Nothing -> "fails"; Just _ -> "succeeds"]
         _ -> id
+
+checkBool :: Bool -> Maybe String
+checkBool True  = Nothing
+checkBool False = Just "condition failed"
 
 runModelIOSim :: forall s. RunModel RegState (IOSimModel (Registry (IOSim s)) s)
 runModelIOSim = RunModel performRegistry
