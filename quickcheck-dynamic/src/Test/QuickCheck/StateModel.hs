@@ -114,7 +114,7 @@ class
   -- by `perform`ing the `Action` inside the `state` so that further actions can use `Lookup`
   -- to retrieve that data. This allows the model to be ignorant of those values yet maintain
   -- some references that can be compared and looked for.
-  nextState :: state -> Action state a -> Var a -> state
+  nextState :: Typeable a => state -> Action state a -> Var a -> state
   nextState s _ _ = s
 
   -- | Precondition for filtering generated `Action`.
