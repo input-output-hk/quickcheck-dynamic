@@ -148,7 +148,7 @@ class Monad m => RunModel state m where
   -- | Postcondition on the `a` value produced at some step.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
   -- to check the implementation produces expected values.
-  postcondition :: forall a. state -> Action state a -> LookUp m -> Realized m a -> m Bool
+  postcondition :: forall a. (state, state) -> Action state a -> LookUp m -> Realized m a -> m Bool
   postcondition _ _ _ _ = pure True
   -- | Allows the user to attach information to the `Property` at each step of the process.
   -- This function is given the full transition that's been executed, including the start and ending
@@ -337,6 +337,6 @@ runActionsInState st (Actions_ rejected (Smart _ actions)) = loop st [] actions
         s' = nextState s act var
         env' = (var :== ret) : env
     monitor (monitoring @state @m (s, s') act (lookUpVar env') ret)
-    b <- run $ postcondition s act (lookUpVar env) ret
+    b <- run $ postcondition (s, s') act (lookUpVar env) ret
     assert b
     loop s' env' as
