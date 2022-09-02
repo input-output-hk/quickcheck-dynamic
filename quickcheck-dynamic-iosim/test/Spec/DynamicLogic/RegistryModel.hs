@@ -151,10 +151,10 @@ instance (m ~ RegM s) => RunModel RegState m where
     perform s act env
 
   postcondition _ Init _ _ = pure True
-  postcondition s (WhereIs name) env mtid =
+  postcondition (s, _) (WhereIs name) env mtid =
     pure $ (env <$> lookup name (regs s)) == mtid
   postcondition _s Spawn _ _ = pure True
-  postcondition s (Register name step) _ res =
+  postcondition (s, _) (Register name step) _ res =
     pure $ positive s (Register name step) == isRight res
   postcondition _s (Unregister _name) _ _ = pure True
   postcondition _s (KillThread _) _ _ = pure True
