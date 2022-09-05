@@ -52,6 +52,7 @@ library
     hs-source-dirs: src
     exposed-modules:
         Test.QuickCheck.DynamicLogic
+        Test.QuickCheck.DynamicLogic.Monad
         Test.QuickCheck.DynamicLogic.CanGenerate
         Test.QuickCheck.DynamicLogic.Core
         Test.QuickCheck.DynamicLogic.Quantify
