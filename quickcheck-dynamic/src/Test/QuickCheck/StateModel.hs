@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -12,8 +13,6 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ConstraintKinds #-}
 
 -- | Simple (stateful) Model-Based Testing library for use with Haskell QuickCheck.
 --
@@ -36,12 +35,12 @@ module Test.QuickCheck.StateModel (
   runActions,
   runActionsInState,
   lookUpVar,
-  lookUpVarMaybe
+  lookUpVarMaybe,
 ) where
 
 import Control.Monad
-import Control.Monad.State
 import Control.Monad.Reader
+import Control.Monad.State
 import Data.Data
 import Data.Kind
 import Test.QuickCheck as QC
@@ -145,11 +144,13 @@ class Monad m => RunModel state m where
   -- The `Lookup` parameter provides an /environment/ to lookup `Var
   -- a` instances from previous steps.
   perform :: forall a. Typeable a => state -> Action state a -> LookUp m -> m (Realized m a)
+
   -- | Postcondition on the `a` value produced at some step.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
   -- to check the implementation produces expected values.
   postcondition :: forall a. (state, state) -> Action state a -> LookUp m -> Realized m a -> m Bool
   postcondition _ _ _ _ = pure True
+
   -- | Allows the user to attach information to the `Property` at each step of the process.
   -- This function is given the full transition that's been executed, including the start and ending
   -- `state`, the `Action`, the current environment to `Lookup` and the value produced by `perform`
@@ -238,11 +239,11 @@ instance (forall a. Show (Action state a)) => Show (Actions state) where
     | d > 10 = ("(" ++) . shows (Actions as) . (")" ++)
     | null as = ("Actions []" ++)
     | otherwise =
-      ("Actions \n [" ++)
-        . foldr
-          (.)
-          (shows (last as) . ("]" ++))
-          [shows a . (",\n  " ++) | a <- init as]
+        ("Actions \n [" ++)
+          . foldr
+            (.)
+            (shows (last as) . ("]" ++))
+            [shows a . (",\n  " ++) | a <- init as]
 
 instance (StateModel state) => Arbitrary (Actions state) where
   arbitrary = do
@@ -272,14 +273,14 @@ instance (StateModel state) => Arbitrary (Actions state) where
       go m n rej
         | m > n = return (Nothing, rej)
         | otherwise = do
-          a <- resize m $ arbitraryAction s
-          case a of
-            Some act ->
-              if precondition s act
-                then return (Just (Some act), rej)
-                else go (m + 1) n (actionName act : rej)
-            Error _ ->
-              go (m + 1) n rej
+            a <- resize m $ arbitraryAction s
+            case a of
+              Some act ->
+                if precondition s act
+                  then return (Just (Some act), rej)
+                  else go (m + 1) n (actionName act : rej)
+              Error _ ->
+                go (m + 1) n rej
 
   shrink (Actions_ rs as) =
     map (Actions_ rs) (shrinkSmart (map (prune . map fst) . shrinkList shrinker . withStates) as)
@@ -292,9 +293,9 @@ prune = loop initialState
   loop _s [] = []
   loop s ((var := act) : as)
     | precondition s act =
-      (var := act) : loop (nextState s act var) as
+        (var := act) : loop (nextState s act var) as
     | otherwise =
-      loop s as
+        loop s as
 
 withStates :: StateModel state => [Step state] -> [(Step state, state)]
 withStates = loop initialState

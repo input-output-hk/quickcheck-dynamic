@@ -474,8 +474,8 @@ shrinkScript dl steps = shrink' dl steps initialState
  where
   shrink' _ [] _ = []
   shrink' d (step : as) s =
-    [] :
-    reverse (takeWhile (not . null) [drop (n - 1) as | n <- iterate (* 2) 1])
+    []
+      : reverse (takeWhile (not . null) [drop (n - 1) as | n <- iterate (* 2) 1])
       ++ case step of
         Do (Var i := act) ->
           [Do (Var i := act') : as | Some act' <- shrinkAction s act]
@@ -513,13 +513,13 @@ pruneDLTest dl = prune [dl] initialState
   prune _ _ [] = []
   prune ds s (Do (var := act) : rest)
     | precondition s act =
-      case [d' | d <- ds, d' <- stepDL d s (Do $ var := act)] of
-        [] -> prune ds s rest
-        ds' ->
-          Do (var := act) :
-          prune ds' (nextState s act var) rest
+        case [d' | d <- ds, d' <- stepDL d s (Do $ var := act)] of
+          [] -> prune ds s rest
+          ds' ->
+            Do (var := act)
+              : prune ds' (nextState s act var) rest
     | otherwise =
-      prune ds s rest
+        prune ds s rest
   prune ds s (Witness a : rest) =
     case [d' | d <- ds, d' <- stepDL d s (Witness a)] of
       [] -> prune ds s rest
