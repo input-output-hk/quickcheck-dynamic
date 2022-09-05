@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleContexts #-}
-
 -- | Monadic interface for writing /Dynamic Logic/ properties.
 --
 -- This interface offers a much nicer experience than manipulating the

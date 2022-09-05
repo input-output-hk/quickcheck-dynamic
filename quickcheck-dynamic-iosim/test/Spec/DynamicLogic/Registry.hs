@@ -1,7 +1,3 @@
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TypeApplications #-}
-
 -- A simple local name service for threads... behaves like the Erlang
 -- process registry.
 module Spec.DynamicLogic.Registry where

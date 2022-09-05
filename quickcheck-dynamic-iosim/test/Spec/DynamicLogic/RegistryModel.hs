@@ -1,17 +1,3 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE InstanceSigs #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE UndecidableInstances #-}
-
 module Spec.DynamicLogic.RegistryModel where
 
 import Control.Concurrent (ThreadId)
@@ -30,7 +16,8 @@ import Test.QuickCheck
 import Test.QuickCheck.Gen.Unsafe (Capture (Capture), capture)
 import Test.QuickCheck.Monadic
 import Test.Tasty hiding (after)
-import Test.Tasty.QuickCheck (testProperty)
+-- TODO: include this when we turn on the tests again
+-- import Test.Tasty.QuickCheck (testProperty)
 
 import Spec.DynamicLogic.Registry
 import Test.QuickCheck.DynamicLogic.Core
@@ -103,7 +90,6 @@ instance StateModel RegState where
     Some act : [Some (Successful act') | Some act' <- shrinkAction s act]
   shrinkAction _ _ = []
 
-  initialState :: RegState
   initialState = RegState [] [] [] False
 
   nextState s Spawn step =

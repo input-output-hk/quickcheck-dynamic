@@ -1,10 +1,3 @@
-{-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
-
 module Test.QuickCheck.DynamicLogic.Core (
   module Test.QuickCheck.DynamicLogic.Quantify,
   DynLogic,
