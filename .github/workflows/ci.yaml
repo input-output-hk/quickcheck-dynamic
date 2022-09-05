@@ -53,6 +53,10 @@ jobs:
       run: |
         nix-shell --arg withoutDevTools true --run 'cabal test all --test-options "--xml=test-results.xml"'
 
+    - name: Formatting
+      run: |
+        nix-shell --arg withoutDevTools false --run './fmt.sh check'
+
     - name: Upload build & test artifacts
       uses: actions/upload-artifact@v2
       with:

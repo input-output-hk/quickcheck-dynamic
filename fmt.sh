@@ -1,3 +1,4 @@
 #!/bin/bash
-find quickcheck-dynamic -type f -name *.hs | xargs -n1 fourmolu -i -c -o -XImportQualifiedPost
-find quickcheck-dynamic-iosim -type f -name *.hs | xargs -n1 fourmolu -i -c -o -XImportQualifiedPost
+MODE=${1:-inplace}
+fourmolu -m $MODE -c $(find quickcheck-dynamic* -type f -name *.hs)
+exit $?
