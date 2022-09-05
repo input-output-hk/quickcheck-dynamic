@@ -5,7 +5,7 @@ license:         Apache-2.0
 license-files:
   LICENSE
   NOTICE
-  CHANGELOG.md
+
 category:  Testing
 synopsis:
   A library to implement stateful property-based testing using dynamic logic.
@@ -53,13 +53,9 @@ library
     exposed-modules:
         Test.QuickCheck.StateModel.IOSim
     build-depends:
-        QuickCheck -any,
         base >=4.7 && <5,
         io-classes,
         io-sim,
-        lens,
-        containers,
-        mtl,
         stm,
         quickcheck-dynamic
 
