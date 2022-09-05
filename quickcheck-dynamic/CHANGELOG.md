@@ -19,3 +19,9 @@ changes.
 
 * Initial publication of quickcheck-dynamic library on Hackage
 * Provide base `StateModel` and `DynamicLogic` tools to write quickcheck-based models, express properties, and test them
+
+## 2.0.0
+
+* Add `Realized` type family to distinguish between the model- and real type of an action
+* Introduce `RunModel` type class for `perform`
+* Split `postcondition` and `monitoring` out from the `StateModel` to the `RunModel` type class
