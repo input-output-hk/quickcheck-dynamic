@@ -7,7 +7,9 @@ let
 
   inherit (project) pkgs compiler;
 
-  libs = [ pkgs.git ] ;
+  libs = [ pkgs.git
+           pkgs.zlib
+         ] ;
 
   buildTools = {
     cabal = "latest";
