@@ -1,5 +1,5 @@
 cabal-version:   2.2
-name:            quickcheck-io-sim-compat
+name:            quickcheck-dynamic-iosim
 version:         0.1.0.0
 license:         Apache-2.0
 license-files:
@@ -72,7 +72,7 @@ test-suite quickcheck-dynamic-iosim
         QuickCheck -any,
         base >=4.7 && <5,
         quickcheck-dynamic -any,
-        quickcheck-io-sim-compat -any,
+        quickcheck-dynamic-iosim -any,
         tasty -any,
         tasty-test-reporter -any,
         tasty-quickcheck -any,
