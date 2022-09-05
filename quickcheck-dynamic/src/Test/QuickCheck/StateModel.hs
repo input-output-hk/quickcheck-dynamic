@@ -39,9 +39,12 @@ module Test.QuickCheck.StateModel (
 
 import Control.Monad
 import Data.Data
-import Test.QuickCheck as QC
+import Test.QuickCheck as QC hiding ((===))
 import Test.QuickCheck.DynamicLogic.SmartShrinking
 import Test.QuickCheck.Monadic
+
+import Test.QuickCheck.StateModel.Postcondition (Postcondition(..))
+import Test.QuickCheck.StateModel.Postcondition qualified as Post
 
 -- | The typeclass users implement to define a model against which to validate some implementation.
 --
@@ -127,8 +130,8 @@ class
   --
   -- When 'postcondition' returns @Just err@, the property will fail, and @err@ will be shown as a
   -- counter-example. This is useful to check th implementation produces expected values.
-  postcondition :: state -> Action state a -> LookUp -> a -> Maybe String
-  postcondition _ _ _ _ = Nothing
+  postcondition :: state -> Action state a -> LookUp -> a -> Postcondition
+  postcondition _ _ _ _ = Post.assertSuccess
 
   -- | Allows the user to attach information to the `Property` at each step of the process.
   -- This function is given the full transition that's been executed, including the start and ending
@@ -339,9 +342,10 @@ runActionsInState state RunModel{..} (Actions_ rejected (Smart _ actions)) = loo
     let s' = nextState s act (Var n)
         env' = (Var n :== ret) : env
     monitor (monitoring (s, s') act (lookUpVar env') ret)
-    case postcondition s act (lookUpVar env) ret of
-      Nothing  -> return ()
-      Just err -> do
+    case getPostcondition $ postcondition s act (lookUpVar env) ret of
+      Right () -> return ()
+      Left err -> do
         monitor (counterexample err)
         assert False
     loop s' env' as
+
