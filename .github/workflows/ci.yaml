@@ -47,7 +47,7 @@ jobs:
     - name: Build
       run: |
         nix-shell --arg withoutDevTools true --run 'cabal update'
-        nix-shell --arg withoutDevTools true --run 'cabal build all'
+        nix-shell --arg withoutDevTools true --run 'cabal build all --ghc-options=-Werror'
 
     - name: Test
       run: |
