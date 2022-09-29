@@ -16,6 +16,7 @@ import Test.QuickCheck
 import Test.QuickCheck.Gen.Unsafe (Capture (Capture), capture)
 import Test.QuickCheck.Monadic
 import Test.Tasty hiding (after)
+
 -- TODO: include this when we turn on the tests again
 -- import Test.Tasty.QuickCheck (testProperty)
 
