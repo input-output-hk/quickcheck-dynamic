@@ -7,6 +7,12 @@
 
 A library for testing stateful programs using [QuickCheck](https://hackage.haskell.org/package/QuickCheck) and [dynamic logic](https://en.wikipedia.org/wiki/Dynamic_logic_(modal_logic)).
 
+This repository hosts:
+* The core [quickcheck-dynamic](./quickcheck-dynamic) library providing tools for quickchecking stateful models,
+* Example of integrating [io-sim](https://github.com/input-output-hk/io-sim)'s Haskell runtime simulator and _quickcheck-dynamic_ to model and test complex multi-threaded application.
+
+## Documentation
+
 * The original stateful testing approach is described in John Hughes' research paper: [https://www.cs.tufts.edu/~nr/cs257/archive/john-hughes/quviq-testing.pdf ](https://publications.lib.chalmers.se/records/fulltext/232550/local_232550.pdf)
 * The [Registry example](https://github.com/input-output-hk/quickcheck-dynamic/tree/main/quickcheck-io-sim-compat) is a common case study that's been explored in two papers:
   * [How well are your requirements tested?](https://publications.lib.chalmers.se/records/fulltext/232552/local_232552.pdf)
@@ -17,11 +23,7 @@ The following talks provide concrete examples on how this approach is used to te
 * John Hughes high level talk on how to test Plutus smart contracts using this library: https://youtu.be/V9_14jjJiuQ
 * 55 minutes in to this lecture an example of using the state machine formalism: https://www.youtube.com/watch?v=zW3D2iM5uVg&t=3300
 
-## Introduction
-
-This repository hosts:
-* The core [quickcheck-dynamic](./quickcheck-dynamic) library providing tools for quickchecking stateful models,
-* Example of integrating [io-sim](https://github.com/input-output-hk/io-sim)'s Haskell runtime simulator and _quickcheck-dynamic_ to model and test complex multi-threaded application.
+Edsko de Vries wrote a [nice blog post](https://well-typed.com/blog/2022/09/lockstep-with-quickcheck-dynamic/) to compare `quickcheck-dynamic` with [quickcheck-state-machine](https://hackage.haskell.org/package/quickcheck-state-machine), another library to write model-based tests on top of QuickCheck. This blog post introduces [quickcheck-lockstep](https://github.com/well-typed/quickcheck-lockstep) which provides _lockstep-style_ testing on top of quickcheck-dynamic.
 
 ## Building
 
