@@ -13,12 +13,12 @@ let
 
   buildTools = {
     cabal = "latest";
+    fourmolu = "latest";
   };
 
   devTools = if withoutDevTools then { } else {
     hlint = "latest";
     haskell-language-server = "latest";
-    fourmolu = "latest";
   };
 
 in project.shellFor {
