@@ -28,6 +28,10 @@ The tests here use IOG's concurrent execution simulator library [io-sim](https:/
 
 Edsko de Vries wrote a [nice blog post](https://well-typed.com/blog/2022/09/lockstep-with-quickcheck-dynamic/) to compare `quickcheck-dynamic` with [quickcheck-state-machine](https://hackage.haskell.org/package/quickcheck-state-machine), another library to write model-based tests on top of QuickCheck. This blog post introduces [quickcheck-lockstep](https://github.com/well-typed/quickcheck-lockstep) which provides _lockstep-style_ testing on top of quickcheck-dynamic.
 
+Lockstep-style testing is a special case of Model-Based Testing whereby what's tested at each execution step of a test sequence is the equivalence up to some observability function, of the return values expected by the _Model_ and the one provided by the _Implementation_. In other words, if we consider each step in the state-machine as a transition that, given some input and a starting state, produces some output and possibly a new state, then lockstep-style testing checks equivalence of the _output traces_ from the model and the implementation.
+
+The quickcheck-lockstep library provides generic implementations for most of the methods of the `StateModel` typeclass and dedicated type-classes to relate the Model and the Implementation.
+
 ### Plutus Contracts
 
 Within IOG, the quickcheck-dynamic testing approach was initially applied to provide a testing framework for Smart Contracts developers within the Plutus Application Backend. The Plutus documentation contains a [detailed tutorial](https://plutus-apps.readthedocs.io/en/latest/plutus/tutorials/contract-models.html) on how to model smart contracts and tests them using underlying _Emulator_.
