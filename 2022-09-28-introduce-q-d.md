@@ -1,6 +1,6 @@
 # Model-Based Testing with QuickCheck
 
-[quickcheck-dynamic](https://github.com/input-output-hk/quickcheck-dynamic) is a library jointly developed by Quviq and IOG, whose purpose is to leverage [QuickCheck](https://hackage.haskell.org/package/QuickCheck) to test stateful programs against a _Model_. In other words, it's a [_Model-Based Testing_](https://en.wikipedia.org/wiki/Model-based_testing) tool. This article describes the approach, the library, and how it's being applied within IOG to improve the reach of our testing efforts.
+[quickcheck-dynamic](https://github.com/input-output-hk/quickcheck-dynamic) is a library jointly developed by Quviq and IOG, whose purpose is to leverage [QuickCheck](https://hackage.haskell.org/package/QuickCheck) to test stateful programs against a _Model_. In other words, it's a [_Model-Based Testing_](https://en.wikipedia.org/wiki/Model-based_testing) tool. This article wants to be a gentle introduction to the use of quickcheck-dynamic for Model-Based Testing. It describes the overall approach, how the library works, and how it's being applied within IOG to improve the reach of our testing efforts.
 
 ## Background
 
@@ -47,8 +47,6 @@ The Model-Based Testing approach supported by quickcheck-dynamic gives developer
 
 ### Hydra
 
-#### Overview
-
 [Hydra](https://hydra.family) is a so-called _Layer 2_ solution for Cardano that aims at increasing the throughput and latency of Cardano transactions by moving most of the traffic out of the main chain (_Layer 1_) and into smaller networks. The _Hydra Head_ protocol is described in great details in a [research paper](https://eprint.iacr.org/2020/299.pdf).
 
 At its core, Hydra is a state machine whose transitions are Layer 1 transactions, as depicted in the following picture:
@@ -59,33 +57,41 @@ While the overall state machine appears relatively simple on the surface, the ac
 
 In order to guarantee the implementation provides those safety properties, the Hydra team has developed a diversified palette of testing techniques, including the use of quickcheck-dynamic. While the careful Test-Driven Development approach taken gives reasonable confidence most use cases and issues are covered, hopes are high that such a model is able to explore more corner cases and reveal subtle issues in the protocol implementation.
 
-What is actually wanted is to be able to define and test Hydra Head security properties against the real implementation. As a first example, here is stated one of the properties from the original paper:
+What was sought after is to be able to define and test Hydra Head security properties against the real implementation. As a first example the team tackled to get a feel of how quickcheck-dynamic could used, here is stated one of the properties from the original paper:
 
 > • Conflict-Free Liveness (Head):
 >
 > In presence of a network adversary, a conflict-free execution satisfies the following condition:
 > For any transaction tx input via (new,tx), tx ∈ T i∈[n] Ci eventually holds.
 
-This property can be restated in an excutable form using quickcheck-dynamic's [Dynamic Logic](https://github.com/input-output-hk/quickcheck-dynamic/blob/abailly-iohk/link-to-blog-post/quickcheck-dynamic/src/Test/QuickCheck/DynamicLogic.hs) language:
+This property and similar ones are encoded as a _Dynamic Logic_ expressions, and a suitable Model of a Hydra network is defined as an instance of `StateModel` from which test sequences representing User actions are generated.
+
+Hydra is a distributed system where nodes are interconnected through a network layer, and each node needs to be connected to a cardano-node in order to preserve the security of the protocol. While testing an actual "cluster" of hydra and cardano nodes is definitely possible, and certainly desirable at some point in order to strengthen confidence in the whole system, it would also be very slow: Spinning up processes, establishing network connections, producing blocks on a chain, all take seconds if not minutes which makes any signficant exploration of the model state space practically infeasible.
+
+Generated test traces are run within the [IOSim](https://github.com/input-output-hk/hydra-poc/blob/master/hydra-node/test/Hydra/ModelSpec.hs#L220) monad which allows testing 100s of traces within seconds.
+
+Of course, this means we won't be using real TCP/IP networking stack nor connection to a real Cardano node and chain to create a Hydra network, but this is actually not a liability but an asset. By [mocking](https://abailly.github.io/posts/mocking-good-idea.html) the interfaces Hydra nodes use to communicate with other nodes and Cardano network, we are able to control the behaviour of the communication layer and _inject faults_ representing some _Adversary_: Reordering or dropping messages, tampering the data, delaying requests...
+
+## Principles
+
+We'll use the latter example to illustrate quickcheck-dynamic's principles and give the reader an intuition on the four steps that need to be defined in order to use it: Defining a test _Model_, stating how the model relates to the _Implementation_, expressing _Properties_ and, last but not least, checking properties.
+
+### Defining a Model
+
+In quickcheck-dynamic, a _Model_ is some type, a representation of the expected state of the system-under-test, for which there exists an instance of the [StateModel class](https://github.com/input-output-hk/quickcheck-dynamic/blob/abailly-iohk/blog-post/quickcheck-dynamic/src/Test/QuickCheck/StateModel.hs#L56) which sets the building blocks needed to generate and validate test sequences.
+
+In the case of Hydra, the Model is a `WorldState` data type that control the Head parties and maintains a `GlobalState` which reflects the expected Head state:
 
 ```haskell
-conflictFreeLiveness :: DL WorldState ()
-conflictFreeLiveness = do
-  anyActions_
-  getModelStateDL >>= \case
-    st@WorldState{hydraState = Open{}} -> do
-      (party, payment) <- forAllQ (nonConflictingTx st)
-      action $ Model.NewTx party payment
-      eventually (ObserveConfirmedTx payment)
-    _ -> pass
- where
-  nonConflictingTx st = withGenQ (genPayment st) (const [])
-  eventually a = action (Wait 10) >> action a
+data WorldState = WorldState
+  { hydraParties :: [(SigningKey HydraKey, CardanoSigningKey)]
+  , hydraState :: GlobalState
+  }
 ```
 
-#### Implementation
+As the old saying from Alfred Korzybski goes, "The map is not the territory", hence to be useful a _Model_ should abstract away irrelevant details for the purpose of testing. Furthermore, it's perfectly fine to use different models to test different aspects of the same implementation.
 
-The current model is relatively simple and covers the basics of the protocol. One key aspect of quickcheck-dynamic's approach is that the model need not be exactly as detailed as the implementation. In the case of Hydra, the model does not detail the myriad possible variations of transactions Cardano permits and only uses _Two Party Payment_ transactions:
+Here the model does not detail the myriad possible variations of transactions Cardano permits and only uses _Two Party Payment_ transactions:
 
 ```haskell
 data Payment = Payment
@@ -95,16 +101,9 @@ data Payment = Payment
   }
 ```
 
-The Model's state is a `WorldState` data type that control the Head parties and maintains a `GlobalState` which reflects the expected Head state:
+The first important part of the `StateModel` instance to define is the type of `Action` that are meaningful for the given _Model_ and that can also be executed against the concrete implementation. The `Action` associated data-type is a GADT which allows the model to represent the type of _observable output_ that can be produced by the implementation and which can be part of the model's validation logic.
 
-```haskell
-data WorldState = WorldState
-  { hydraParties :: [(SigningKey HydraKey, CardanoSigningKey)]
-  , hydraState :: GlobalState
-  }
-```
-
-Furthermore, the model needs to represent both on-chain and off-chain actions as the properties required from Hydra relates the two. There is an `instance StateModel WorldState` whose `Action` represent user-facing commands and observations that can be made on the state of the system (please note at the time of writing this, the model is incomplete):
+The Hydra model needs to represent both on-chain and off-chain actions as the properties required from Hydra relates the two. The `Action` data-type represent user-facing commands and observations that can be made on the state of the system (please note at the time of writing this, the model is incomplete):
 
 ```haskell
   data Action WorldState a where
@@ -123,21 +122,120 @@ Furthermore, the model needs to represent both on-chain and off-chain actions as
     ObserveConfirmedTx :: Payment -> Action WorldState ()
 ```
 
-As expected, the rest of the [StateModel](https://github.com/input-output-hk/hydra-poc/blob/master/hydra-node/test/Hydra/Model.hs#L207) instance's code defines how sequence of actions are generated, what are the `precondition` and `postcondition` for each action, and the state transition function for each `Action`.
+Then one needs to define:
+* An `initialState`,
+* How to generate _arbitraryAction_s which will be used to produce sequences (or traces) of `Action`s to execute, depending on the current state,
+* A _precondition_ function ensuring some `Action` is valid in some state. This function may seem redundant with the generator but is actually important when _shrinking_ a failing test sequences: The execution engine will ensure the reduced sequence is still valid with respect to the model,
+* A _nextState_ (transition) function that evolves the state according to the `Action`s,
+* Auxiliary function `actionName` to providea  human-readable representation of actions.
 
-The second half of the work needed to use quickcheck-dynamic is to define a `RunModel` whose purpose is to run the action sequences generated by the `StateModel` against the actual implementation. Hydra is a distributed system where nodes are interconnected through a network layer, and each node needs to be connected to a cardano-node in order to preserve the security of the protocol. While testing an actual "cluster" of hydra and cardano nodes is definitely possible, and certainly desirable at some point in order to strengthen confidence in the whole system, it would also be very slow: Spinning up processes, establishing network connections, producing blocks on a chain, all take seconds if not minutes which makes any signficant exploration of the model state space practically infeasible.
-
-The Hydra `RunModel` is defined in terms of an abstract `Monad m` with some constraints from the [io-sim](https://github.com/input-output-hk/io-sim) typeclasses. And the actual tests are run within the [IOSim](https://github.com/input-output-hk/hydra-poc/blob/master/hydra-node/test/Hydra/ModelSpec.hs#L220) monad, an in-process concurrent execution simulator developped within IOG to test the networking layer. This allows 100s of test sequences to be run within seconds.
-
-Of course, this means we won't be using real TCP/IP networking stack nor connection to a real Cardano node and chain to create a Hydra network, but this is actually not a liability but an asset. By [mocking](https://abailly.github.io/posts/mocking-good-idea.html) the interfaces Hydra nodes use to communicate with other nodes and Cardano network, we are able to control the behaviour of the communication layer and _inject faults_ representing some _Adversary_: Reordering or dropping messages, tampering the data, delaying requests...
-
-
-## Principles
-
-### Defining a Model
+The reader is invited to check the [Haddock](https://hackage.haskell.org/package/quickcheck-dynamic-1.1.0/docs/Test-QuickCheck-StateModel.html) documentation of the library for further details.
 
 ### Exercising Implementation
 
-why separating from model, performing stuff, IOSim
+A _Model_ alone is somewhat useless if we don't provide a way to relate it to the actual implementation of the system-under-test. quickcheck-dynamic provides the [`RunModel`](https://hackage.haskell.org/package/quickcheck-dynamic-1.1.0/docs/Test-QuickCheck-StateModel.html#t:RunModel) typeclass for this purpose. The most important function to define is `perform` which defines how `StateModel`'s `Action` should be executed against the implementation within some monadic context `m`. Having the actual execution `Monad m` be a parameter of the `RunModel` gives more flexibility to the implementor which is not tied to `IO` for example.
+
+In the case of Hydra, the `perform` function is defined as:
+
+```haskell
+  perform ::
+    WorldState ->
+    Action WorldState a ->
+    LookUp (StateT (Nodes m) m ->
+    StateT (Nodes m) m a
+  perform st command _ = do
+    case command of
+      Seed{seedKeys} ->
+        seedWorld seedKeys
+      Commit party utxo ->
+        performCommit (snd <$> hydraParties st) party utxo
+...
+```
+
+The actual monad used is a classical `State` monad whose state maps a `Party` to the corresponding client connection to the Hydra node:
+
+```haskell
+data Nodes m = Nodes
+  { nodes :: Map.Map Party (TestHydraNode Tx m)
+  , logger :: Tracer m (HydraNodeLog Tx)
+  }
+```
+
+The `m` parameter is here kept somewhat unconstrained in order to make it possible to run properties within the `IOSim` monad for faster tests execution.
 
 ### Expressing Properties with Dynamic Logic
+
+Once we have a `StateModel` we can express interesting _properties_ to check against our `RunModel`. [Dynamic Logic](https://github.com/input-output-hk/quickcheck-dynamic/blob/abailly-iohk/link-to-blog-post/quickcheck-dynamic/src/Test/QuickCheck/DynamicLogic.hs) allows one to express properties through monadic expressions relating actions, states and logic predicates.
+
+Dynamic Logic is a form of _modal logic_, similar to [temporal logic](https://en.wikipedia.org/wiki/Temporal_logic), but whose modalities are the _actions_ (or programs) themselves. One can intertwine _programs_ and logic predicates to specify the behaviour of the former when executing some statements and actually [Dynamic Logic](https://en.wikipedia.org/wiki/Dynamic_logic_(modal_logic)) evolved from _Hoare's Triples_.
+
+Here is the dynamic logic reformulation of the previously stated Hydra property which has been kept as close as possible to the original English statement:
+
+```haskell
+conflictFreeLiveness :: DL WorldState ()
+conflictFreeLiveness = do
+  anyActions_
+  getModelStateDL >>= \case
+    st@WorldState{hydraState = Open{}} -> do
+      (party, payment) <- forAllQ (nonConflictingTx st)
+      action $ Model.NewTx party payment
+      eventually (ObserveConfirmedTx payment)
+    _ -> pass
+ where
+  nonConflictingTx st = withGenQ (genPayment st) (const [])
+  eventually a = action (Wait 10) >> action a
+```
+
+Note that in order to define this property we have introduced two a "pseudo-actions" in the _Model_, `Wait` and `ObserveConfirmedTx`: Those `Action`s have no effect on the model itself, the former being used to introduce some delay in the context of distributed and asynchronous execution, and the latter serving the purpose of _observing_ the current state of the SUT. An alternative formulation would have been to make `ObserveConfirmedTx` return the set of confirmed transactions and then express the condition as a logic predicate within the `conflictFreeLiveness` property's body.
+
+### Checking Properties
+
+The last step in putting quickcheck-dynamic at work is to be able to connect the _StateModel_, the _RunModel_, and the _DynamicLogic_ expression and turn those into a QuickCheck `Property` which can then be checked using the standard testing framework.
+
+quickcheck-dynamic provides 2 functions for that purpose. The `forAllDL_` function (actually more a family of functions) will leverage `DL` formulae to generate sequences of `Action`s:
+
+```haskell
+prop_checkConflictFreeLiveness :: Property
+prop_checkConflictFreeLiveness =
+  forAllDL_ conflictFreeLiveness prop_HydraModel
+```
+
+The `runActions` function will execute the generated trace against the `RunModel`.
+
+```haskell
+prop_HydraModel :: Actions WorldState -> Property
+prop_HydraModel actions = property $
+  runIOSimProp $ do
+    _ <- runActions runIt actions
+    assert True
+```
+
+In this particular instance from Hydra, we need some additional machinery (the `runIOSimProp` function) to handle the execution of some monadic `PropertyM` into `IOSim` monad, turning it into a `Property`.
+
+When run and successful, this `Property` generates the following output:
+
+```
+  check conflict-free liveness
+    +++ OK, passed 100 tests.
+
+    Actions (1334 in total):
+    49.93% NewTx
+    25.86% Commit
+     7.50% Seed
+     7.42% Init
+     4.80% Abort
+     2.25% ObserveConfirmedTx
+     2.25% Wait
+
+    Transitions (1334 in total):
+    54.42% Open -> Open
+    23.61% Initial -> Initial
+     7.50% Start -> Idle
+     7.42% Idle -> Initial
+     4.80% Initial -> Final
+     2.25% Initial -> Open
+```
+
+By default, `runActions` decorate the QuickCheck output _tabulating_ the executed `Action`. And thanks to the `monitoring` helper provided by the `RunModel`, this example also tabulates the executed _transitions_. These pieces of information are important to assess the "quality" of the model: We want to make sure its generators and the properties execution covers all interesting parts of the Model, hence exercise all relevant parts of the implementation.
+
+## Conclusion
