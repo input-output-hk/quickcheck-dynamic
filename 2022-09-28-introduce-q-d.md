@@ -127,7 +127,7 @@ The reader is invited to check the [Haddock](https://hackage.haskell.org/package
 
 ### Exercising Implementation
 
-A _Model_ alone is somewhat useless if we don't provide a way to relate it to the actual implementation of the system-under-test. quickcheck-dynamic provides the [`RunModel`](https://hackage.haskell.org/package/quickcheck-dynamic-1.1.0/docs/Test-QuickCheck-StateModel.html#t:RunModel) typeclass for this purpose. The most important function to define is `perform` which defines how `StateModel`'s `Action` should be executed against the implementation within some monadic context `m`. Having the actual execution `Monad m` be a parameter of the `RunModel` gives more flexibility to the implementor which is not tied to `IO` for example.
+A _Model_ alone is somewhat useless if we don't provide a way to relate it to the actual implementation of the system-under-test. `quickcheck-dynamic` provides the [`RunModel`](https://hackage.haskell.org/package/quickcheck-dynamic-1.1.0/docs/Test-QuickCheck-StateModel.html#t:RunModel) typeclass for this purpose. The most important function to define is `perform` which defines how `StateModel`'s `Action` should be executed against the implementation within some monadic context `m`. Having the actual execution `Monad m` be a parameter of the `RunModel` gives more flexibility to the implementor which is not tied to `IO` for example.
 
 In the case of Hydra, the `perform` function is defined as:
 
