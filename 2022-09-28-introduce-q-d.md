@@ -57,7 +57,7 @@ While the overall state machine appears relatively simple on the surface, the ac
 
 In order to guarantee the implementation provides those safety properties, the Hydra team has developed a diversified palette of testing techniques, including the use of quickcheck-dynamic. While the careful Test-Driven Development approach taken gives reasonable confidence most use cases and issues are covered, hopes are high that such a model is able to explore more corner cases and reveal subtle issues in the protocol implementation.
 
-What was sought after is to be able to define and test Hydra Head security properties against the real implementation. As a first example the team tackled to get a feel of how quickcheck-dynamic could be used, here one of the properties from the original paper is stated :
+What was sought after is to be able to define and test Hydra Head security properties against the real implementation. As a first example the team tackled to get a feel of how quickcheck-dynamic could used, here one of the properties from the original paper is stated:
 
 > • Conflict-Free Liveness (Head):
 >
@@ -161,7 +161,7 @@ data Nodes m = Nodes
   }
 ```
 
-The `m` parameter is here kept somewhat unconstrained in order to make it possible to run properties within the `IOSim` monad for faster tests execution.
+The `m` parameter is here kept somewhat unconstrained in order to make it possible to run properties within the `IOSim` monad for faster tests execution. Also note the presence of the `logger` field which is used to capture logging output from all the nodes: Should an error happen or a postcondition fail, we can dump the log of each node which is invaluable to troubleshoot such failures. In general, testing systems in a black-box way emphasises the importance of good logging to provide as much context as possible should issues arise, and using quickcheck-dynamic makes no exception.
 
 ### Expressing Properties with Dynamic Logic
 
@@ -236,6 +236,12 @@ When run and successful, this `Property` generates the following output:
      2.25% Initial -> Open
 ```
 
-By default, `runActions` decorate the QuickCheck output _tabulating_ the executed `Action`. And thanks to the `monitoring` helper provided by the `RunModel`, this example also tabulates the executed _transitions_. These pieces of information are important to assess the "quality" of the model: We want to make sure its generators and the properties execution covers all interesting parts of the Model, hence exercise all relevant parts of the implementation.
+By default, `runActions` decorate the QuickCheck output _tabulating_ the executed `Action`. And thanks to the `monitoring` helper provided by the `RunModel`, this example also tabulates the executed _transitions_. These pieces of information are important to assess the "quality" of the model: We want to make sure its generators and the properties execution covers all interesting parts of the Model, hence exercise all relevant parts of the implementation. Please note that, as we mentioned before, the Hydra model is still a work in progress hence the reason why there's no `Open -> Final` transition!
 
 ## Conclusion
+
+This articled introduced [quickcheck-dynamic](https://hackage.org/packages/quickcheck-dynamic), a novel Model-Based Testing library initially developed by Quviq for testing Plutus Smart Contracts and which has recently been open-sourced by IOG. I have tried to convey to the user a sense of the _Whys_, _Whats_ and _Hows_ questions this library answers through various examples and a high-level walkthrough of the steps needed to use this library for testing an implementation.
+
+_Model-Based Testing_ is a powerful tool that simultaneously addresses both aspects of [Customer-facing tests](http://www.exampler.com/old-blog/2003/09/05.1.html#agile-testing-project-4) as Brian Marick puts it in his famous _Agile Testing Quadrant_ popularised by Lisa Crispin and Janet Gregory through their [Agile Testing](https://agiletester.ca/wp-content/uploads/sites/26/2015/07/Agile-tips-final.pdf) books: _Supporting the team_ by providing a reference model to build against, and _Critiquing the product_ through the unique state-space exploration QuickCheck provides, possibly uncovering corner cases and blind spots in either the specification or the implementation.
+
+The library is still evolving towards better developer experience and flexibility but it's already in a state that makes it possible to test something as significant as a Hydra network. And while it may appear somewhat involved when compared to more traditional forms of writing _Functional tests_, I hope I have demonstrated quickcheck-dynamic lowers the barrier to entry associated with most MBT tools.
