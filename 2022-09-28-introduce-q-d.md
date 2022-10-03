@@ -89,6 +89,8 @@ data WorldState = WorldState
   }
 ```
 
+We won't bother the reader with details of the `GlobalState` which basically encode the states as depicted in the state-machine picture hereabove in the form of an Algebraic Data-Type.
+
 As the old saying from Alfred Korzybski goes, "The map is not the territory", hence to be useful a _Model_ should abstract away irrelevant details for the purpose of testing. Furthermore, it's perfectly fine to use different models to test different aspects of the same implementation.
 
 Here the model does not detail the myriad possible variations of transactions Cardano permits and only uses _Two Party Payment_ transactions:
@@ -108,17 +110,11 @@ The Hydra model needs to represent both on-chain and off-chain actions as the pr
 ```haskell
   data Action WorldState a where
     Seed :: {seedKeys :: [(SigningKey HydraKey, CardanoSigningKey)]} -> Action WorldState ()
-
     Init :: Party -> ContestationPeriod -> Action WorldState ()
-
     Commit :: Party -> UTxOType Payment -> Action WorldState ActualCommitted
-
     Abort :: Party -> Action WorldState ()
-
     NewTx :: Party -> Payment -> Action WorldState ()
-
     Wait :: DiffTime -> Action WorldState ()
-
     ObserveConfirmedTx :: Payment -> Action WorldState ()
 ```
 
@@ -236,7 +232,7 @@ When run and successful, this `Property` generates the following output:
      2.25% Initial -> Open
 ```
 
-By default, `runActions` decorate the QuickCheck output _tabulating_ the executed `Action`. And thanks to the `monitoring` helper provided by the `RunModel`, this example also tabulates the executed _transitions_. These pieces of information are important to assess the "quality" of the model: We want to make sure its generators and the properties execution covers all interesting parts of the Model, hence exercise all relevant parts of the implementation. Please note that, as we mentioned before, the Hydra model is still a work in progress hence the reason why there's no `Open -> Final` transition!
+By default, `runActions` decorate the QuickCheck output _tabulating_ the executed `Action`. And thanks to the `monitoring` helper provided by the `RunModel`, this example also tabulates the executed _transitions_ between each of the possible values for `GlobalState`. These pieces of information are important to assess the "quality" of the model: We want to make sure its generators and the properties execution covers all interesting parts of the Model, hence exercise all relevant parts of the implementation. Please note that, as we mentioned before, the Hydra model is still a work in progress hence the reason why there's no `Open -> Final` transition!
 
 ## Conclusion
 
