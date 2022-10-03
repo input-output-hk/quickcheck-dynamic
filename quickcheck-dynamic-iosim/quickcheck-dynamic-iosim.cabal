@@ -76,8 +76,7 @@ test-suite quickcheck-dynamic-iosim
         quickcheck-dynamic-iosim -any,
         tasty -any,
         tasty-test-reporter -any,
-        -- TODO: include this when we turn on the tests again
-        -- tasty-quickcheck -any,
+        tasty-quickcheck -any,
         io-classes,
         io-sim,
         mtl
