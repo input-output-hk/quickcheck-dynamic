@@ -4,7 +4,7 @@
 
 ## Background
 
-Testing stateful or rather effectful code using QuickCheck is not new: In particular, techniques to test _Monadic_ code with QuickCheck have been introduced in [Claessen & Hughes, 2002](https://dl.acm.org/doi/10.1145/636517.636527). `quickcheck-dynamic` is based on a state-machine approach originally implemented by Quviq in closed-source Erlang version of QuickCheck and put to use to test various systems as explained in John Hughes' [paper](https://publications.lib.chalmers.se/records/fulltext/232550/local_232550.pdf).
+Testing stateful or rather effectful code using QuickCheck is not new: In particular, techniques to test _Monadic_ code with QuickCheck have been introduced in [Claessen & Hughes, 2002](https://dl.acm.org/doi/10.1145/636517.636527). `quickcheck-dynamic` is based on a state-machine approach originally implemented by Quviq in closed-source Erlang version of QuickCheck [paper](https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.148.6554&rep=rep1&type=pdf) and put to use to test various systems as explained in John Hughes' [paper](https://publications.lib.chalmers.se/records/fulltext/232550/local_232550.pdf).
 
 IOG already has had experience with state-machine based testing in the Consensus [Storage layer](https://github.com/input-output-hk/ouroboros-network/blob/nfrisby/old-benchmark-ledger-ops/ouroboros-consensus-test/README.md#L1) using [quickcheck-state-machine](https://hackage.haskell.org/package/quickcheck-state-machine) library, but this was not widespread practice across the various teams.
 
@@ -18,7 +18,7 @@ In the rest of the article, we illustrate the usefulness of the library on sever
 
 ### Example: Thread Registry
 
-The library comes with a complete example defining a model and reference implementation for a _Thread Registry_. It's inspired by a similar example in Erlag from a couple of papers:
+The library comes with a complete example defining a model and reference implementation for a _Thread Registry_. It's inspired by a similar example in Erlang from a couple of papers:
   * [How well are your requirements tested?](https://publications.lib.chalmers.se/records/fulltext/232552/local_232552.pdf)
   * and [Understanding Formal Specifications through Good Examples](https://mengwangoxf.github.io/Papers/Erlang18.pdf)
 
