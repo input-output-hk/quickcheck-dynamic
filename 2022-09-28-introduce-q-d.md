@@ -118,7 +118,7 @@ The Hydra model needs to represent both on-chain and off-chain actions as the pr
 
 Then one needs to define:
 * An `initialState`,
-* How to generate _arbitraryAction_s which will be used to produce sequences (or traces) of `Action`s to execute, depending on the current state,
+* How to generate `arbitraryAction`s which will be used to produce sequences (or traces) of `Action`s to execute, depending on the current state,
 * A `precondition` function ensuring some `Action` is valid in some state. This function may seem redundant with the generator but is actually important when _shrinking_ a failing test sequences: The execution engine will ensure the reduced sequence is still valid with respect to the model,
 * A `nextState` (transition) function that evolves the model state according to the `Action`s,
 * Auxiliary function `actionName` to providea  human-readable representation of actions.
