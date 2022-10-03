@@ -78,10 +78,10 @@ We'll use the latter example to illustrate quickcheck-dynamic's principles and g
 
 In quickcheck-dynamic, a _Model_ is some type, a representation of the expected state of the system-under-test, for which there exists an instance of the [StateModel class](https://github.com/input-output-hk/quickcheck-dynamic/blob/abailly-iohk/blog-post/quickcheck-dynamic/src/Test/QuickCheck/StateModel.hs#L56) which sets the building blocks needed to generate and validate test sequences.
 
-In the case of Hydra, the Model is a `WorldState` data type that control the Head parties and maintains a `GlobalState` which reflects the expected Head state:
+In the case of Hydra, the Model is a `IdealWorld` data type that control the Head parties and maintains a `GlobalState` which reflects the expected Head state:
 
 ```haskell
-data WorldState = WorldState
+data IdealWorld = IdealWorld
   { hydraParties :: [(SigningKey HydraKey, CardanoSigningKey)]
   , hydraState :: GlobalState
   }
@@ -106,14 +106,14 @@ The first important part of the `StateModel` instance to define is the type of `
 The Hydra model needs to represent both on-chain and off-chain actions as the properties required from Hydra relates the two. The `Action` data-type represent user-facing commands and observations that can be made on the state of the system (please note at the time of writing this, the model is incomplete):
 
 ```haskell
-  data Action WorldState a where
-    Seed :: {seedKeys :: [(SigningKey HydraKey, CardanoSigningKey)]} -> Action WorldState ()
-    Init :: Party -> ContestationPeriod -> Action WorldState ()
-    Commit :: Party -> UTxOType Payment -> Action WorldState ActualCommitted
-    Abort :: Party -> Action WorldState ()
-    NewTx :: Party -> Payment -> Action WorldState ()
-    Wait :: DiffTime -> Action WorldState ()
-    ObserveConfirmedTx :: Payment -> Action WorldState ()
+  data Action IdealWorld a where
+    Seed :: {seedKeys :: [(SigningKey HydraKey, CardanoSigningKey)]} -> Action IdealWorld ()
+    Init :: Party -> ContestationPeriod -> Action IdealWorld ()
+    Commit :: Party -> UTxOType Payment -> Action IdealWorld ActualCommitted
+    Abort :: Party -> Action IdealWorld ()
+    NewTx :: Party -> Payment -> Action IdealWorld ()
+    Wait :: DiffTime -> Action IdealWorld ()
+    ObserveConfirmedTx :: Payment -> Action IdealWorld ()
 ```
 
 Then one needs to define:
@@ -133,8 +133,8 @@ In the case of Hydra, the `perform` function is defined as:
 
 ```haskell
   perform ::
-    WorldState ->
-    Action WorldState a ->
+    IdealWorld ->
+    Action IdealWorld a ->
     LookUp (StateT (Nodes m) m ->
     StateT (Nodes m) m a
   perform st command _ = do
@@ -166,11 +166,11 @@ Dynamic Logic is a form of _modal logic_, similar to [temporal logic](https://en
 Here is the dynamic logic reformulation of the previously stated Hydra property which has been kept as close as possible to the original English statement:
 
 ```haskell
-conflictFreeLiveness :: DL WorldState ()
+conflictFreeLiveness :: DL IdealWorld ()
 conflictFreeLiveness = do
   anyActions_
   getModelStateDL >>= \case
-    st@WorldState{hydraState = Open{}} -> do
+    st@IdealWorld{hydraState = Open{}} -> do
       (party, payment) <- forAllQ (nonConflictingTx st)
       action $ Model.NewTx party payment
       eventually (ObserveConfirmedTx payment)
@@ -197,7 +197,7 @@ prop_checkConflictFreeLiveness =
 The `runActions` function will execute the generated trace against the `RunModel`.
 
 ```haskell
-prop_HydraModel :: Actions WorldState -> Property
+prop_HydraModel :: Actions IdealWorld -> Property
 prop_HydraModel actions = property $
   runIOSimProp $ do
     _ <- runActions runIt actions
