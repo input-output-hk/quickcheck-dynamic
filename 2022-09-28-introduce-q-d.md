@@ -18,7 +18,7 @@ In the rest of the article, we illustrate the usefulness of the library on sever
 
 ### Example: Thread Registry
 
-The library comes with a complete example defining a model and reference implementation for a _Thread Registry_. It's inspired by a similar example in Erlag from a couple of papers:
+The library comes with a complete example defining a model and reference implementation for a _Thread Registry_. It's inspired by a similar example in Erlang from a couple of papers:
   * [How well are your requirements tested?](https://publications.lib.chalmers.se/records/fulltext/232552/local_232552.pdf)
   * and [Understanding Formal Specifications through Good Examples](https://mengwangoxf.github.io/Papers/Erlang18.pdf)
 
