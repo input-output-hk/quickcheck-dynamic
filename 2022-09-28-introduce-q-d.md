@@ -186,7 +186,7 @@ conflictFreeLiveness = do
   eventually a = action (Wait 10) >> action a
 ```
 
-Note that in order to define this property we have introduced two a "pseudo-actions" in the _Model_, `Wait` and `ObserveConfirmedTx`: Those `Action`s have no effect on the model itself, the former being used to introduce some delay in the context of distributed and asynchronous execution, and the latter serving the purpose of _observing_ the current state of the SUT. An alternative formulation would have been to make `ObserveConfirmedTx` return the set of confirmed transactions and then express the condition as a logic predicate within the `conflictFreeLiveness` property's body.
+Note that in order to define this property we have introduced two "pseudo-actions" in the _Model_, `Wait` and `ObserveConfirmedTx`: Those `Action`s have no effect on the model itself, the former being used to introduce some delay in the context of distributed and asynchronous execution, and the latter serving the purpose of _observing_ the current state of the SUT. An alternative formulation would have been to make `ObserveConfirmedTx` return the set of confirmed transactions and then express the condition as a logic predicate within the `conflictFreeLiveness` property's body.
 
 ### Checking Properties
 
