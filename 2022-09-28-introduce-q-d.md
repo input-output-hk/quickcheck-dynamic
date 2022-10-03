@@ -91,7 +91,7 @@ We won't bother the reader with details of the `GlobalState` which basically enc
 
 As the old saying from Alfred Korzybski goes, "The map is not the territory", hence to be useful a _Model_ should abstract away irrelevant details for the purpose of testing. Furthermore, it's perfectly fine to use different models to test different aspects of the same implementation.
 
-Here the model does not detail the myriad possible variations of transactions Cardano permits and only uses _Two Party Payment_ transactions:
+While the real Hydra layer two ledger does support a myriad of possible Cardano transactions, our model at hand is simpler and only uses _Two Party Payment_ transactions:
 
 ```haskell
 data Payment = Payment
