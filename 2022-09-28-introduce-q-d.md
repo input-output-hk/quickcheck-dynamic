@@ -12,8 +12,6 @@ When IOG started working on the Plutus Smart Contracts language and application 
 
 As quickcheck-dynamic matured and became independent of the Plutus framework, it attracted interest from other teams willing to invest into model-based testing and reuse existing effort. This finally lead to publication of the library as an independent package on [Hackage](https://hackage.haskell.org/package/quickcheck-dynamic) in the hope it will be useful to a wider audience.
 
-In the rest of the article, we illustrate the usefulness of the library on several use cases, then proceed to explain its principles and how to
-
 ## Use Cases
 
 ### Example: Thread Registry
