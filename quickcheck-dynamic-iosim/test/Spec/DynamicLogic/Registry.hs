@@ -2,12 +2,12 @@
 -- process registry.
 module Spec.DynamicLogic.Registry where
 
+import Control.Concurrent.Class.MonadSTM.TVar
 import Control.Monad
 import Control.Monad.Class.MonadFork
 import Control.Monad.Class.MonadSTM
 import Control.Monad.Class.MonadThrow
-import Control.Concurrent.Class.MonadSTM.TVar
-import GHC.Conc (ThreadStatus(..))
+import GHC.Conc (ThreadStatus (..))
 
 type Registry m = TVar m [(String, ThreadId m)]
 

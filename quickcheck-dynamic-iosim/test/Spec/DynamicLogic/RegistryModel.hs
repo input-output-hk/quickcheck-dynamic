@@ -314,6 +314,7 @@ canReregister' s
 -- TODO:
 --  * add DL properties
 tests :: TestTree
-tests = testGroup
-  "registry model example"
-  [testProperty "prop_Registry" prop_Registry]
+tests =
+  testGroup
+    "registry model example"
+    [testProperty "prop_Registry" prop_Registry]
