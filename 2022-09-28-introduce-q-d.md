@@ -57,7 +57,7 @@ While the overall state machine appears relatively simple on the surface, the ac
 
 In order to guarantee the implementation provides those safety properties, the Hydra team has developed a diversified palette of testing techniques, including the use of quickcheck-dynamic. While the careful Test-Driven Development approach taken gives reasonable confidence most use cases and issues are covered, hopes are high that such a model is able to explore more corner cases and reveal subtle issues in the protocol implementation.
 
-What was sought after is to be able to define and test Hydra Head security properties against the real implementation. As a first example the team tackled to get a feel of how quickcheck-dynamic could used, here is stated one of the properties from the original paper:
+What was sought after is to be able to define and test Hydra Head security properties against the real implementation. As a first example the team tackled to get a feel of how quickcheck-dynamic could be used, here one of the properties from the original paper is stated:
 
 > • Conflict-Free Liveness (Head):
 >
