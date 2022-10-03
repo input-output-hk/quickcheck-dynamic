@@ -108,7 +108,7 @@ instance StateModel RegState where
 
   precondition s Spawn = setup s
   precondition s WhereIs{} = setup s
-  precondition s (Register _name step) = setup s && step `elem` tids s -- && positive s (Register name step)
+  precondition s (Register name step) = setup s && step `elem` tids s && positive s (Register name step)
   precondition s Unregister{} = setup s
   precondition s (KillThread tid) = setup s && tid `elem` tids s
   precondition s (Successful act) = precondition s act
