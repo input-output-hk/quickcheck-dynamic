@@ -2,25 +2,21 @@
 -- process registry.
 module Spec.DynamicLogic.Registry where
 
--- import Control.Concurrent
 import Control.Monad
 import Control.Monad.Class.MonadFork
 import Control.Monad.Class.MonadSTM
 import Control.Monad.Class.MonadThrow
-
--- import Data.IORef
--- import GHC.Conc hiding (TVar)
--- import System.IO.Unsafe
+import Control.Concurrent.Class.MonadSTM.TVar
+import GHC.Conc (ThreadStatus(..))
 
 type Registry m = TVar m [(String, ThreadId m)]
 
 type MonadRegistry m = (MonadSTM m, MonadFork m, MonadThrow m, MonadFail m, MonadFail (STM m))
 
 alive :: MonadRegistry m => ThreadId m -> m Bool
-alive _ = do
-  -- s <- threadStatus tid
-  -- return $ s /= ThreadFinished && s /= ThreadDied
-  return True
+alive tid = do
+  s <- threadStatus tid
+  return $ s /= ThreadFinished && s /= ThreadDied
 
 setupRegistry :: forall m. MonadRegistry m => m (Registry m)
 setupRegistry = atomically $ newTVar @m []

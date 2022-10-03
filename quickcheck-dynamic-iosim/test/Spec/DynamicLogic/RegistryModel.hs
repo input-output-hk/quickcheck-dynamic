@@ -17,8 +17,7 @@ import Test.QuickCheck.Gen.Unsafe (Capture (Capture), capture)
 import Test.QuickCheck.Monadic
 import Test.Tasty hiding (after)
 
--- TODO: include this when we turn on the tests again
--- import Test.Tasty.QuickCheck (testProperty)
+import Test.Tasty.QuickCheck (testProperty)
 
 import Spec.DynamicLogic.Registry
 import Test.QuickCheck.DynamicLogic.Core
@@ -312,14 +311,9 @@ canReregister' s
  where
   availableTids = (tids s \\ map snd (regs s)) \\ dead s
 
-tests :: TestTree
-tests = testGroup "registry model example" []
-
 -- TODO:
---  * turn on this test
 --  * add DL properties
-{-
-testGroup
+tests :: TestTree
+tests = testGroup
   "registry model example"
   [testProperty "prop_Registry" prop_Registry]
--}
