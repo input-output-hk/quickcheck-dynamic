@@ -8,9 +8,9 @@ Testing stateful or rather effectful code using QuickCheck is not new: In partic
 
 IOG already has had experience with state-machine based testing in the Consensus [Storage layer](https://github.com/input-output-hk/ouroboros-network/blob/nfrisby/old-benchmark-ledger-ops/ouroboros-consensus-test/README.md#L1) using [quickcheck-state-machine](https://hackage.haskell.org/package/quickcheck-state-machine) library, but this was not widespread practice across the various teams.
 
-When IOG started working on the Plutus Smart Contracts language and application framework, Quviq's consultancy was sought after to help test the platform and build tools for future Smart Contract implementors. This effort lead to the development of a custom library for testing smart contracts which in turn leverages quickcheck-dynamic's state-machine model and dynamic logic language.
+When IOG started working on the Plutus Smart Contracts language and application framework, Quviq's consultancy was sought after to help test the platform and build tools for future Smart Contract implementors. This effort lead to the development of a custom library for testing smart contracts based on quickcheck-dynamic's state-machine model and dynamic logic language adapted from Erlang QuickCheck.
 
-As quickcheck-dynamic matured and became independent of the Plutus framework, it attracted interest from other teams willing to invest into model-based testing and reuse existing effort. This finally lead to publication of the library as an independent package on [Hackage](https://hackage.haskell.org/package/quickcheck-dynamic) in the hope it will be useful to a wider audience.
+As quickcheck-dynamic matured, it attracted interest from other teams willing to invest into model-based testing and reuse existing effort. This finally lead to publication of the library as an independent package on [Hackage](https://hackage.haskell.org/package/quickcheck-dynamic), independently of the Plutus framework, in the hope it will be useful to a wider audience.
 
 ## Use Cases
 
