@@ -15,9 +15,6 @@ type family RealizeIOSim s a where
   RealizeIOSim s ThreadId = IOClass.ThreadId (IOSim s)
   RealizeIOSim s (TVar a) = IOClass.TVar (IOSim s) a
   RealizeIOSim s (MVar a) = IOClass.TMVar (IOSim s) a
--- TODO: unfortunately no poly-kinded recursion for type families
--- so we can't do something like :'(
--- RealizeIOSim s (f a)  = (RealizeIOSim f) (RealizeIOSim s a)
   RealizeIOSim s (f a b) = f (RealizeIOSim s a) (RealizeIOSim s b)
   RealizeIOSim s (f a) = f (RealizeIOSim s a)
   RealizeIOSim s a = a
