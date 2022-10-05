@@ -46,6 +46,8 @@ common lang
     FlexibleInstances
     MultiParamTypeClasses
     RankNTypes
+    ViewPatterns
+    TypeOperators
 
   ghc-options:
     -Wall -Wnoncanonical-monad-instances -Wunused-packages

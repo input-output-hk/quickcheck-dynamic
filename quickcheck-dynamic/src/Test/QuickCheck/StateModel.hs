@@ -2,6 +2,7 @@
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE UndecidableInstances #-}
 
+
 -- | Simple (stateful) Model-Based Testing library for use with Haskell QuickCheck.
 --
 -- This module provides the basic machinery to define a `StateModel` from which /traces/ can
@@ -17,6 +18,7 @@ module Test.QuickCheck.StateModel (
   Actions (..),
   pattern Actions,
   EnvEntry (..),
+  pattern (:=?),
   Env,
   Realized,
   stateAfter,
@@ -154,6 +156,14 @@ data EnvEntry m where
   (:==) :: Typeable a => Var a -> Realized m a -> EnvEntry m
 
 infix 5 :==
+
+pattern (:=?) :: forall a m. Typeable a => Var a -> Realized m a -> EnvEntry m
+pattern v :=? val <- (viewAtType -> Just (v, val))
+
+viewAtType :: forall a m. Typeable a => EnvEntry m -> Maybe (Var a, Realized m a)
+viewAtType ((v :: Var b) :== val)
+  | Just Refl <- eqT @a @b = Just (v, val)
+  | otherwise              = Nothing
 
 lookUpVarMaybe :: forall a m. Typeable a => Env m -> Var a -> Maybe (Realized m a)
 lookUpVarMaybe [] _ = Nothing
