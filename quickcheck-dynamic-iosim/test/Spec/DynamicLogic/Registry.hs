@@ -43,7 +43,7 @@ unregister registry name = do
   reg <- readRegistry registry
   if name `elem` map fst reg
     then atomically $ modifyTVar registry $ filter ((/= name) . fst)
-    else fail "badarg"
+    else pure ()
 
 readRegistry :: MonadRegistry m => Registry m -> m [(String, ThreadId m)]
 readRegistry registry = garbageCollect registry *> atomically (readTVar registry)

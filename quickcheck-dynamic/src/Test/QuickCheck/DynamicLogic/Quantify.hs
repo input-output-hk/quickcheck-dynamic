@@ -5,6 +5,7 @@
 --   a `t`, shrink a `t`, and recognise a generated `t`.
 module Test.QuickCheck.DynamicLogic.Quantify (
   Quantification (isaQ),
+  QuantifyConstraints,
   isEmptyQ,
   generateQ,
   shrinkQ,
@@ -27,6 +28,7 @@ import Data.Typeable
 import System.Random
 import Test.QuickCheck
 import Test.QuickCheck.DynamicLogic.CanGenerate
+import Test.QuickCheck.StateModel
 
 -- | A `Quantification` over a type @a@ is a generator that can be used with
 --   `Plutus.Contract.Test.ContractModel.forAllQ` to generate random values in
@@ -143,6 +145,8 @@ pairQ q q' =
     (\(a, a') -> isaQ q a && isaQ q' a')
     (\(a, a') -> map (,a') (shrQ q a) ++ map (a,) (shrQ q' a'))
 
+type QuantifyConstraints a = (Eq a, Show a, Typeable a, HasVariables a)
+
 -- | Generalization of `Quantification`s, which lets you treat lists and tuples of quantifications
 --   as quantifications. For instance,
 --
@@ -152,7 +156,7 @@ pairQ q q' =
 --   ...
 -- @
 class
-  (Eq (Quantifies q), Show (Quantifies q), Typeable (Quantifies q)) =>
+  QuantifyConstraints (Quantifies q) =>
   Quantifiable q
   where
   -- | The type of values quantified over.
@@ -165,7 +169,7 @@ class
   -- | Computing the actual `Quantification`.
   quantify :: q -> Quantification (Quantifies q)
 
-instance (Eq a, Show a, Typeable a) => Quantifiable (Quantification a) where
+instance QuantifyConstraints a => Quantifiable (Quantification a) where
   type Quantifies (Quantification a) = a
   quantify = id
 
