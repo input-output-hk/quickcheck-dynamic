@@ -317,52 +317,52 @@ instance
 
 usedVariables :: forall state. StateModel state => Actions state -> VarContext
 usedVariables (Actions as) = go initialAnnotatedState as
- where
-  go :: Annotated state -> [Step state] -> VarContext
-  go aState [] = allVariables (underlyingState aState)
-  go aState ((var := act) : seq) =
-    allVariables act
-      <> allVariables (underlyingState aState)
-      <> go (computeNextState aState act var) seq
+  where
+    go :: Annotated state -> [Step state] -> VarContext
+    go aState [] = allVariables (underlyingState aState)
+    go aState ((var := act) : seq) =
+      allVariables act
+        <> allVariables (underlyingState aState)
+        <> go (computeNextState aState act var) seq
 
 instance (StateModel state) => Arbitrary (Actions state) where
   arbitrary = do
     (as, rejected) <- arbActions initialAnnotatedState 1
     return $ Actions_ rejected (Smart 0 as)
-   where
-    arbActions :: Annotated state -> Int -> Gen ([Step state], [String])
-    arbActions s step = sized $ \n ->
-      let w = n `div` 2 + 1
-       in frequency
-            [ (1, return ([], []))
-            ,
-              ( w
-              , do
-                  (mact, rej) <- satisfyPrecondition
-                  case mact of
-                    Just (Some act) -> do
-                      (as, rejected) <- arbActions (computeNextState s act (Var step)) (step + 1)
-                      return ((Var step := act) : as, rej ++ rejected)
-                    Nothing ->
-                      return ([], [])
-              )
-            ]
-     where
-      satisfyPrecondition = sized $ \n -> go n (2 * n) [] -- idea copied from suchThatMaybe
-      go m n rej
-        | m > n = return (Nothing, rej)
-        | otherwise = do
-            a <- resize m $ computeArbitraryAction s
-            case a of
-              Some act ->
-                if computePrecondition s act
-                  then return (Just (Some act), rej)
-                  else go (m + 1) n (actionName act : rej)
+    where
+      arbActions :: Annotated state -> Int -> Gen ([Step state], [String])
+      arbActions s step = sized $ \n ->
+        let w = n `div` 2 + 1
+         in frequency
+              [ (1, return ([], []))
+              ,
+                ( w
+                , do
+                    (mact, rej) <- satisfyPrecondition
+                    case mact of
+                      Just (Some act) -> do
+                        (as, rejected) <- arbActions (computeNextState s act (Var step)) (step + 1)
+                        return ((Var step := act) : as, rej ++ rejected)
+                      Nothing ->
+                        return ([], [])
+                )
+              ]
+        where
+          satisfyPrecondition = sized $ \n -> go n (2 * n) [] -- idea copied from suchThatMaybe
+          go m n rej
+            | m > n = return (Nothing, rej)
+            | otherwise = do
+                a <- resize m $ computeArbitraryAction s
+                case a of
+                  Some act ->
+                    if computePrecondition s act
+                      then return (Just (Some act), rej)
+                      else go (m + 1) n (actionName act : rej)
 
   shrink (Actions_ rs as) =
     map (Actions_ rs) (shrinkSmart (map (prune . map fst) . shrinkList shrinker . withStates) as)
-   where
-    shrinker (Var i := act, s) = [(Var i := act', s) | Some act' <- computeShrinkAction s act]
+    where
+      shrinker (Var i := act, s) = [(Var i := act', s) | Some act' <- computeShrinkAction s act]
 
 -- Running state models
 
@@ -371,11 +371,11 @@ newtype VarContext = VarCtx (Set (Any Var)) deriving (Semigroup) via Set (Any Va
 instance Show VarContext where
   show (VarCtx vs) =
     "[" ++ intercalate ", " (map showBinding . sortBy (comparing getIdx) $ Set.toList vs) ++ "]"
-   where
-    getIdx (Some (Var i)) = i
-    showBinding :: Any Var -> String
-    -- The use of typeRep here is on purpose to avoid printing `Var` unnecessarily.
-    showBinding (Some v) = show v ++ " :: " ++ show (typeRep v)
+    where
+      getIdx (Some (Var i)) = i
+      showBinding :: Any Var -> String
+      -- The use of typeRep here is on purpose to avoid printing `Var` unnecessarily.
+      showBinding (Some v) = show v ++ " :: " ++ show (typeRep v)
 
 data Annotated state = Metadata
   { vars :: VarContext
@@ -438,26 +438,26 @@ shrinkVar ctx v = filter (< v) $ ctxAtType ctx
 
 prune :: StateModel state => [Step state] -> [Step state]
 prune = loop initialAnnotatedState
- where
-  loop _s [] = []
-  loop s ((var := act) : as)
-    | computePrecondition s act =
-        (var := act) : loop (computeNextState s act var) as
-    | otherwise =
-        loop s as
+  where
+    loop _s [] = []
+    loop s ((var := act) : as)
+      | computePrecondition s act =
+          (var := act) : loop (computeNextState s act var) as
+      | otherwise =
+          loop s as
 
 withStates :: StateModel state => [Step state] -> [(Step state, Annotated state)]
 withStates = loop initialAnnotatedState
- where
-  loop _s [] = []
-  loop s ((var := act) : as) =
-    (var := act, s) : loop (computeNextState s act var) as
+  where
+    loop _s [] = []
+    loop s ((var := act) : as) =
+      (var := act, s) : loop (computeNextState s act var) as
 
 stateAfter :: StateModel state => Actions state -> Annotated state
 stateAfter (Actions actions) = loop initialAnnotatedState actions
- where
-  loop s [] = s
-  loop s ((var := act) : as) = loop (computeNextState s act var) as
+  where
+    loop s [] = s
+    loop s ((var := act) : as) = loop (computeNextState s act var) as
 
 runActions ::
   forall state m.
@@ -465,24 +465,24 @@ runActions ::
   Actions state ->
   PropertyM m (Annotated state, Env m)
 runActions (Actions_ rejected (Smart _ actions)) = loop initialAnnotatedState [] actions
- where
-  loop :: Annotated state -> Env m -> [Step state] -> PropertyM m (Annotated state, Env m)
-  loop _s env [] = do
-    unless (null rejected) $
-      monitor (tabulate "Actions rejected by precondition" rejected)
-    return (_s, reverse env)
-  loop s env ((Var n := act) : as) = do
-    pre $ computePrecondition s act
-    ret <- run (perform (underlyingState s) act (lookUpVar env))
-    let name = actionName act
-    monitor (tabulate "Actions" [name])
-    let var = Var n
-        s' = computeNextState s act var
-        env' = (var :== ret) : env
-    monitor (monitoring @state @m (underlyingState s, underlyingState s') act (lookUpVar env') ret)
-    b <- run $ postcondition @state @m (underlyingState s, underlyingState s') act (lookUpVar env) ret
-    assert b
-    loop s' env' as
+  where
+    loop :: Annotated state -> Env m -> [Step state] -> PropertyM m (Annotated state, Env m)
+    loop _s env [] = do
+      unless (null rejected) $
+        monitor (tabulate "Actions rejected by precondition" rejected)
+      return (_s, reverse env)
+    loop s env ((Var n := act) : as) = do
+      pre $ computePrecondition s act
+      ret <- run (perform (underlyingState s) act (lookUpVar env))
+      let name = actionName act
+      monitor (tabulate "Actions" [name])
+      let var = Var n
+          s' = computeNextState s act var
+          env' = (var :== ret) : env
+      monitor (monitoring @state @m (underlyingState s, underlyingState s') act (lookUpVar env') ret)
+      b <- run $ postcondition @state @m (underlyingState s, underlyingState s') act (lookUpVar env) ret
+      assert b
+      loop s' env' as
 
 -- Trics to get HasVariables instances via either TemplateHaskell or Generic
 
@@ -520,9 +520,9 @@ makeActionInstances stateTypeName = do
   newVarName <- qNewName "a"
   stateTypeKind <- reifyType stateTypeName
   let numStateTypeParams = arity stateTypeKind
-       where
-        arity (AppT (AppT ArrowT _) k) = 1 + arity k
-        arity _ = 0
+        where
+          arity (AppT (AppT ArrowT _) k) = 1 + arity k
+          arity _ = 0
   stateTypeArgs <- replicateM numStateTypeParams $ qNewName "a"
   let typ =
         AppT
