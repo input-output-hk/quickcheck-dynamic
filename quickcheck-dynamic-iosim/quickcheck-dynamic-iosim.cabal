@@ -49,7 +49,7 @@ common lang
     -Wall -Wnoncanonical-monad-instances -Wunused-packages
     -Wincomplete-uni-patterns -Wincomplete-record-updates
     -Wredundant-constraints -Widentities
-    -Wno-unused-do-bind -Wno-name-shadowing
+    -Wno-unused-do-bind
 
 library
     import: lang

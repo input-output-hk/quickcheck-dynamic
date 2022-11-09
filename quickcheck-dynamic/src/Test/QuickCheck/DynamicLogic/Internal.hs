@@ -203,15 +203,15 @@ pattern TestSeqStop :: TestSequence s
 pattern TestSeqStop = TestSeq (Do ContStop)
 
 pattern TestSeqStep :: Step s -> TestSequence s -> TestSequence s
-pattern TestSeqStep s seq = TestSeq (Do (ContStep s seq))
+pattern TestSeqStep s ss = TestSeq (Do (ContStep s ss))
 
 -- The `()` are the constraints required to use the pattern, and the `(Typeable a, ...)` are the
 -- ones provided when you do (including a fresh type variable `a`).
 -- See https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/pattern_synonyms.html#typing-of-pattern-synonyms
 pattern TestSeqWitness :: () => forall a. QuantifyConstraints a => a -> TestSequence s -> TestSequence s
-pattern TestSeqWitness a seq <- TestSeq (Witness a (TestSeq -> seq))
+pattern TestSeqWitness a ss <- TestSeq (Witness a (TestSeq -> ss))
   where
-    TestSeqWitness a (TestSeq seq) = TestSeq (Witness a seq)
+    TestSeqWitness a (TestSeq ss) = TestSeq (Witness a ss)
 
 {-# COMPLETE TestSeqWitness, TestSeqStep, TestSeqStop #-}
 
@@ -219,18 +219,18 @@ deriving instance StateModel s => Show (TestContinuation s)
 deriving instance StateModel s => Eq (TestContinuation s)
 
 consSeq :: TestStep s -> TestSequence s -> TestSequence s
-consSeq step seq = TestSeq $ flip ContStep seq <$> step
+consSeq step ss = TestSeq $ flip ContStep ss <$> step
 
 unconsSeq :: TestSequence s -> Maybe (TestStep s, TestSequence s)
-unconsSeq (TestSeq seq) =
-  case discardWitnesses seq of
+unconsSeq (TestSeq ss) =
+  case discardWitnesses ss of
     ContStop -> Nothing
-    ContStep s rest -> Just (s <$ seq, rest)
+    ContStep s rest -> Just (s <$ ss, rest)
 
 unstopSeq :: TestSequence s -> Maybe (Witnesses ())
-unstopSeq (TestSeq seq) =
-  case discardWitnesses seq of
-    ContStop -> Just $ () <$ seq
+unstopSeq (TestSeq ss) =
+  case discardWitnesses ss of
+    ContStop -> Just $ () <$ ss
     ContStep{} -> Nothing
 
 pattern TestSeqStopW :: Witnesses () -> TestSequence s
@@ -239,9 +239,9 @@ pattern TestSeqStopW w <- (unstopSeq -> Just w)
     TestSeqStopW w = TestSeq (ContStop <$ w)
 
 pattern (:>) :: TestStep s -> TestSequence s -> TestSequence s
-pattern step :> seq <- (unconsSeq -> Just (step, seq))
+pattern step :> ss <- (unconsSeq -> Just (step, ss))
   where
-    step :> seq = consSeq step seq
+    step :> ss = consSeq step ss
 
 {-# COMPLETE TestSeqStopW, (:>) #-}
 
@@ -251,10 +251,10 @@ nullSeq _ = False
 
 dropSeq :: Int -> TestSequence s -> TestSequence s
 dropSeq n _ | n < 0 = error "dropSeq: negative number"
-dropSeq 0 seq = seq
+dropSeq 0 ss = ss
 dropSeq _ TestSeqStop = TestSeqStop
-dropSeq n (TestSeqWitness _ seq) = dropSeq (n - 1) seq
-dropSeq n (TestSeqStep _ seq) = dropSeq (n - 1) seq
+dropSeq n (TestSeqWitness _ ss) = dropSeq (n - 1) ss
+dropSeq n (TestSeqStep _ ss) = dropSeq (n - 1) ss
 
 getContinuation :: TestSequence s -> TestSequence s
 getContinuation (TestSeq w) = case discardWitnesses w of
@@ -266,40 +266,40 @@ unlines' [] = ""
 unlines' xs = init $ unlines xs
 
 prettyTestSequence :: VarContext -> TestSequence s -> String
-prettyTestSequence ctx seq = unlines' $ zipWith (++) ("do " : repeat "   ") $ prettySeq seq
+prettyTestSequence ctx ss = unlines' $ zipWith (++) ("do " : repeat "   ") $ prettySeq ss
   where
     prettySeq (TestSeqStopW w) = prettyWitnesses w
-    prettySeq (Witnesses w step :> seq) = prettyWitnesses w ++ show (WithUsedVars ctx step) : prettySeq seq
+    prettySeq (Witnesses w step :> ss') = prettyWitnesses w ++ show (WithUsedVars ctx step) : prettySeq ss'
 
 prettyWitnesses :: Witnesses () -> [String]
 prettyWitnesses (Witness a w) = ("_ <- forAllQ $ exactlyQ $ " ++ show a) : prettyWitnesses w
 prettyWitnesses Do{} = []
 
 instance StateModel s => Show (DynLogicTest s) where
-  show (BadPrecondition seq bad s) =
-    prettyTestSequence (usedVariables seq <> allVariables bad) seq
+  show (BadPrecondition ss bad s) =
+    prettyTestSequence (usedVariables ss <> allVariables bad) ss
       ++ "\n   -- In state: "
       ++ show s
       ++ "\n   "
       ++ prettyBad bad
     where
       prettyBad :: FailingAction s -> String
-      prettyBad (ErrorFail s) = "assert " ++ show s ++ " False"
+      prettyBad (ErrorFail e) = "assert " ++ show e ++ " False"
       prettyBad (ActionFail a) = "action $ " ++ show a ++ "  -- Failed precondition\n   pure ()"
-  show (Looping seq) = prettyTestSequence (usedVariables seq) seq ++ "\n   pure ()\n   -- Looping"
-  show (Stuck seq s) = prettyTestSequence (usedVariables seq) seq ++ "\n   pure ()\n   -- Stuck in state " ++ show s
-  show (DLScript seq) = prettyTestSequence (usedVariables seq) seq ++ "\n   pure ()\n"
+  show (Looping ss) = prettyTestSequence (usedVariables ss) ss ++ "\n   pure ()\n   -- Looping"
+  show (Stuck ss s) = prettyTestSequence (usedVariables ss) ss ++ "\n   pure ()\n   -- Stuck in state " ++ show s
+  show (DLScript ss) = prettyTestSequence (usedVariables ss) ss ++ "\n   pure ()\n"
 
 usedVariables :: forall s. StateModel s => TestSequence s -> VarContext
 usedVariables = go initialAnnotatedState
   where
     go :: Annotated s -> TestSequence s -> VarContext
     go aState TestSeqStop = allVariables (underlyingState aState)
-    go aState (TestSeqWitness a seq) = allVariables a <> go aState seq
-    go aState (TestSeqStep step@(_ := act) seq) =
+    go aState (TestSeqWitness a ss) = allVariables a <> go aState ss
+    go aState (TestSeqStep step@(_ := act) ss) =
       allVariables act
         <> allVariables (underlyingState aState)
-        <> go (nextStateStep step aState) seq
+        <> go (nextStateStep step aState) ss
 
 -- | Restricted calls are not generated by "AfterAny"; they are included
 -- in tests explicitly using "After" in order to check specific
@@ -369,10 +369,10 @@ generateDLTest :: DynLogicModel s => DynLogic s -> Int -> Gen (DynLogicTest s)
 generateDLTest d size = generate chooseNextStep d 0 (initialStateFor d) size
 
 onDLTestSeq :: (TestSequence s -> TestSequence s) -> DynLogicTest s -> DynLogicTest s
-onDLTestSeq f (BadPrecondition seq bad s) = BadPrecondition (f seq) bad s
-onDLTestSeq f (Looping seq) = Looping (f seq)
-onDLTestSeq f (Stuck seq s) = Stuck (f seq) s
-onDLTestSeq f (DLScript seq) = DLScript (f seq)
+onDLTestSeq f (BadPrecondition ss bad s) = BadPrecondition (f ss) bad s
+onDLTestSeq f (Looping ss) = Looping (f ss)
+onDLTestSeq f (Stuck ss s) = Stuck (f ss) s
+onDLTestSeq f (DLScript ss) = DLScript (f ss)
 
 consDLTest :: TestStep s -> DynLogicTest s -> DynLogicTest s
 consDLTest step = onDLTestSeq (step :>)
@@ -380,8 +380,8 @@ consDLTest step = onDLTestSeq (step :>)
 consDLTestW :: Witnesses () -> DynLogicTest s -> DynLogicTest s
 consDLTestW w = onDLTestSeq (addW w)
   where
-    addW Do{} seq = seq
-    addW (Witness a w) seq = TestSeqWitness a (addW w seq)
+    addW Do{} ss = ss
+    addW (Witness a w') ss = TestSeqWitness a (addW w' ss)
 
 generate ::
   (Monad m, DynLogicModel s) =>
@@ -489,13 +489,12 @@ data NextStep s
 
 chooseNextStep :: DynLogicModel s => Annotated s -> Int -> DynLogic s -> Gen (NextStep s)
 chooseNextStep s n d = do
-  steps <- nextSteps d
-  case steps of
+  nextSteps d >>= \case
     [] -> return NoStep
     steps -> do
-      let bad = concatMap (findBad . snd) steps
+      let bads = concatMap (findBad . snd) steps
           findBad = traverse $ flip badActions s
-      case bad of
+      case bads of
         [] -> do
           chosen <- chooseOneOf steps
           let takeStep = \case
@@ -520,12 +519,12 @@ chooseNextStep s n d = do
                 Stopping{} -> error "chooseNextStep: Stopping"
                 Weight{} -> error "chooseNextStep: Weight"
                 Monitor{} -> error "chooseNextStep: Monitor"
-              go (Do d) = takeStep d
+              go (Do d') = takeStep d'
               go (Witness a step) =
                 go step
                   >>= pure . \case
                     StoppingStep -> StoppingStep -- TODO: This is a bit fishy
-                    Stepping step dl -> Stepping (Witness a step) dl
+                    Stepping step' dl -> Stepping (Witness a step') dl
                     NoStep -> NoStep
                     BadAction bad -> BadAction (Witness a bad)
           go chosen
@@ -568,21 +567,21 @@ shrinkScript :: DynLogicModel s => DynLogic s -> TestSequence s -> [TestSequence
 shrinkScript = shrink' initialAnnotatedState
   where
     shrink' :: DynLogicModel s => Annotated s -> DynLogic s -> TestSequence s -> [TestSequence s]
-    shrink' s d seq = structural s d seq ++ nonstructural s d seq
+    shrink' s d ss = structural s d ss ++ nonstructural s d ss
 
-    nonstructural s d (TestSeqWitness a seq) =
-      [ TestSeqWitness a' seq'
+    nonstructural s d (TestSeqWitness a ss) =
+      [ TestSeqWitness a' ss'
       | a' <- shrinkWitness d a
-      , seq' <- seq : shrink' s (stepDLSeq d s $ TestSeqWitness a TestSeqStop) seq
+      , ss' <- ss : shrink' s (stepDLSeq d s $ TestSeqWitness a TestSeqStop) ss
       ]
-    nonstructural s d (TestSeqStep step@(Var i := act) seq) =
-      [TestSeqStep (Var i := act') seq | Some act' <- computeShrinkAction s act]
-        ++ [ TestSeqStep step seq'
-           | seq' <-
+    nonstructural s d (TestSeqStep step@(Var i := act) ss) =
+      [TestSeqStep (Var i := act') ss | Some act' <- computeShrinkAction s act]
+        ++ [ TestSeqStep step ss'
+           | ss' <-
               shrink'
                 (nextStateStep step s)
                 (stepDLStep d s step)
-                seq
+                ss
            ]
     nonstructural _ _ TestSeqStop = []
 
@@ -614,16 +613,16 @@ pruneDLTest dl = prune [dl] initialAnnotatedState
   where
     prune [] _ _ = TestSeqStop
     prune _ _ TestSeqStop = TestSeqStop
-    prune ds s (TestSeqWitness a seq) =
+    prune ds s (TestSeqWitness a ss) =
       case [d' | d <- ds, d' <- stepDLW d a] of
-        [] -> prune ds s seq
-        ds' -> TestSeqWitness a $ prune ds' s seq
-    prune ds s (TestSeqStep step@(_ := act) seq)
+        [] -> prune ds s ss
+        ds' -> TestSeqWitness a $ prune ds' s ss
+    prune ds s (TestSeqStep step@(_ := act) ss)
       | computePrecondition s act =
           case [d' | d <- ds, d' <- stepDL d s (Do step)] of
-            [] -> prune ds s seq
-            ds' -> TestSeqStep step $ prune ds' (nextStateStep step s) seq
-      | otherwise = prune ds s seq
+            [] -> prune ds s ss
+            ds' -> TestSeqStep step $ prune ds' (nextStateStep step s) ss
+      | otherwise = prune ds s ss
 
 stepDL :: DynLogicModel s => DynLogic s -> Annotated s -> TestStep s -> [DynLogic s]
 stepDL (After a k) s (Do (Var n := act))
@@ -654,8 +653,8 @@ stepDLW _ _ = []
 stepDLSeq :: DynLogicModel s => DynLogic s -> Annotated s -> TestSequence s -> DynLogic s
 stepDLSeq d _ (TestSeqStopW Do{}) = d
 stepDLSeq d s (TestSeqStopW (Witness a w)) = stepDLSeq (stepDLWitness d a) s (TestSeqStopW w)
-stepDLSeq d s (step@(Witnesses _ (var := act)) :> seq) =
-  stepDLSeq (demonicAlt $ stepDL d s step) (computeNextState s act var) seq
+stepDLSeq d s (step@(Witnesses _ (var := act)) :> ss) =
+  stepDLSeq (demonicAlt $ stepDL d s step) (computeNextState s act var) ss
 
 stepDLWitness :: forall a s. (DynLogicModel s, Typeable a) => DynLogic s -> a -> DynLogic s
 stepDLWitness d a = demonicAlt $ stepDLW d a
@@ -690,18 +689,18 @@ makeTestFromPruned dl = make dl initialAnnotatedState
       | b : _ <- badActions d s = BadPrecondition TestSeqStop b s
       | stuck d s = Stuck TestSeqStop s
       | otherwise = DLScript TestSeqStop
-    make d s (TestSeqWitness a seq) =
+    make d s (TestSeqWitness a ss) =
       onDLTestSeq (TestSeqWitness a) $
         make
           (stepDLWitness d a)
           s
-          seq
-    make d s (TestSeqStep step seq) =
+          ss
+    make d s (TestSeqStep step ss) =
       onDLTestSeq (TestSeqStep step) $
         make
           (stepDLStep d s step)
           (nextStateStep step s)
-          seq
+          ss
 
 -- | If failed, return the prefix up to the failure. Also prunes the test in case the model has
 --   changed.
@@ -746,10 +745,10 @@ scriptFromDL (DLScript s) = Actions $ sequenceSteps s
 scriptFromDL _ = Actions []
 
 sequenceSteps :: TestSequence s -> [Step s]
-sequenceSteps (TestSeq seq) =
-  case discardWitnesses seq of
+sequenceSteps (TestSeq ss) =
+  case discardWitnesses ss of
     ContStop -> []
-    ContStep s seq -> s : sequenceSteps seq
+    ContStep s ss' -> s : sequenceSteps ss'
 
 badActionsGiven :: StateModel s => DynLogic s -> Annotated s -> Witnesses a -> [Witnesses (FailingAction s)]
 badActionsGiven Stop _ _ = []
@@ -757,7 +756,7 @@ badActionsGiven EmptySpec _ _ = []
 badActionsGiven AfterAny{} _ _ = []
 badActionsGiven (ForAll _ k) s (Witness a step) =
   case cast a of
-    Just a -> Witness a <$> badActionsGiven (k a) s step
+    Just a' -> Witness a' <$> badActionsGiven (k a') s step
     _ -> []
 badActionsGiven (Alt _ d d') s w = badActionsGiven d s w ++ badActionsGiven d' s w
 badActionsGiven (Stopping d) s w = badActionsGiven d s w

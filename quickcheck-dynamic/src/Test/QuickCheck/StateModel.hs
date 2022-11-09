@@ -319,10 +319,10 @@ usedVariables (Actions as) = go initialAnnotatedState as
   where
     go :: Annotated state -> [Step state] -> VarContext
     go aState [] = allVariables (underlyingState aState)
-    go aState ((var := act) : seq) =
+    go aState ((var := act) : steps) =
       allVariables act
         <> allVariables (underlyingState aState)
-        <> go (computeNextState aState act var) seq
+        <> go (computeNextState aState act var) steps
 
 instance (StateModel state) => Arbitrary (Actions state) where
   arbitrary = do
@@ -516,8 +516,8 @@ makeHasVarsInstance typ cs = do
 
 makeActionInstances :: Name -> Q [Dec]
 makeActionInstances stateTypeName = do
-  Just actionName <- lookupTypeName "Action"
-  [DataInstD _ _ _ _ cs _] <- reifyInstances actionName [ConT stateTypeName]
+  Just actionTypeName <- lookupTypeName "Action"
+  [DataInstD _ _ _ _ cs _] <- reifyInstances actionTypeName [ConT stateTypeName]
   Just eqName <- lookupTypeName "Eq"
   newVarName <- qNewName "a"
   stateTypeKind <- reifyType stateTypeName
@@ -529,7 +529,7 @@ makeActionInstances stateTypeName = do
   let typ =
         AppT
           ( AppT
-              (ConT actionName)
+              (ConT actionTypeName)
               (foldl AppT (ConT stateTypeName) (VarT <$> stateTypeArgs))
           )
           (VarT newVarName)
