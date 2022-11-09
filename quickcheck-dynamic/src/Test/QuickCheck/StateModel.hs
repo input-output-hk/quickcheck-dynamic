@@ -37,7 +37,6 @@ module Test.QuickCheck.StateModel (
   arbitraryVar,
   shrinkVar,
   makeActionInstances,
-  emptyContext,
   extendContext,
   isWellTyped,
   allVariables,
@@ -366,7 +365,8 @@ instance (StateModel state) => Arbitrary (Actions state) where
 
 -- Running state models
 
-newtype VarContext = VarCtx (Set (Any Var)) deriving (Semigroup) via Set (Any Var)
+newtype VarContext = VarCtx (Set (Any Var))
+  deriving (Semigroup, Monoid) via Set (Any Var)
 
 instance Show VarContext where
   show (VarCtx vs) =
@@ -388,9 +388,6 @@ instance Show state => Show (Annotated state) where
 isWellTyped :: Typeable a => Var a -> VarContext -> Bool
 isWellTyped v (VarCtx ctx) = Some v `Set.member` ctx
 
-emptyContext :: VarContext
-emptyContext = VarCtx mempty
-
 -- TODO: check invariants??
 extendContext :: Typeable a => VarContext -> Var a -> VarContext
 extendContext (VarCtx ctx) v = VarCtx $ Set.insert (Some v) ctx
@@ -399,7 +396,7 @@ allVariables :: HasVariables a => a -> VarContext
 allVariables = VarCtx . getAllVariables
 
 initialAnnotatedState :: StateModel state => Annotated state
-initialAnnotatedState = Metadata emptyContext initialState
+initialAnnotatedState = Metadata mempty initialState
 
 computePrecondition :: StateModel state => Annotated state -> Action state a -> Bool
 computePrecondition s a =
