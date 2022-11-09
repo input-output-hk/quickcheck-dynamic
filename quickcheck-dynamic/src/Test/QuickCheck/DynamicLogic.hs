@@ -38,8 +38,8 @@ import Test.QuickCheck.DynamicLogic.Quantify
 import Test.QuickCheck.StateModel
 
 -- | The `DL` monad provides a nicer interface to dynamic logic formulae than the plain API.
---   It's a continuation monad producing a `DL.DynFormula` formula, with a state component threaded
---   through.
+--   It's a continuation monad producing a `DL.DynFormula` formula, with a state component (with
+--   variable context) threaded through.
 newtype DL s a = DL {unDL :: Annotated s -> (a -> Annotated s -> DL.DynFormula s) -> DL.DynFormula s}
   deriving (Functor)
 
