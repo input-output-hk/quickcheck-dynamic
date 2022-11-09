@@ -190,7 +190,7 @@ tabu tab xs = tabulate tab xs . foldr (.) id [classify True (tab ++ ": " ++ x) |
 prop_Registry :: Actions RegState -> Property
 prop_Registry s =
   property $
-    runIOSimProperty $ do
+    runIOSimProperty_ $ do
       monitor $ counterexample "\nExecution\n"
       reg <- lift setupRegistry
       _res <- runPropertyReaderT (runActions s) reg

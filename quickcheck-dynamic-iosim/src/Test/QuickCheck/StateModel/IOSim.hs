@@ -25,15 +25,17 @@ type family RealizeIOSim s a where
 
 type instance Realized (IOSim s) a = RealizeIOSim s a
 
-runIOSimProperty :: Testable a => (forall s. PropertyM (IOSim s) a) -> Gen Property
+runIOSimProperty :: Testable a => (forall s. PropertyM (IOSim s) a) -> Gen (SimTrace Property, Property)
 runIOSimProperty p = do
   Capture eval <- capture
-  let tr = runSimTrace (eval (monadic' p)) -- \$ evalStateT (eval $ monadic' p) (undefined, Map.empty)
-      logsOnError = id -- counterexample ("trace:\n" <> toString traceDump)
+  let tr = runSimTrace (eval (monadic' p))
   case traceResult False tr of
     Right x ->
-      pure $ logsOnError x
+      pure (tr, x)
     Left (FailureException (SomeException ex)) ->
-      pure $ counterexample (show ex) $ logsOnError $ property False
+      pure (tr, counterexample (show ex) False)
     Left ex ->
-      pure $ counterexample (show ex) $ logsOnError $ property False
+      pure (tr, counterexample (show ex) False)
+
+runIOSimProperty_ :: Testable a => (forall s. PropertyM (IOSim s) a) -> Gen Property
+runIOSimProperty_ p = fmap snd $ runIOSimProperty p
