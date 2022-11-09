@@ -500,7 +500,7 @@ chooseNextStep s n d = do
           let takeStep = \case
                 Stop -> return StoppingStep
                 After a k ->
-                  return $ Stepping (Do $ Var n := a) (k (Var n) (computeNextState s a (Var n)))
+                  return $ Stepping (Do $ mkVar n := a) (k (mkVar n) (computeNextState s a (mkVar n)))
                 AfterAny k -> do
                   m <- keepTryingUntil 100 (computeArbitraryAction s) $
                     \case
@@ -510,8 +510,8 @@ chooseNextStep s n d = do
                     Just (Some a) ->
                       return $
                         Stepping
-                          (Do $ Var n := a)
-                          (k (computeNextState s a (Var n)))
+                          (Do $ mkVar n := a)
+                          (k (computeNextState s a (mkVar n)))
                 EmptySpec -> error "chooseNextStep: EmptySpec"
                 ForAll{} -> error "chooseNextStep: ForAll"
                 Error{} -> error "chooseNextStep: Error"
@@ -537,7 +537,7 @@ chooseUniqueNextStep s n d = do
     [] -> return NoStep
     [Do EmptySpec] -> return NoStep
     [Do Stop] -> return StoppingStep
-    [Do (After a k)] -> return $ Stepping (Do $ Var n := a) (k (Var n) (computeNextState s a (Var n)))
+    [Do (After a k)] -> return $ Stepping (Do $ mkVar n := a) (k (mkVar n) (computeNextState s a (mkVar n)))
     _ -> bad
   where
     bad = fail "chooseUniqueNextStep: non-unique action in DynLogic"
@@ -574,8 +574,8 @@ shrinkScript = shrink' initialAnnotatedState
       | a' <- shrinkWitness d a
       , ss' <- ss : shrink' s (stepDLSeq d s $ TestSeqWitness a TestSeqStop) ss
       ]
-    nonstructural s d (TestSeqStep step@(Var i := act) ss) =
-      [TestSeqStep (Var i := act') ss | Some act' <- computeShrinkAction s act]
+    nonstructural s d (TestSeqStep step@(var := act) ss) =
+      [TestSeqStep (unsafeCoerceVar var := act') ss | Some act' <- computeShrinkAction s act]
         ++ [ TestSeqStep step ss'
            | ss' <-
               shrink'
@@ -625,8 +625,10 @@ pruneDLTest dl = prune [dl] initialAnnotatedState
       | otherwise = prune ds s ss
 
 stepDL :: DynLogicModel s => DynLogic s -> Annotated s -> TestStep s -> [DynLogic s]
-stepDL (After a k) s (Do (Var n := act))
-  | Some a == Some act = [k (Var n) (computeNextState s act (Var n))]
+stepDL (After a k) s (Do (var := act))
+  -- TOOD: make this nicer when we migrate to 9.2 where we can just bind
+  -- the type variables cleanly and do `Just Refl <- eqT ...` here instead.
+  | Some a == Some act = [k (unsafeCoerceVar var) (computeNextState s act (unsafeCoerceVar var))]
 stepDL (AfterAny k) s (Do (var := act))
   | not (restricted act) = [k (computeNextState s act var)]
 stepDL (Alt _ d d') s step = stepDL d s step ++ stepDL d' s step
@@ -791,10 +793,11 @@ applyMonitoring _ BadPrecondition{} p = p
 
 findMonitoring :: DynLogicModel s => DynLogic s -> Annotated s -> TestSequence s -> Maybe (Property -> Property)
 findMonitoring Stop _s TestSeqStop = Just id
-findMonitoring (After a k) s (TestSeqStep (Var n := a') as)
-  | Some a == Some a' = findMonitoring (k (Var n) s') s' as
+findMonitoring (After a k) s (TestSeqStep (var := a') as)
+  -- TODO: do nicely with eqT instead (avoids `unsafeCoerceVar`)
+  | Some a == Some a' = findMonitoring (k (unsafeCoerceVar var) s') s' as
   where
-    s' = computeNextState s a' (Var n)
+    s' = computeNextState s a' (unsafeCoerceVar var)
 findMonitoring (AfterAny k) s as@(TestSeqStep (_var := a) _)
   | not (restricted a) = findMonitoring (After a $ const k) s as
 findMonitoring (Alt _b d d') s as =

@@ -8,16 +8,14 @@
 -- be generated and executed against some /actual/ implementation code to define monadic `Property`
 -- to be asserted by QuickCheck.
 module Test.QuickCheck.StateModel (
+  module Test.QuickCheck.StateModel.Variables,
+  module Test.QuickCheck.StateModel.TH,
   StateModel (..),
   RunModel (..),
-  HasVariables (..),
-  VarContext,
   WithUsedVars (..),
   Annotated (..),
-  Any (..),
   Step (..),
   LookUp,
-  Var (..), -- we export the constructors so that users can construct test cases
   Actions (..),
   pattern Actions,
   EnvEntry (..),
@@ -33,13 +31,6 @@ module Test.QuickCheck.StateModel (
   computePrecondition,
   computeArbitraryAction,
   computeShrinkAction,
-  ctxAtType,
-  arbitraryVar,
-  shrinkVar,
-  makeActionInstances,
-  extendContext,
-  isWellTyped,
-  allVariables,
 ) where
 
 import Control.Monad
@@ -49,44 +40,13 @@ import Control.Monad.Writer (WriterT)
 import Data.Data
 import Data.Kind
 import Data.List
-import Data.Map (Map)
-import Data.Map qualified as Map
-import Data.Ord
-import Data.Set (Set)
 import Data.Set qualified as Set
 import GHC.Generics
-import Language.Haskell.TH hiding (Type)
-import Language.Haskell.TH qualified as TH
-import Language.Haskell.TH.Syntax hiding (Type)
 import Test.QuickCheck as QC
 import Test.QuickCheck.DynamicLogic.SmartShrinking
 import Test.QuickCheck.Monadic
-
-class HasVariables a where
-  getAllVariables :: a -> Set (Any Var)
-  default getAllVariables :: (Generic a, GenericHasVariables (Rep a)) => a -> Set (Any Var)
-  getAllVariables = genericGetAllVariables . from
-
-instance HasVariables a => HasVariables (Smart a) where
-  getAllVariables (Smart _ a) = getAllVariables a
-
-instance Typeable a => HasVariables (Var a) where
-  getAllVariables = Set.singleton . Some
-
-instance (HasVariables k, HasVariables v) => HasVariables (Map k v) where
-  getAllVariables = getAllVariables . Map.toList
-
-instance HasVariables a => HasVariables (Set a) where
-  getAllVariables = getAllVariables . Set.toList
-
-newtype BaseType a = BaseType a
-
-instance HasVariables (BaseType a) where
-  getAllVariables _ = mempty
-
-deriving via BaseType Integer instance HasVariables Integer
-deriving via BaseType Int instance HasVariables Int
-deriving via BaseType Char instance HasVariables Char
+import Test.QuickCheck.StateModel.Variables
+import Test.QuickCheck.StateModel.TH
 
 -- | The typeclass users implement to define a model against which to validate some implementation.
 --
@@ -166,6 +126,8 @@ class
   precondition :: state -> Action state a -> Bool
   precondition _ _ = True
 
+deriving instance (forall a. Show (Action state a)) => Show (Any (Action state))
+
 -- TODO: maybe it makes sense to write
 -- out a long list of these instances
 type family Realized (m :: Type -> Type) a :: Type
@@ -229,23 +191,6 @@ lookUpVar env v = case lookUpVarMaybe env v of
   Nothing -> error $ "Variable " ++ show v ++ " is not bound!"
   Just a -> a
 
-data Any f where
-  Some :: (Typeable a, Eq (f a)) => f a -> Any f
-
-deriving instance (forall a. Show (Action state a)) => Show (Any (Action state))
-
-instance Eq (Any f) where
-  Some (a :: f a) == Some (b :: f b) =
-    case eqT @a @b of
-      Just Refl -> a == b
-      Nothing -> False
-
-instance (forall a. Ord (f a)) => Ord (Any f) where
-  compare (Some (a :: f a)) (Some (a' :: f a')) =
-    case eqT @a @a' of
-      Just Refl -> compare a a'
-      Nothing -> compare (typeRep a) (typeRep a')
-
 data WithUsedVars a = WithUsedVars VarContext a
 
 data Step state where
@@ -269,15 +214,9 @@ instance Show (WithUsedVars (Step state)) where
       then show var ++ " <- action $ " ++ show act
       else "action $ " ++ show act
 
-newtype Var a = Var Int
-  deriving (Eq, Ord, Typeable, Data)
-
-instance Show (Var a) where
-  show (Var i) = "var" ++ show i
-
 instance Eq (Step state) where
-  (Var i := act) == (Var j := act') =
-    i == j && Some act == Some act'
+  (v := act) == (v' := act') =
+    unsafeCoerceVar v == v' && Some act == Some act'
 
 -- Action sequences use Smart shrinking, but this is invisible to
 -- client code because the extra Smart constructor is concealed by a
@@ -340,8 +279,9 @@ instance (StateModel state) => Arbitrary (Actions state) where
                     (mact, rej) <- satisfyPrecondition
                     case mact of
                       Just (Some act) -> do
-                        (as, rejected) <- arbActions (computeNextState s act (Var step)) (step + 1)
-                        return ((Var step := act) : as, rej ++ rejected)
+                        let var = mkVar step
+                        (as, rejected) <- arbActions (computeNextState s act var) (step + 1)
+                        return ((var := act) : as, rej ++ rejected)
                       Nothing ->
                         return ([], [])
                 )
@@ -361,21 +301,9 @@ instance (StateModel state) => Arbitrary (Actions state) where
   shrink (Actions_ rs as) =
     map (Actions_ rs) (shrinkSmart (map (prune . map fst) . shrinkList shrinker . withStates) as)
     where
-      shrinker (Var i := act, s) = [(Var i := act', s) | Some act' <- computeShrinkAction s act]
+      shrinker (v := act, s) = [(unsafeCoerceVar v := act', s) | Some act' <- computeShrinkAction s act]
 
 -- Running state models
-
-newtype VarContext = VarCtx (Set (Any Var))
-  deriving (Semigroup, Monoid) via Set (Any Var)
-
-instance Show VarContext where
-  show (VarCtx vs) =
-    "[" ++ intercalate ", " (map showBinding . sortBy (comparing getIdx) $ Set.toList vs) ++ "]"
-    where
-      getIdx (Some (Var i)) = i
-      showBinding :: Any Var -> String
-      -- The use of typeRep here is on purpose to avoid printing `Var` unnecessarily.
-      showBinding (Some v) = show v ++ " :: " ++ show (typeRep v)
 
 data Annotated state = Metadata
   { vars :: VarContext
@@ -384,21 +312,6 @@ data Annotated state = Metadata
 
 instance Show state => Show (Annotated state) where
   show (Metadata ctx s) = show ctx ++ " |- " ++ show s
-
-isWellTyped :: Typeable a => Var a -> VarContext -> Bool
-isWellTyped v (VarCtx ctx) = Some v `Set.member` ctx
-
--- TODO: check the invariant that no variable index is used
--- twice at different types. This is generally not an issue
--- because lookups take types into account (so it *shouldn't*
--- cause an issue, but it might be good practise to crash
--- if the invariant is violated anyway as it is evidence that
--- something is horribly broken at the use site).
-extendContext :: Typeable a => VarContext -> Var a -> VarContext
-extendContext (VarCtx ctx) v = VarCtx $ Set.insert (Some v) ctx
-
-allVariables :: HasVariables a => a -> VarContext
-allVariables = VarCtx . getAllVariables
 
 initialAnnotatedState :: StateModel state => Annotated state
 initialAnnotatedState = Metadata mempty initialState
@@ -428,15 +341,6 @@ computeShrinkAction ::
   Action state a ->
   [Any (Action state)]
 computeShrinkAction s = shrinkAction (vars s) (underlyingState s)
-
-ctxAtType :: Typeable a => VarContext -> [Var a]
-ctxAtType (VarCtx vs) = [v | Some (cast -> Just v) <- Set.toList vs]
-
-arbitraryVar :: Typeable a => VarContext -> Gen (Var a)
-arbitraryVar = elements . ctxAtType
-
-shrinkVar :: Typeable a => VarContext -> Var a -> [Var a]
-shrinkVar ctx v = filter (< v) $ ctxAtType ctx
 
 prune :: StateModel state => [Step state] -> [Step state]
 prune = loop initialAnnotatedState
@@ -473,12 +377,12 @@ runActions (Actions_ rejected (Smart _ actions)) = loop initialAnnotatedState []
       unless (null rejected) $
         monitor (tabulate "Actions rejected by precondition" rejected)
       return (_s, reverse env)
-    loop s env ((Var n := act) : as) = do
+    loop s env ((v := act) : as) = do
       pre $ computePrecondition s act
       ret <- run (perform (underlyingState s) act (lookUpVar env))
       let name = actionName act
       monitor (tabulate "Actions" [name])
-      let var = Var n
+      let var = unsafeCoerceVar v
           s' = computeNextState s act var
           env' = (var :== ret) : env
       monitor (monitoring @state @m (underlyingState s, underlyingState s') act (lookUpVar env') ret)
@@ -486,76 +390,3 @@ runActions (Actions_ rejected (Smart _ actions)) = loop initialAnnotatedState []
       assert b
       loop s' env' as
 
--- Trics to get HasVariables instances via either TemplateHaskell or Generic
-
-makeHasVarsInstance :: TH.Type -> [Con] -> Q InstanceDec
-makeHasVarsInstance typ cs = do
-  Just hasVarsName <- lookupTypeName "HasVariables"
-  Just getAllVarsName <- lookupValueName "getAllVariables"
-  Just memptyName <- lookupValueName "mempty"
-  Just mappendName <- lookupValueName "mappend"
-  let mkClause (NormalC cn args) = mkClauseWith cn (length args)
-      mkClause (RecC cn args) = mkClauseWith cn (length args)
-      mkClause (InfixC _ cn _) = mkClauseWith cn 2
-      mkClause (ForallC _ _ con) = mkClause con
-      mkClause (GadtC (cn : _) args _) = mkClauseWith cn (length args)
-      mkClause (RecGadtC (cn : _) args _) = mkClauseWith cn (length args)
-      mkClause _ = error "The impossible happened"
-      mkClauseWith cn n = do
-        names <- sequence $ replicate n $ qNewName "a"
-        -- TODO: when we migrate to ghc 9.2 we need to put in an extra empty list here
-        pure $ Clause [ConP cn (map VarP names)] (buildBody names) []
-      buildBody [] = NormalB $ VarE memptyName
-      buildBody as =
-        NormalB $
-          foldr1
-            (\e e' -> AppE (AppE (VarE mappendName) e) e')
-            (map (AppE (VarE getAllVarsName) . VarE) as)
-  cls <- mapM mkClause cs
-  pure $ InstanceD Nothing [] (AppT (ConT hasVarsName) typ) [FunD getAllVarsName cls]
-
-makeActionInstances :: Name -> Q [Dec]
-makeActionInstances stateTypeName = do
-  Just actionTypeName <- lookupTypeName "Action"
-  [DataInstD _ _ _ _ cs _] <- reifyInstances actionTypeName [ConT stateTypeName]
-  Just eqName <- lookupTypeName "Eq"
-  newVarName <- qNewName "a"
-  stateTypeKind <- reifyType stateTypeName
-  let numStateTypeParams = arity stateTypeKind
-        where
-          arity (AppT (AppT ArrowT _) k) = 1 + arity k
-          arity _ = 0
-  stateTypeArgs <- replicateM numStateTypeParams $ qNewName "a"
-  let typ =
-        AppT
-          ( AppT
-              (ConT actionTypeName)
-              (foldl AppT (ConT stateTypeName) (VarT <$> stateTypeArgs))
-          )
-          (VarT newVarName)
-  varsInstance <- makeHasVarsInstance typ cs
-  return $
-    [ varsInstance
-    , StandaloneDerivD Nothing [] (AppT (ConT eqName) typ)
-    ]
-
-instance {-# OVERLAPPABLE #-} (Generic a, GenericHasVariables (Rep a)) => HasVariables a
-
-class GenericHasVariables f where
-  genericGetAllVariables :: f k -> Set (Any Var)
-
-instance GenericHasVariables f => GenericHasVariables (M1 i c f) where
-  genericGetAllVariables = genericGetAllVariables . unM1
-
-instance HasVariables c => GenericHasVariables (K1 i c) where
-  genericGetAllVariables = getAllVariables . unK1
-
-instance GenericHasVariables U1 where
-  genericGetAllVariables _ = mempty
-
-instance (GenericHasVariables f, GenericHasVariables g) => GenericHasVariables (f :*: g) where
-  genericGetAllVariables (x :*: y) = genericGetAllVariables x <> genericGetAllVariables y
-
-instance (GenericHasVariables f, GenericHasVariables g) => GenericHasVariables (f :+: g) where
-  genericGetAllVariables (L1 x) = genericGetAllVariables x
-  genericGetAllVariables (R1 x) = genericGetAllVariables x

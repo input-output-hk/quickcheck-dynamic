@@ -73,6 +73,8 @@ library
         Test.QuickCheck.DynamicLogic.Utils
         Test.QuickCheck.Extras
         Test.QuickCheck.StateModel
+        Test.QuickCheck.StateModel.Variables
+        Test.QuickCheck.StateModel.TH
     build-depends:
         QuickCheck -any,
         base >=4.7 && <5,
