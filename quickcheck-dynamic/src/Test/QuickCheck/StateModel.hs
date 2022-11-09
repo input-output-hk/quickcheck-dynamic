@@ -45,8 +45,8 @@ import GHC.Generics
 import Test.QuickCheck as QC
 import Test.QuickCheck.DynamicLogic.SmartShrinking
 import Test.QuickCheck.Monadic
-import Test.QuickCheck.StateModel.Variables
 import Test.QuickCheck.StateModel.TH
+import Test.QuickCheck.StateModel.Variables
 
 -- | The typeclass users implement to define a model against which to validate some implementation.
 --
@@ -389,4 +389,3 @@ runActions (Actions_ rejected (Smart _ actions)) = loop initialAnnotatedState []
       b <- run $ postcondition @state @m (underlyingState s, underlyingState s') act (lookUpVar env) ret
       assert b
       loop s' env' as
-

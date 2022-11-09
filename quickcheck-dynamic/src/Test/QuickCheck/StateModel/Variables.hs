@@ -2,8 +2,8 @@
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Test.QuickCheck.StateModel.Variables
-  ( Var,
+module Test.QuickCheck.StateModel.Variables (
+  Var,
   Any (..),
   HasVariables (..),
   VarContext,
@@ -15,7 +15,7 @@ module Test.QuickCheck.StateModel.Variables
   isWellTyped,
   allVariables,
   unsafeCoerceVar,
-  )where
+) where
 
 import Data.Data
 import Data.List

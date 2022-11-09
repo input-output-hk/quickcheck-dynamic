@@ -1,4 +1,5 @@
 module Test.QuickCheck.StateModel.TH (makeActionInstances) where
+
 import Control.Monad
 import Language.Haskell.TH hiding (Type)
 import Language.Haskell.TH qualified as TH
