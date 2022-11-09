@@ -388,7 +388,12 @@ instance Show state => Show (Annotated state) where
 isWellTyped :: Typeable a => Var a -> VarContext -> Bool
 isWellTyped v (VarCtx ctx) = Some v `Set.member` ctx
 
--- TODO: check invariants??
+-- TODO: check the invariant that no variable index is used
+-- twice at different types. This is generally not an issue
+-- because lookups take types into account (so it *shouldn't*
+-- cause an issue, but it might be good practise to crash
+-- if the invariant is violated anyway as it is evidence that
+-- something is horribly broken at the use site).
 extendContext :: Typeable a => VarContext -> Var a -> VarContext
 extendContext (VarCtx ctx) v = VarCtx $ Set.insert (Some v) ctx
 
