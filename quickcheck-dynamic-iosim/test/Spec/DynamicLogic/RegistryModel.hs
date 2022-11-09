@@ -193,7 +193,7 @@ prop_Registry s =
     runIOSimProperty_ $ do
       monitor $ counterexample "\nExecution\n"
       reg <- lift setupRegistry
-      _res <- runPropertyReaderT (runActions s) reg
+      runPropertyReaderT (runActions s) reg
       QC.assert True
 
 propDL :: DL RegState () -> Property
