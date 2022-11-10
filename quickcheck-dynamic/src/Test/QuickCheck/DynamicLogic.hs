@@ -3,7 +3,7 @@
 -- This interface offers a much nicer experience than manipulating the
 -- expressions it is implemented on top of, especially as it improves
 -- readability. It's still possible to express properties as pure
--- expressions using the `Test.QuickCheck.DynamicLogic.Core` module
+-- expressions using the `Test.QuickCheck.DynamicLogic.Internal` module
 -- and it might make sense depending on the context and the kind of
 -- properties one wants to express.
 module Test.QuickCheck.DynamicLogic (
@@ -16,20 +16,16 @@ module Test.QuickCheck.DynamicLogic (
   weight,
   getSize,
   getModelStateDL,
+  getVarContextDL,
+  forAllVar,
   assert,
   assertModel,
   monitorDL,
   forAllQ,
   forAllDL,
-  forAllDL_,
   forAllMappedDL,
-  forAllMappedDL_,
   forAllUniqueDL,
-  withDLTest,
-  DL.DynLogic,
   DL.DynLogicModel (..),
-  DL.DynLogicTest (..),
-  DL.TestStep (..),
   module Test.QuickCheck.DynamicLogic.Quantify,
 ) where
 
@@ -37,14 +33,14 @@ import Control.Applicative
 import Control.Monad
 import Data.Typeable
 import Test.QuickCheck hiding (getSize)
-import Test.QuickCheck.DynamicLogic.Core qualified as DL
+import Test.QuickCheck.DynamicLogic.Internal qualified as DL
 import Test.QuickCheck.DynamicLogic.Quantify
 import Test.QuickCheck.StateModel
 
 -- | The `DL` monad provides a nicer interface to dynamic logic formulae than the plain API.
---   It's a continuation monad producing a `DL.DynFormula` formula, with a state component threaded
---   through.
-newtype DL s a = DL {unDL :: s -> (a -> s -> DL.DynFormula s) -> DL.DynFormula s}
+--   It's a continuation monad producing a `DL.DynFormula` formula, with a state component (with
+--   variable context) threaded through.
+newtype DL s a = DL {unDL :: Annotated s -> (a -> Annotated s -> DL.DynFormula s) -> DL.DynFormula s}
   deriving (Functor)
 
 instance Applicative (DL s) where
@@ -62,8 +58,8 @@ instance Monad (DL s) where
 instance MonadFail (DL s) where
   fail = errorDL
 
-action :: (Typeable a, Eq (Action s a)) => Action s a -> DL s ()
-action cmd = DL $ \_ k -> DL.after cmd $ k ()
+action :: (Typeable a, Eq (Action s a), Show (Action s a)) => Action s a -> DL s (Var a)
+action cmd = DL $ \_ k -> DL.after cmd k
 
 anyAction :: DL s ()
 anyAction = DL $ \_ k -> DL.afterAny $ k ()
@@ -90,7 +86,15 @@ getSize :: DL s Int
 getSize = DL $ \s k -> DL.withSize $ \n -> k n s
 
 getModelStateDL :: DL s s
-getModelStateDL = DL $ \s k -> k s s
+getModelStateDL = DL $ \s k -> k (underlyingState s) s
+
+getVarContextDL :: DL s VarContext
+getVarContextDL = DL $ \s k -> k (vars s) s
+
+forAllVar :: forall a s. Typeable a => DL s (Var a)
+forAllVar = do
+  xs <- ctxAtType <$> getVarContextDL
+  forAllQ $ elementsQ xs
 
 errorDL :: String -> DL s a
 errorDL name = DL $ \_ _ -> DL.errorDL name
@@ -116,13 +120,13 @@ monitorDL f = DL $ \s k -> DL.monitorDL f (k () s)
 forAllQ :: Quantifiable q => q -> DL s (Quantifies q)
 forAllQ q = DL $ \s k -> DL.forAllQ q $ \x -> k x s
 
-runDL :: s -> DL s () -> DL.DynFormula s
+runDL :: Annotated s -> DL s () -> DL.DynFormula s
 runDL s dl = unDL dl s $ \_ _ -> DL.passTest
 
 forAllUniqueDL ::
   (DL.DynLogicModel s, Testable a) =>
   Int ->
-  s ->
+  Annotated s ->
   DL s () ->
   (Actions s -> a) ->
   Property
@@ -133,17 +137,10 @@ forAllDL ::
   DL s () ->
   (Actions s -> a) ->
   Property
-forAllDL d = DL.forAllScripts (runDL initialState d)
-
-forAllDL_ ::
-  (DL.DynLogicModel s, Testable a) =>
-  DL s () ->
-  (Actions s -> a) ->
-  Property
-forAllDL_ d = DL.forAllScripts_ (runDL initialState d)
+forAllDL d = DL.forAllScripts (runDL initialAnnotatedState d)
 
 forAllMappedDL ::
-  (DL.DynLogicModel s, Testable a, Show rep) =>
+  (DL.DynLogicModel s, Testable a) =>
   (rep -> DL.DynLogicTest s) ->
   (DL.DynLogicTest s -> rep) ->
   (Actions s -> srep) ->
@@ -151,18 +148,4 @@ forAllMappedDL ::
   (srep -> a) ->
   Property
 forAllMappedDL to from fromScript d prop =
-  DL.forAllMappedScripts to from (runDL initialState d) (prop . fromScript)
-
-forAllMappedDL_ ::
-  (DL.DynLogicModel s, Testable a, Show rep) =>
-  (rep -> DL.DynLogicTest s) ->
-  (DL.DynLogicTest s -> rep) ->
-  (Actions s -> srep) ->
-  DL s () ->
-  (srep -> a) ->
-  Property
-forAllMappedDL_ to from fromScript d prop =
-  DL.forAllMappedScripts_ to from (runDL initialState d) (prop . fromScript)
-
-withDLTest :: (DL.DynLogicModel s, Testable a) => DL s () -> (Actions s -> a) -> DL.DynLogicTest s -> Property
-withDLTest d = DL.withDLScriptPrefix (runDL initialState d)
+  DL.forAllMappedScripts to from (runDL initialAnnotatedState d) (prop . fromScript)

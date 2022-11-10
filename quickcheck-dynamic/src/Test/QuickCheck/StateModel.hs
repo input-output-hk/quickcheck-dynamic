@@ -8,12 +8,14 @@
 -- be generated and executed against some /actual/ implementation code to define monadic `Property`
 -- to be asserted by QuickCheck.
 module Test.QuickCheck.StateModel (
+  module Test.QuickCheck.StateModel.Variables,
+  module Test.QuickCheck.StateModel.TH,
   StateModel (..),
   RunModel (..),
-  Any (..),
+  WithUsedVars (..),
+  Annotated (..),
   Step (..),
   LookUp,
-  Var (..), -- we export the constructors so that users can construct test cases
   Actions (..),
   pattern Actions,
   EnvEntry (..),
@@ -22,19 +24,29 @@ module Test.QuickCheck.StateModel (
   Realized,
   stateAfter,
   runActions,
-  runActionsInState,
   lookUpVar,
   lookUpVarMaybe,
+  initialAnnotatedState,
+  computeNextState,
+  computePrecondition,
+  computeArbitraryAction,
+  computeShrinkAction,
 ) where
 
 import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State
+import Control.Monad.Writer (WriterT)
 import Data.Data
 import Data.Kind
+import Data.List
+import Data.Set qualified as Set
+import GHC.Generics
 import Test.QuickCheck as QC
 import Test.QuickCheck.DynamicLogic.SmartShrinking
 import Test.QuickCheck.Monadic
+import Test.QuickCheck.StateModel.TH
+import Test.QuickCheck.StateModel.Variables
 
 -- | The typeclass users implement to define a model against which to validate some implementation.
 --
@@ -56,7 +68,9 @@ import Test.QuickCheck.Monadic
 --    somewhat redundant with the generator's conditions,
 class
   ( forall a. Show (Action state a)
+  , forall a. HasVariables (Action state a)
   , Show state
+  , HasVariables state
   ) =>
   StateModel state
   where
@@ -87,15 +101,13 @@ class
   actionName = head . words . show
 
   -- | Generator for `Action` depending on `state`.
-  -- The generated values are wrapped in `Any` type to allow the model to /not/ generate an action under
-  -- some circumstances: Any generated  `Error` value will be ignored when generating a trace for testing.
-  arbitraryAction :: state -> Gen (Any (Action state))
+  arbitraryAction :: VarContext -> state -> Gen (Any (Action state))
 
   -- | Shrinker for `Action`.
   -- Defaults to no-op but as usual, defining a good shrinker greatly enhances the usefulness
   -- of property-based testing.
-  shrinkAction :: Typeable a => state -> Action state a -> [Any (Action state)]
-  shrinkAction _ _ = []
+  shrinkAction :: Typeable a => VarContext -> state -> Action state a -> [Any (Action state)]
+  shrinkAction _ _ _ = []
 
   -- | Initial state of generated traces.
   initialState :: state
@@ -114,12 +126,15 @@ class
   precondition :: state -> Action state a -> Bool
   precondition _ _ = True
 
+deriving instance (forall a. Show (Action state a)) => Show (Any (Action state))
+
 -- TODO: maybe it makes sense to write
 -- out a long list of these instances
 type family Realized (m :: Type -> Type) a :: Type
 type instance Realized IO a = a
 type instance Realized (StateT s m) a = Realized m a
 type instance Realized (ReaderT r m) a = Realized m a
+type instance Realized (WriterT w m) a = Realized m a
 
 class Monad m => RunModel state m where
   -- | Perform an `Action` in some `state` in the `Monad` `m`.  This
@@ -176,19 +191,7 @@ lookUpVar env v = case lookUpVarMaybe env v of
   Nothing -> error $ "Variable " ++ show v ++ " is not bound!"
   Just a -> a
 
-data Any f where
-  Some :: (Typeable a, Eq (f a)) => f a -> Any f
-  Error :: String -> Any f
-
-deriving instance (forall a. Show (Action state a)) => Show (Any (Action state))
-
-instance Eq (Any f) where
-  Some (a :: f a) == Some (b :: f b) =
-    case eqT @a @b of
-      Just Refl -> a == b
-      Nothing -> False
-  Error s == Error s' = s == s'
-  _ == _ = False
+data WithUsedVars a = WithUsedVars VarContext a
 
 data Step state where
   (:=) ::
@@ -199,14 +202,21 @@ data Step state where
 
 infix 5 :=
 
-deriving instance (forall a. Show (Action state a)) => Show (Step state)
+instance (forall a. HasVariables (Action state a)) => HasVariables (Step state) where
+  getAllVariables (var := act) = Set.insert (Some var) $ getAllVariables act
 
-newtype Var a = Var Int
-  deriving (Eq, Ord, Show, Typeable, Data)
+instance Show (Step state) where
+  show (var := act) = show var ++ " <- action $ " ++ show act
+
+instance Show (WithUsedVars (Step state)) where
+  show (WithUsedVars ctx (var := act)) =
+    if isWellTyped var ctx
+      then show var ++ " <- action $ " ++ show act
+      else "action $ " ++ show act
 
 instance Eq (Step state) where
-  (Var i := act) == (Var j := act') =
-    i == j && Some act == Some act'
+  (v := act) == (v' := act') =
+    unsafeCoerceVar v == v' && Some act == Some act'
 
 -- Action sequences use Smart shrinking, but this is invisible to
 -- client code because the extra Smart constructor is concealed by a
@@ -216,6 +226,7 @@ instance Eq (Step state) where
 -- but were then rejected by their precondition.
 
 data Actions state = Actions_ [String] (Smart [Step state])
+  deriving (Generic)
 
 pattern Actions :: [Step state] -> Actions state
 pattern Actions as <-
@@ -231,110 +242,150 @@ instance Semigroup (Actions state) where
 instance Eq (Actions state) where
   Actions as == Actions as' = as == as'
 
-instance (forall a. Show (Action state a)) => Show (Actions state) where
-  showsPrec d (Actions as)
-    | d > 10 = ("(" ++) . shows (Actions as) . (")" ++)
-    | null as = ("Actions []" ++)
-    | otherwise =
-        ("Actions \n [" ++)
-          . foldr
-            (.)
-            (shows (last as) . ("]" ++))
-            [shows a . (",\n  " ++) | a <- init as]
+instance
+  ( forall a. Show (Action state a)
+  , forall a. HasVariables (Action state a)
+  , StateModel state
+  ) =>
+  Show (Actions state)
+  where
+  show (Actions as) =
+    let as' = WithUsedVars (usedVariables (Actions as)) <$> as
+     in intercalate "\n" $ zipWith (++) ("do " : repeat "   ") (map show as' ++ ["pure ()"])
+
+usedVariables :: forall state. StateModel state => Actions state -> VarContext
+usedVariables (Actions as) = go initialAnnotatedState as
+  where
+    go :: Annotated state -> [Step state] -> VarContext
+    go aState [] = allVariables (underlyingState aState)
+    go aState ((var := act) : steps) =
+      allVariables act
+        <> allVariables (underlyingState aState)
+        <> go (computeNextState aState act var) steps
 
 instance (StateModel state) => Arbitrary (Actions state) where
   arbitrary = do
-    (as, rejected) <- arbActions initialState 1
+    (as, rejected) <- arbActions initialAnnotatedState 1
     return $ Actions_ rejected (Smart 0 as)
-   where
-    arbActions :: state -> Int -> Gen ([Step state], [String])
-    arbActions s step = sized $ \n ->
-      let w = n `div` 2 + 1
-       in frequency
-            [ (1, return ([], []))
-            ,
-              ( w
-              , do
-                  (mact, rej) <- satisfyPrecondition
-                  case mact of
-                    Just (Some act) -> do
-                      (as, rejected) <- arbActions (nextState s act (Var step)) (step + 1)
-                      return ((Var step := act) : as, rej ++ rejected)
-                    Just Error{} -> error "impossible"
-                    Nothing ->
-                      return ([], [])
-              )
-            ]
-     where
-      satisfyPrecondition = sized $ \n -> go n (2 * n) [] -- idea copied from suchThatMaybe
-      go m n rej
-        | m > n = return (Nothing, rej)
-        | otherwise = do
-            a <- resize m $ arbitraryAction s
-            case a of
-              Some act ->
-                if precondition s act
-                  then return (Just (Some act), rej)
-                  else go (m + 1) n (actionName act : rej)
-              Error _ ->
-                go (m + 1) n rej
+    where
+      arbActions :: Annotated state -> Int -> Gen ([Step state], [String])
+      arbActions s step = sized $ \n ->
+        let w = n `div` 2 + 1
+         in frequency
+              [ (1, return ([], []))
+              ,
+                ( w
+                , do
+                    (mact, rej) <- satisfyPrecondition
+                    case mact of
+                      Just (Some act) -> do
+                        let var = mkVar step
+                        (as, rejected) <- arbActions (computeNextState s act var) (step + 1)
+                        return ((var := act) : as, rej ++ rejected)
+                      Nothing ->
+                        return ([], [])
+                )
+              ]
+        where
+          satisfyPrecondition = sized $ \n -> go n (2 * n) [] -- idea copied from suchThatMaybe
+          go m n rej
+            | m > n = return (Nothing, rej)
+            | otherwise = do
+                a <- resize m $ computeArbitraryAction s
+                case a of
+                  Some act ->
+                    if computePrecondition s act
+                      then return (Just (Some act), rej)
+                      else go (m + 1) n (actionName act : rej)
 
   shrink (Actions_ rs as) =
     map (Actions_ rs) (shrinkSmart (map (prune . map fst) . shrinkList shrinker . withStates) as)
-   where
-    shrinker (Var i := act, s) = [(Var i := act', s) | Some act' <- shrinkAction s act]
+    where
+      shrinker (v := act, s) = [(unsafeCoerceVar v := act', s) | Some act' <- computeShrinkAction s act]
+
+-- Running state models
+
+data Annotated state = Metadata
+  { vars :: VarContext
+  , underlyingState :: state
+  }
+
+instance Show state => Show (Annotated state) where
+  show (Metadata ctx s) = show ctx ++ " |- " ++ show s
+
+initialAnnotatedState :: StateModel state => Annotated state
+initialAnnotatedState = Metadata mempty initialState
+
+computePrecondition :: StateModel state => Annotated state -> Action state a -> Bool
+computePrecondition s a =
+  all (\(Some v) -> v `isWellTyped` vars s) (getAllVariables a)
+    && precondition (underlyingState s) a
+
+computeNextState ::
+  (StateModel state, Typeable a) =>
+  Annotated state ->
+  Action state a ->
+  Var a ->
+  Annotated state
+computeNextState s a v = Metadata (extendContext (vars s) v) (nextState (underlyingState s) a v)
+
+computeArbitraryAction ::
+  StateModel state =>
+  Annotated state ->
+  Gen (Any (Action state))
+computeArbitraryAction s = arbitraryAction (vars s) (underlyingState s)
+
+computeShrinkAction ::
+  (Typeable a, StateModel state) =>
+  Annotated state ->
+  Action state a ->
+  [Any (Action state)]
+computeShrinkAction s = shrinkAction (vars s) (underlyingState s)
 
 prune :: StateModel state => [Step state] -> [Step state]
-prune = loop initialState
- where
-  loop _s [] = []
-  loop s ((var := act) : as)
-    | precondition s act =
-        (var := act) : loop (nextState s act var) as
-    | otherwise =
-        loop s as
+prune = loop initialAnnotatedState
+  where
+    loop _s [] = []
+    loop s ((var := act) : as)
+      | computePrecondition s act =
+          (var := act) : loop (computeNextState s act var) as
+      | otherwise =
+          loop s as
 
-withStates :: StateModel state => [Step state] -> [(Step state, state)]
-withStates = loop initialState
- where
-  loop _s [] = []
-  loop s ((var := act) : as) =
-    (var := act, s) : loop (nextState s act var) as
+withStates :: StateModel state => [Step state] -> [(Step state, Annotated state)]
+withStates = loop initialAnnotatedState
+  where
+    loop _s [] = []
+    loop s ((var := act) : as) =
+      (var := act, s) : loop (computeNextState s act var) as
 
-stateAfter :: StateModel state => Actions state -> state
-stateAfter (Actions actions) = loop initialState actions
- where
-  loop s [] = s
-  loop s ((var := act) : as) = loop (nextState s act var) as
+stateAfter :: StateModel state => Actions state -> Annotated state
+stateAfter (Actions actions) = loop initialAnnotatedState actions
+  where
+    loop s [] = s
+    loop s ((var := act) : as) = loop (computeNextState s act var) as
 
 runActions ::
   forall state m.
   (StateModel state, RunModel state m) =>
   Actions state ->
-  PropertyM m (state, Env m)
-runActions = runActionsInState @_ @m initialState
-
-runActionsInState ::
-  forall state m.
-  (StateModel state, RunModel state m) =>
-  state ->
-  Actions state ->
-  PropertyM m (state, Env m)
-runActionsInState st (Actions_ rejected (Smart _ actions)) = loop st [] actions
- where
-  loop _s env [] = do
-    unless (null rejected) $
-      monitor (tabulate "Actions rejected by precondition" rejected)
-    return (_s, reverse env)
-  loop s env ((Var n := act) : as) = do
-    pre $ precondition s act
-    ret <- run (perform s act (lookUpVar env))
-    let name = actionName act
-    monitor (tabulate "Actions" [name])
-    let var = Var n
-        s' = nextState s act var
-        env' = (var :== ret) : env
-    monitor (monitoring @state @m (s, s') act (lookUpVar env') ret)
-    b <- run $ postcondition (s, s') act (lookUpVar env) ret
-    assert b
-    loop s' env' as
+  PropertyM m (Annotated state, Env m)
+runActions (Actions_ rejected (Smart _ actions)) = loop initialAnnotatedState [] actions
+  where
+    loop :: Annotated state -> Env m -> [Step state] -> PropertyM m (Annotated state, Env m)
+    loop _s env [] = do
+      unless (null rejected) $
+        monitor (tabulate "Actions rejected by precondition" rejected)
+      return (_s, reverse env)
+    loop s env ((v := act) : as) = do
+      pre $ computePrecondition s act
+      ret <- run (perform (underlyingState s) act (lookUpVar env))
+      let name = actionName act
+      monitor (tabulate "Actions" [name])
+      let var = unsafeCoerceVar v
+          s' = computeNextState s act var
+          env' = (var :== ret) : env
+      monitor (monitoring @state @m (underlyingState s, underlyingState s') act (lookUpVar env') ret)
+      b <- run $ postcondition @state @m (underlyingState s, underlyingState s') act (lookUpVar env) ret
+      assert b
+      loop s' env' as

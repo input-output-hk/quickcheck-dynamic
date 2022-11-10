@@ -13,8 +13,8 @@ type Registry m = TVar m [(String, ThreadId m)]
 
 type MonadRegistry m = (MonadSTM m, MonadFork m, MonadThrow m, MonadFail m, MonadFail (STM m))
 
-alive :: MonadRegistry m => ThreadId m -> m Bool
-alive tid = do
+isAlive :: MonadRegistry m => ThreadId m -> m Bool
+isAlive tid = do
   s <- threadStatus tid
   return $ s /= ThreadFinished && s /= ThreadDied
 
@@ -28,7 +28,7 @@ whereis registry name = do
 
 register :: MonadRegistry m => Registry m -> String -> ThreadId m -> m ()
 register registry name tid = do
-  ok <- alive tid
+  ok <- isAlive tid
   reg <- readRegistry registry
   if ok && name `notElem` map fst reg && tid `notElem` map snd reg
     then atomically $ do
@@ -41,9 +41,8 @@ register registry name tid = do
 unregister :: MonadRegistry m => Registry m -> String -> m ()
 unregister registry name = do
   reg <- readRegistry registry
-  if name `elem` map fst reg
-    then atomically $ modifyTVar registry $ filter ((/= name) . fst)
-    else fail "badarg"
+  when (name `elem` map fst reg) $ do
+    atomically $ modifyTVar registry $ filter ((/= name) . fst)
 
 readRegistry :: MonadRegistry m => Registry m -> m [(String, ThreadId m)]
 readRegistry registry = garbageCollect registry *> atomically (readTVar registry)
@@ -51,6 +50,6 @@ readRegistry registry = garbageCollect registry *> atomically (readTVar registry
 garbageCollect :: forall m. MonadRegistry m => Registry m -> m ()
 garbageCollect registry = do
   reg <- atomically $ readTVar @m registry
-  garbage <- filterM (fmap not . alive) (map snd reg)
+  garbage <- filterM (fmap not . isAlive) (map snd reg)
   atomically $ modifyTVar registry $ filter ((`notElem` garbage) . snd)
   return ()

@@ -42,11 +42,14 @@ common lang
     FlexibleInstances
     GADTs
     MultiParamTypeClasses
+    ViewPatterns
+    DeriveGeneric
 
   ghc-options:
     -Wall -Wnoncanonical-monad-instances -Wunused-packages
     -Wincomplete-uni-patterns -Wincomplete-record-updates
     -Wredundant-constraints -Widentities
+    -Wno-unused-do-bind
 
 library
     import: lang
@@ -58,9 +61,10 @@ library
         io-classes,
         io-sim,
         stm,
+        QuickCheck -any,
         quickcheck-dynamic
 
-test-suite quickcheck-dynamic-iosim
+test-suite quickcheck-dynamic-iosim-test
     import: lang
     type: exitcode-stdio-1.0
     main-is: Spec.hs
@@ -72,6 +76,7 @@ test-suite quickcheck-dynamic-iosim
     build-depends:
         QuickCheck -any,
         base >=4.7 && <5,
+        containers -any,
         quickcheck-dynamic -any,
         quickcheck-dynamic-iosim -any,
         tasty -any,
