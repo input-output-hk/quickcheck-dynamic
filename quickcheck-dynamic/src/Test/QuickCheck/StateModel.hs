@@ -22,6 +22,7 @@ module Test.QuickCheck.StateModel (
   pattern (:=?),
   Env,
   Realized,
+  Generic,
   stateAfter,
   runActions,
   lookUpVar,
@@ -34,6 +35,7 @@ module Test.QuickCheck.StateModel (
 ) where
 
 import Control.Monad
+import Control.Monad.Identity
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Writer (WriterT)
@@ -135,6 +137,7 @@ type instance Realized IO a = a
 type instance Realized (StateT s m) a = Realized m a
 type instance Realized (ReaderT r m) a = Realized m a
 type instance Realized (WriterT w m) a = Realized m a
+type instance Realized Identity a = a
 
 class Monad m => RunModel state m where
   -- | Perform an `Action` in some `state` in the `Monad` `m`.  This
