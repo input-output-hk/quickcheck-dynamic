@@ -123,29 +123,29 @@ forAllQ q = DL $ \s k -> DL.forAllQ q $ \x -> k x s
 runDL :: Annotated s -> DL s () -> DL.DynFormula s
 runDL s dl = unDL dl s $ \_ _ -> DL.passTest
 
-forAllUniqueDL
-  :: (DL.DynLogicModel s, Testable a)
-  => Int
-  -> Annotated s
-  -> DL s ()
-  -> (Actions s -> a)
-  -> Property
+forAllUniqueDL ::
+  (DL.DynLogicModel s, Testable a) =>
+  Int ->
+  Annotated s ->
+  DL s () ->
+  (Actions s -> a) ->
+  Property
 forAllUniqueDL nextVar initState d = DL.forAllUniqueScripts nextVar initState (runDL initState d)
 
-forAllDL
-  :: (DL.DynLogicModel s, Testable a)
-  => DL s ()
-  -> (Actions s -> a)
-  -> Property
+forAllDL ::
+  (DL.DynLogicModel s, Testable a) =>
+  DL s () ->
+  (Actions s -> a) ->
+  Property
 forAllDL d = DL.forAllScripts (runDL initialAnnotatedState d)
 
-forAllMappedDL
-  :: (DL.DynLogicModel s, Testable a)
-  => (rep -> DL.DynLogicTest s)
-  -> (DL.DynLogicTest s -> rep)
-  -> (Actions s -> srep)
-  -> DL s ()
-  -> (srep -> a)
-  -> Property
+forAllMappedDL ::
+  (DL.DynLogicModel s, Testable a) =>
+  (rep -> DL.DynLogicTest s) ->
+  (DL.DynLogicTest s -> rep) ->
+  (Actions s -> srep) ->
+  DL s () ->
+  (srep -> a) ->
+  Property
 forAllMappedDL to from fromScript d prop =
   DL.forAllMappedScripts to from (runDL initialAnnotatedState d) (prop . fromScript)
