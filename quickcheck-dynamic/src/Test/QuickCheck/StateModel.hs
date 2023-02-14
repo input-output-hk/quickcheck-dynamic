@@ -245,13 +245,7 @@ instance Semigroup (Actions state) where
 instance Eq (Actions state) where
   Actions as == Actions as' = as == as'
 
-instance
-  ( forall a. Show (Action state a)
-  , forall a. HasVariables (Action state a)
-  , StateModel state
-  ) =>
-  Show (Actions state)
-  where
+instance StateModel state => Show (Actions state) where
   show (Actions as) =
     let as' = WithUsedVars (usedVariables (Actions as)) <$> as
      in intercalate "\n" $ zipWith (++) ("do " : repeat "   ") (map show as' ++ ["pure ()"])
@@ -266,7 +260,7 @@ usedVariables (Actions as) = go initialAnnotatedState as
         <> allVariables (underlyingState aState)
         <> go (computeNextState aState act var) steps
 
-instance (StateModel state) => Arbitrary (Actions state) where
+instance StateModel state => Arbitrary (Actions state) where
   arbitrary = do
     (as, rejected) <- arbActions initialAnnotatedState 1
     return $ Actions_ rejected (Smart 0 as)

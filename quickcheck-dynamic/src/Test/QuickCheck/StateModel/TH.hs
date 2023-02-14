@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 module Test.QuickCheck.StateModel.TH (makeActionInstances) where
 
 import Control.Monad
@@ -20,8 +21,11 @@ makeHasVarsInstance typ cs = do
       mkClause _ = error "The impossible happened"
       mkClauseWith cn n = do
         names <- sequence $ replicate n $ qNewName "a"
-        -- TODO: when we migrate to ghc 9.2 we need to put in an extra empty list here
+#if __GLASGOW_HASKELL__ >= 902
+        pure $ Clause [ConP cn [] (map VarP names)] (buildBody names) []
+#else
         pure $ Clause [ConP cn (map VarP names)] (buildBody names) []
+#endif
       buildBody [] = NormalB $ VarE memptyName
       buildBody as =
         NormalB $
