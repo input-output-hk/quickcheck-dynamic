@@ -6,6 +6,7 @@ module Test.QuickCheck.StateModel.Variables (
   Var,
   Any (..),
   HasVariables (..),
+  HasNoVariables,
   VarContext,
   mkVar,
   ctxAtType,
@@ -56,14 +57,14 @@ instance (HasVariables k, HasVariables v) => HasVariables (Map k v) where
 instance HasVariables a => HasVariables (Set a) where
   getAllVariables = getAllVariables . Set.toList
 
-newtype BaseType a = BaseType a
+newtype HasNoVariables a = HasNoVariables a
 
-instance HasVariables (BaseType a) where
+instance HasVariables (HasNoVariables a) where
   getAllVariables _ = mempty
 
-deriving via BaseType Integer instance HasVariables Integer
-deriving via BaseType Int instance HasVariables Int
-deriving via BaseType Char instance HasVariables Char
+deriving via HasNoVariables Integer instance HasVariables Integer
+deriving via HasNoVariables Int instance HasVariables Int
+deriving via HasNoVariables Char instance HasVariables Char
 
 data Any f where
   Some :: (Typeable a, Eq (f a)) => f a -> Any f

@@ -9,7 +9,6 @@
 -- to be asserted by QuickCheck.
 module Test.QuickCheck.StateModel (
   module Test.QuickCheck.StateModel.Variables,
-  module Test.QuickCheck.StateModel.TH,
   StateModel (..),
   RunModel (..),
   WithUsedVars (..),
@@ -47,7 +46,6 @@ import GHC.Generics
 import Test.QuickCheck as QC
 import Test.QuickCheck.DynamicLogic.SmartShrinking
 import Test.QuickCheck.Monadic
-import Test.QuickCheck.StateModel.TH
 import Test.QuickCheck.StateModel.Variables
 
 -- | The typeclass users implement to define a model against which to validate some implementation.
