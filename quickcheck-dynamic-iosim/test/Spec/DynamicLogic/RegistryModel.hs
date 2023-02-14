@@ -1,5 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
-
 module Spec.DynamicLogic.RegistryModel where
 
 import Control.Concurrent (ThreadId)
