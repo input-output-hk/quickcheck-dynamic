@@ -80,4 +80,3 @@ library
         random -any,
         mtl -any,
         containers -any,
-        template-haskell >= 2.16
