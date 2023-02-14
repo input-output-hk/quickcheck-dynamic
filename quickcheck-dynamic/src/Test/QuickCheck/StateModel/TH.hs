@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+
 module Test.QuickCheck.StateModel.TH (makeActionInstances) where
 
 import Control.Monad
@@ -10,8 +11,6 @@ makeHasVarsInstance :: TH.Type -> [Con] -> Q InstanceDec
 makeHasVarsInstance typ cs = do
   Just hasVarsName <- lookupTypeName "HasVariables"
   Just getAllVarsName <- lookupValueName "getAllVariables"
-  Just memptyName <- lookupValueName "mempty"
-  Just mappendName <- lookupValueName "mappend"
   let mkClause (NormalC cn args) = mkClauseWith cn (length args)
       mkClause (RecC cn args) = mkClauseWith cn (length args)
       mkClause (InfixC _ cn _) = mkClauseWith cn 2
@@ -20,20 +19,34 @@ makeHasVarsInstance typ cs = do
       mkClause (RecGadtC (cn : _) args _) = mkClauseWith cn (length args)
       mkClause _ = error "The impossible happened"
       mkClauseWith cn n = do
-        names <- sequence $ replicate n $ qNewName "a"
-#if __GLASGOW_HASKELL__ >= 902
-        pure $ Clause [ConP cn [] (map VarP names)] (buildBody names) []
-#else
-        pure $ Clause [ConP cn (map VarP names)] (buildBody names) []
-#endif
-      buildBody [] = NormalB $ VarE memptyName
-      buildBody as =
-        NormalB $
-          foldr1
-            (\e e' -> AppE (AppE (VarE mappendName) e) e')
-            (map (AppE (VarE getAllVarsName) . VarE) as)
+        names <- replicateM n $ qNewName "a"
+        buildBody cn names
   cls <- mapM mkClause cs
   pure $ InstanceD Nothing [] (AppT (ConT hasVarsName) typ) [FunD getAllVarsName cls]
+
+buildBody :: Name -> [Name] -> Q Clause
+#if __GLASGOW_HASKELL__ >= 902
+buildBody cn names = do
+  body <- buildBody' names
+  pure $ Clause [ConP cn [] (map VarP names)] body []
+#else
+buildBody cn names = do
+  body <- buildBody' names
+  pure $ Clause [ConP cn (map VarP names)] body []
+#endif
+
+buildBody' :: [Name] -> Q Body
+buildBody' [] = do
+  Just memptyName <- lookupValueName "mempty"
+  pure $ NormalB $ VarE memptyName
+buildBody' as = do
+  Just mappendName <- lookupValueName "mappend"
+  Just getAllVarsName <- lookupValueName "getAllVariables"
+  pure $
+    NormalB $
+      foldr1
+        (AppE . AppE (VarE mappendName))
+        (map (AppE (VarE getAllVarsName) . VarE) as)
 
 makeActionInstances :: Name -> Q [Dec]
 makeActionInstances stateTypeName = do

@@ -195,8 +195,8 @@ instance (Quantifiable a, Quantifiable b, Quantifiable c, Quantifiable d) => Qua
       from (a, b, c, d) = (a, (b, (c, d)))
 
 instance
-  (Quantifiable a, Quantifiable b, Quantifiable c, Quantifiable d, Quantifiable e) =>
-  Quantifiable (a, b, c, d, e)
+  (Quantifiable a, Quantifiable b, Quantifiable c, Quantifiable d, Quantifiable e)
+  => Quantifiable (a, b, c, d, e)
   where
   type
     Quantifies (a, b, c, d, e) =

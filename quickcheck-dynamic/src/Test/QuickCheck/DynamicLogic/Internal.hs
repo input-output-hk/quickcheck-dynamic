@@ -66,11 +66,11 @@ afterAny f = DynFormula $ \n -> AfterAny $ \s -> unDynFormula (f s) n
 
 -- | Given `f` must be `True` after /some/ action.
 -- `f` is passed the state resulting from executing the `Action`.
-after ::
-  (Typeable a, Eq (Action s a), Show (Action s a)) =>
-  Action s a ->
-  (Var a -> Annotated s -> DynFormula s) ->
-  DynFormula s
+after
+  :: (Typeable a, Eq (Action s a), Show (Action s a))
+  => Action s a
+  -> (Var a -> Annotated s -> DynFormula s)
+  -> DynFormula s
 after act f = DynFormula $ \n -> After act $ \x s -> unDynFormula (f x s) n
 
 -- | Disjunction for DL formulae.
@@ -88,11 +88,11 @@ DynFormula f ||| DynFormula g = DynFormula $ \n -> Alt Angelic (f n) (g n)
 -- for those values. `Quantifiable` values are thus values that can be generated
 -- and checked and the `Test.QuickCheck.DynamicLogic.Quantify` module defines
 -- basic combinators to build those from building blocks.
-forAllQ ::
-  Quantifiable q =>
-  q ->
-  (Quantifies q -> DynFormula s) ->
-  DynFormula s
+forAllQ
+  :: Quantifiable q
+  => q
+  -> (Quantifies q -> DynFormula s)
+  -> DynFormula s
 forAllQ q f
   | isEmptyQ q' = ignore
   | otherwise = DynFormula $ \n -> ForAll q' $ ($ n) . unDynFormula . f
@@ -315,21 +315,21 @@ class StateModel s => DynLogicModel s where
 -- Turns a given a `DynFormula` paired with an interpreter function to produce some result from an
 
 --- `Actions` sequence into a proper `Property` than can then be run by QuickCheck.
-forAllScripts ::
-  (DynLogicModel s, Testable a) =>
-  DynFormula s ->
-  (Actions s -> a) ->
-  Property
+forAllScripts
+  :: (DynLogicModel s, Testable a)
+  => DynFormula s
+  -> (Actions s -> a)
+  -> Property
 forAllScripts = forAllMappedScripts id id
 
 -- | `Property` function suitable for formulae without choice.
-forAllUniqueScripts ::
-  (DynLogicModel s, Testable a) =>
-  Int ->
-  Annotated s ->
-  DynFormula s ->
-  (Actions s -> a) ->
-  Property
+forAllUniqueScripts
+  :: (DynLogicModel s, Testable a)
+  => Int
+  -> Annotated s
+  -> DynFormula s
+  -> (Actions s -> a)
+  -> Property
 forAllUniqueScripts n s f k =
   QC.withSize $ \sz ->
     let d = unDynFormula f sz
@@ -338,13 +338,13 @@ forAllUniqueScripts n s f k =
           Just test -> validDLTest d test . applyMonitoring d test . property $ k (scriptFromDL test)
 
 -- | Creates a `Property` from `DynFormula` with some specialised isomorphism for shrinking purpose.
-forAllMappedScripts ::
-  (DynLogicModel s, Testable a) =>
-  (rep -> DynLogicTest s) ->
-  (DynLogicTest s -> rep) ->
-  DynFormula s ->
-  (Actions s -> a) ->
-  Property
+forAllMappedScripts
+  :: (DynLogicModel s, Testable a)
+  => (rep -> DynLogicTest s)
+  -> (DynLogicTest s -> rep)
+  -> DynFormula s
+  -> (Actions s -> a)
+  -> Property
 forAllMappedScripts to from f k =
   QC.withSize $ \n ->
     let d = unDynFormula f n
@@ -383,14 +383,14 @@ consDLTestW w = onDLTestSeq (addW w)
     addW Do{} ss = ss
     addW (Witness a w') ss = TestSeqWitness a (addW w' ss)
 
-generate ::
-  (Monad m, DynLogicModel s) =>
-  (Annotated s -> Int -> DynLogic s -> m (NextStep s)) ->
-  DynLogic s ->
-  Int ->
-  Annotated s ->
-  Int ->
-  m (DynLogicTest s)
+generate
+  :: (Monad m, DynLogicModel s)
+  => (Annotated s -> Int -> DynLogic s -> m (NextStep s))
+  -> DynLogic s
+  -> Int
+  -> Annotated s
+  -> Int
+  -> m (DynLogicTest s)
 generate chooseNextStepFun d n s size =
   if n > sizeLimit size
     then return $ Looping TestSeqStop

@@ -197,11 +197,11 @@ lookUpVar env v = case lookUpVarMaybe env v of
 data WithUsedVars a = WithUsedVars VarContext a
 
 data Step state where
-  (:=) ::
-    (Typeable a, Eq (Action state a), Show (Action state a)) =>
-    Var a ->
-    Action state a ->
-    Step state
+  (:=)
+    :: (Typeable a, Eq (Action state a), Show (Action state a))
+    => Var a
+    -> Action state a
+    -> Step state
 
 infix 5 :=
 
@@ -318,25 +318,25 @@ computePrecondition s a =
   all (\(Some v) -> v `isWellTyped` vars s) (getAllVariables a)
     && precondition (underlyingState s) a
 
-computeNextState ::
-  (StateModel state, Typeable a) =>
-  Annotated state ->
-  Action state a ->
-  Var a ->
-  Annotated state
+computeNextState
+  :: (StateModel state, Typeable a)
+  => Annotated state
+  -> Action state a
+  -> Var a
+  -> Annotated state
 computeNextState s a v = Metadata (extendContext (vars s) v) (nextState (underlyingState s) a v)
 
-computeArbitraryAction ::
-  StateModel state =>
-  Annotated state ->
-  Gen (Any (Action state))
+computeArbitraryAction
+  :: StateModel state
+  => Annotated state
+  -> Gen (Any (Action state))
 computeArbitraryAction s = arbitraryAction (vars s) (underlyingState s)
 
-computeShrinkAction ::
-  (Typeable a, StateModel state) =>
-  Annotated state ->
-  Action state a ->
-  [Any (Action state)]
+computeShrinkAction
+  :: (Typeable a, StateModel state)
+  => Annotated state
+  -> Action state a
+  -> [Any (Action state)]
 computeShrinkAction s = shrinkAction (vars s) (underlyingState s)
 
 prune :: StateModel state => [Step state] -> [Step state]
@@ -362,11 +362,11 @@ stateAfter (Actions actions) = loop initialAnnotatedState actions
     loop s [] = s
     loop s ((var := act) : as) = loop (computeNextState s act var) as
 
-runActions ::
-  forall state m.
-  (StateModel state, RunModel state m) =>
-  Actions state ->
-  PropertyM m (Annotated state, Env m)
+runActions
+  :: forall state m
+   . (StateModel state, RunModel state m)
+  => Actions state
+  -> PropertyM m (Annotated state, Env m)
 runActions (Actions_ rejected (Smart _ actions)) = loop initialAnnotatedState [] actions
   where
     loop :: Annotated state -> Env m -> [Step state] -> PropertyM m (Annotated state, Env m)

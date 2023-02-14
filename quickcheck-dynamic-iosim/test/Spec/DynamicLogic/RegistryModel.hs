@@ -42,7 +42,7 @@ instance HasVariables (Action RegState a) where
   getAllVariables (Register _ v) = getAllVariables v
   getAllVariables (KillThread v) = getAllVariables v
   getAllVariables (Successful a) = getAllVariables a
-  getAllVariables _              = mempty
+  getAllVariables _ = mempty
 
 instance StateModel RegState where
   data Action RegState a where
@@ -307,5 +307,3 @@ tests =
     , testProperty "canRegister" $ propDL canRegister
     , testProperty "canRegisterNoUnregister" $ expectFailure $ propDL canRegisterNoUnregister
     ]
-
-
