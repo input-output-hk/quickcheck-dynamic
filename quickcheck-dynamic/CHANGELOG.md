@@ -9,6 +9,18 @@ changes.
 
 ## UNRELEASED
 
+## 3.0.0 - 2023-02-14
+
+* **BREAKING**: Add `HasVariables` class to keep track of symbolic variables and automatically insert precondition
+  checks for well-scopedness of variables.
+* **BREAKING**: Remove some unnecessary and unusead features in dynamic logic, including re-running tests from a
+  counterexample directly.
+* Improved printing of counterexamples in DL - they are now printed as code that can be copied more-or-less verbatim to
+  create a runnable counterexample in code.
+* Made the variable context explicit to avoid having to keep track of symbolic variables in the model
+  * This introduces the `ctxAtType` and `arbitraryVar` functions to use in action generators (c.f. the
+  `RegistryModel.hs` example).
+
 ## 2.0.0 - 2022-10-11
 
 * **BREAKING**: Add `Realized` type family to distinguish between the model- and real type of an action
