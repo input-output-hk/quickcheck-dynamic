@@ -36,6 +36,13 @@ data RegState = RegState
   deriving (Show, Generic)
 
 deriving instance Show (Action RegState a)
+deriving instance Eq (Action RegState a)
+
+instance HasVariables (Action RegState a) where
+  getAllVariables (Register _ v) = getAllVariables v
+  getAllVariables (KillThread v) = getAllVariables v
+  getAllVariables (Successful a) = getAllVariables a
+  getAllVariables _              = mempty
 
 instance StateModel RegState where
   data Action RegState a where
@@ -157,6 +164,20 @@ positive s (Unregister name) =
   name `Map.notMember` regs s
 positive _s _ = True
 
+data ShowDict s a where
+  ShowDict :: Show (Realized (RegM s) a) => ShowDict s a
+
+showDictAction :: forall s a. Action RegState a -> ShowDict s a
+showDictAction Spawn{} = ShowDict
+showDictAction WhereIs{} = ShowDict
+showDictAction Register{} = ShowDict
+showDictAction Unregister{} = ShowDict
+showDictAction KillThread{} = ShowDict
+showDictAction (Successful a) = showDictAction a
+
+tabu :: String -> [String] -> Property -> Property
+tabu tab xs = tabulate tab xs . foldr (.) id [classify True (tab ++ ": " ++ x) | x <- xs]
+
 instance DynLogicModel RegState where
   restricted (Successful _) = True
   restricted _ = False
@@ -183,9 +204,6 @@ shrinkName name = [n | n <- allNames, n < name]
 
 allNames :: [String]
 allNames = ["a", "b", "c", "d", "e"]
-
-tabu :: String -> [String] -> Property -> Property
-tabu tab xs = tabulate tab xs . foldr (.) id [classify True (tab ++ ": " ++ x) | x <- xs]
 
 prop_Registry :: Actions RegState -> Property
 prop_Registry s =
@@ -290,15 +308,4 @@ tests =
     , testProperty "canRegisterNoUnregister" $ expectFailure $ propDL canRegisterNoUnregister
     ]
 
-data ShowDict s a where
-  ShowDict :: Show (Realized (RegM s) a) => ShowDict s a
 
-showDictAction :: forall s a. Action RegState a -> ShowDict s a
-showDictAction Spawn{} = ShowDict
-showDictAction WhereIs{} = ShowDict
-showDictAction Register{} = ShowDict
-showDictAction Unregister{} = ShowDict
-showDictAction KillThread{} = ShowDict
-showDictAction (Successful a) = showDictAction a
-
-makeActionInstances ''RegState
