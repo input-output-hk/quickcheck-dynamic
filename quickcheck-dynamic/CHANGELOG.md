@@ -9,6 +9,10 @@ changes.
 
 ## UNRELEASED
 
+## 3.0.1 - 2023-02-15
+
+* Remove template haskell dependency
+
 ## 3.0.0 - 2023-02-14
 
 * **BREAKING**: Add `HasVariables` class to keep track of symbolic variables and automatically insert precondition
