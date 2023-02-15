@@ -6,7 +6,7 @@ module Test.QuickCheck.StateModel.Variables (
   Var,
   Any (..),
   HasVariables (..),
-  HasNoVariables,
+  HasNoVariables (..),
   VarContext,
   mkVar,
   ctxAtType,
