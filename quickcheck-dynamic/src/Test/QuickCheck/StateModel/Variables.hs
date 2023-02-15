@@ -26,6 +26,7 @@ import Data.Ord
 import Data.Set (Set)
 import Data.Set qualified as Set
 import GHC.Generics
+import GHC.Word
 import Test.QuickCheck as QC
 
 -- | A symbolic variable for a value of type `a`
@@ -65,6 +66,10 @@ instance HasVariables (HasNoVariables a) where
 deriving via HasNoVariables Integer instance HasVariables Integer
 deriving via HasNoVariables Int instance HasVariables Int
 deriving via HasNoVariables Char instance HasVariables Char
+deriving via HasNoVariables Word8 instance HasVariables Word8
+deriving via HasNoVariables Word16 instance HasVariables Word16
+deriving via HasNoVariables Word32 instance HasVariables Word32
+deriving via HasNoVariables Word64 instance HasVariables Word64
 
 data Any f where
   Some :: (Typeable a, Eq (f a)) => f a -> Any f
