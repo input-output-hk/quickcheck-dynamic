@@ -325,14 +325,14 @@ forAllScripts = forAllMappedScripts id id
 -- | `Property` function suitable for formulae without choice.
 forAllUniqueScripts ::
   (DynLogicModel s, Testable a) =>
-  Int ->
   Annotated s ->
   DynFormula s ->
   (Actions s -> a) ->
   Property
-forAllUniqueScripts n s f k =
+forAllUniqueScripts s f k =
   QC.withSize $ \sz ->
     let d = unDynFormula f sz
+        n = unsafeNextVarIndex $ vars s
      in case generate chooseUniqueNextStep d n s 500 of
           Nothing -> counterexample "Generating Non-unique script in forAllUniqueScripts" False
           Just test -> validDLTest d test . applyMonitoring d test . property $ k (scriptFromDL test)

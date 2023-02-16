@@ -16,6 +16,7 @@ module Test.QuickCheck.StateModel.Variables (
   isWellTyped,
   allVariables,
   unsafeCoerceVar,
+  unsafeNextVarIndex
 ) where
 
 import Data.Data
@@ -124,6 +125,9 @@ shrinkVar ctx v = filter (< v) $ ctxAtType ctx
 
 unsafeCoerceVar :: Var a -> Var b
 unsafeCoerceVar (Var i) = Var i
+
+unsafeNextVarIndex :: VarContext -> Int
+unsafeNextVarIndex (VarCtx vs) = 1 + maximum (0 : [ i | Some (Var i) <- Set.toList vs ])
 
 instance {-# OVERLAPPABLE #-} (Generic a, GenericHasVariables (Rep a)) => HasVariables a
 

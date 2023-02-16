@@ -125,12 +125,11 @@ runDL s dl = unDL dl s $ \_ _ -> DL.passTest
 
 forAllUniqueDL ::
   (DL.DynLogicModel s, Testable a) =>
-  Int ->
   Annotated s ->
   DL s () ->
   (Actions s -> a) ->
   Property
-forAllUniqueDL nextVar initState d = DL.forAllUniqueScripts nextVar initState (runDL initState d)
+forAllUniqueDL initState d = DL.forAllUniqueScripts initState (runDL initState d)
 
 forAllDL ::
   (DL.DynLogicModel s, Testable a) =>
