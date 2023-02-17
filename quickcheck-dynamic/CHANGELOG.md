@@ -9,11 +9,12 @@ changes.
 
 ## UNRELEASED
 
+## 3.0.2 - 2023-02-17
+
 * Added instances of `HasVariables` for Word types
 * Exported definition of `HasNoVariables` to make it useable
   with deriving via in downstream packages (whoops!)
 * Fixed impossible to use `nextVar` arguments to `forAllUniqueDL`
-
 
 ## 3.0.1 - 2023-02-15
 
