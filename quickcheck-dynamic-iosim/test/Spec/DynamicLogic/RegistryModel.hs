@@ -129,29 +129,26 @@ instance (m ~ RegM s) => RunModel RegState m where
   perform s (Successful act) env = do
     perform s act env
 
-  postcondition (s, _) (WhereIs name) env mtid =
+  postcondition (s, _) (WhereIs name) env mtid = do
+    monitorPost $ tabu "WhereIs" [case mtid of Nothing -> "fails"; Just _ -> "succeeds"]
     pure $ (env <$> Map.lookup name (regs s)) == mtid
   postcondition _s Spawn _ _ = pure True
-  postcondition (s, _) (Register name step) _ res =
+  postcondition (s, _) act@(Register name step) _ res = do
+    monitorPost $ tabu "Register"
+            [ case res of
+                Left _ -> "fails " ++ why s act
+                Right () -> "succeeds"
+            ]
     pure $ positive s (Register name step) == isRight res
-  postcondition _s (Unregister _name) _ _ = pure True
+  postcondition _s (Unregister _name) _ res = do
+    monitorPost $ tabu "Unregister" [case res of Left _ -> "fails"; Right () -> "succeeds"]
+    pure True
   postcondition _s (KillThread _) _ _ = pure True
   postcondition ss@(s, _) (Successful act) env res = (positive s act &&) <$> postcondition ss act env res
 
   monitoring (_s, s') act@(showDictAction @s -> ShowDict) _ res =
     counterexample (show res ++ " <- " ++ show act ++ "\n  -- State: " ++ show s')
       . tabulate "Registry size" [show $ Map.size (regs s')]
-      . case act of
-        Register _ _ ->
-          tabu
-            "Register"
-            [ case res of
-                Left _ -> "fails " ++ why _s act
-                Right () -> "succeeds"
-            ]
-        Unregister _ -> tabu "Unregister" [case res of Left _ -> "fails"; Right () -> "succeeds"]
-        WhereIs _ -> tabu "WhereIs" [case res of Nothing -> "fails"; Just _ -> "succeeds"]
-        _ -> id
 
 positive :: RegState -> Action RegState a -> Bool
 positive s (Register name tid) =
