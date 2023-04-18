@@ -18,11 +18,13 @@ module Test.QuickCheck.DynamicLogic.Quantify (
   whereQ,
   chooseQ,
   withGenQ,
+  hasNoVariablesQ,
   validQuantification,
   Quantifiable (..),
 ) where
 
 import Control.Monad
+import Data.Coerce
 import Data.Maybe
 import Data.Typeable
 import System.Random
@@ -144,6 +146,14 @@ pairQ q q' =
     (liftM2 (,) <$> genQ q <*> genQ q')
     (\(a, a') -> isaQ q a && isaQ q' a')
     (\(a, a') -> map (,a') (shrQ q a) ++ map (a,) (shrQ q' a'))
+
+-- | Wrap a Quantification in `HasNoVariables` to indicate that you know
+-- what you're doing and there are no symbolic variables in the thing you
+-- are quantifying over. WARNING: use this function carefully as there is
+-- no guarantee that you won't get bitten by very strange failures if you
+-- were in fact not honest about the lack of variables.
+hasNoVariablesQ :: Quantification a -> Quantification (HasNoVariables a)
+hasNoVariablesQ = coerce
 
 type QuantifyConstraints a = (Eq a, Show a, Typeable a, HasVariables a)
 

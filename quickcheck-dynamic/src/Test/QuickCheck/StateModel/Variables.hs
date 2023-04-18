@@ -16,7 +16,7 @@ module Test.QuickCheck.StateModel.Variables (
   isWellTyped,
   allVariables,
   unsafeCoerceVar,
-  unsafeNextVarIndex
+  unsafeNextVarIndex,
 ) where
 
 import Data.Data
@@ -60,6 +60,9 @@ instance HasVariables a => HasVariables (Set a) where
   getAllVariables = getAllVariables . Set.toList
 
 newtype HasNoVariables a = HasNoVariables a
+
+deriving via a instance Show a => Show (HasNoVariables a)
+deriving via a instance Eq a => Eq (HasNoVariables a)
 
 instance HasVariables (HasNoVariables a) where
   getAllVariables _ = mempty
@@ -127,7 +130,7 @@ unsafeCoerceVar :: Var a -> Var b
 unsafeCoerceVar (Var i) = Var i
 
 unsafeNextVarIndex :: VarContext -> Int
-unsafeNextVarIndex (VarCtx vs) = 1 + maximum (0 : [ i | Some (Var i) <- Set.toList vs ])
+unsafeNextVarIndex (VarCtx vs) = 1 + maximum (0 : [i | Some (Var i) <- Set.toList vs])
 
 instance {-# OVERLAPPABLE #-} (Generic a, GenericHasVariables (Rep a)) => HasVariables a
 

@@ -22,6 +22,7 @@ module Test.QuickCheck.DynamicLogic (
   assertModel,
   monitorDL,
   forAllQ,
+  forAllNonVariableQ,
   forAllDL,
   forAllMappedDL,
   forAllUniqueDL,
@@ -119,6 +120,11 @@ monitorDL f = DL $ \s k -> DL.monitorDL f (k () s)
 --   Generated values will only shrink to smaller values that could also have been generated.
 forAllQ :: Quantifiable q => q -> DL s (Quantifies q)
 forAllQ q = DL $ \s k -> DL.forAllQ q $ \x -> k x s
+
+-- | Generate a random value using the given `Quantification` (or list/tuple of quantifications).
+--   Generated values will only shrink to smaller values that could also have been generated.
+forAllNonVariableQ :: QuantifyConstraints (HasNoVariables a) => Quantification a -> DL s a
+forAllNonVariableQ q = DL $ \s k -> DL.forAllQ (hasNoVariablesQ q) $ \(HasNoVariables x) -> k x s
 
 runDL :: Annotated s -> DL s () -> DL.DynFormula s
 runDL s dl = unDL dl s $ \_ _ -> DL.passTest
