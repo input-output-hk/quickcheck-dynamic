@@ -54,6 +54,7 @@ common lang
     TypeOperators
     DerivingVia
     DeriveGeneric
+    GeneralizedNewtypeDeriving
 
   ghc-options:
     -Wall -Wnoncanonical-monad-instances -Wunused-packages

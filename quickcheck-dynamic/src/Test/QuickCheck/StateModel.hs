@@ -11,6 +11,7 @@ module Test.QuickCheck.StateModel (
   module Test.QuickCheck.StateModel.Variables,
   StateModel (..),
   RunModel (..),
+  PostconditionM (..),
   WithUsedVars (..),
   Annotated (..),
   Step (..),
@@ -22,6 +23,7 @@ module Test.QuickCheck.StateModel (
   Env,
   Realized,
   Generic,
+  monitorPost,
   stateAfter,
   runActions,
   lookUpVar,
@@ -37,7 +39,7 @@ import Control.Monad
 import Control.Monad.Identity
 import Control.Monad.Reader
 import Control.Monad.State
-import Control.Monad.Writer (WriterT)
+import Control.Monad.Writer (Endo (..), WriterT, runWriterT, tell)
 import Data.Data
 import Data.Kind
 import Data.List
@@ -137,6 +139,12 @@ type instance Realized (ReaderT r m) a = Realized m a
 type instance Realized (WriterT w m) a = Realized m a
 type instance Realized Identity a = a
 
+newtype PostconditionM m a = PostconditionM {runPost :: WriterT (Endo Property) m a}
+  deriving (Functor, Applicative, Monad, MonadTrans)
+
+monitorPost :: Monad m => (Property -> Property) -> PostconditionM m ()
+monitorPost m = PostconditionM $ tell (Endo m)
+
 class Monad m => RunModel state m where
   -- | Perform an `Action` in some `state` in the `Monad` `m`.  This
   -- is the function that's used to exercise the actual stateful
@@ -153,10 +161,10 @@ class Monad m => RunModel state m where
   -- | Postcondition on the `a` value produced at some step.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
   -- to check the implementation produces expected values.
-  postcondition :: forall a. (state, state) -> Action state a -> LookUp m -> Realized m a -> m Bool
+  postcondition :: forall a. (state, state) -> Action state a -> LookUp m -> Realized m a -> PostconditionM m Bool
   postcondition _ _ _ _ = pure True
 
-  -- | Allows the user to attach information to the `Property` at each step of the process.
+  -- | Allows the user to attach additional information to the `Property` at each step of the process.
   -- This function is given the full transition that's been executed, including the start and ending
   -- `state`, the `Action`, the current environment to `Lookup` and the value produced by `perform`
   -- while executing this step.
@@ -381,6 +389,7 @@ runActions (Actions_ rejected (Smart _ actions)) = loop initialAnnotatedState []
           s' = computeNextState s act var
           env' = (var :== ret) : env
       monitor (monitoring @state @m (underlyingState s, underlyingState s') act (lookUpVar env') ret)
-      b <- run $ postcondition @state @m (underlyingState s, underlyingState s') act (lookUpVar env) ret
+      (b, Endo mon) <- run . runWriterT . runPost $ postcondition @state @m (underlyingState s, underlyingState s') act (lookUpVar env) ret
+      monitor mon
       assert b
       loop s' env' as
