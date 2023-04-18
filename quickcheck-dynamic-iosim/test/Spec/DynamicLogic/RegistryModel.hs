@@ -134,11 +134,13 @@ instance (m ~ RegM s) => RunModel RegState m where
     pure $ (env <$> Map.lookup name (regs s)) == mtid
   postcondition _s Spawn _ _ = pure True
   postcondition (s, _) act@(Register name step) _ res = do
-    monitorPost $ tabu "Register"
-            [ case res of
-                Left _ -> "fails " ++ why s act
-                Right () -> "succeeds"
-            ]
+    monitorPost $
+      tabu
+        "Register"
+        [ case res of
+            Left _ -> "fails " ++ why s act
+            Right () -> "succeeds"
+        ]
     pure $ positive s (Register name step) == isRight res
   postcondition _s (Unregister _name) _ res = do
     monitorPost $ tabu "Unregister" [case res of Left _ -> "fails"; Right () -> "succeeds"]
