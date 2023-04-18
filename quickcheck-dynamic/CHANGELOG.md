@@ -9,6 +9,11 @@ changes.
 
 ## UNRELEASED
 
+## 3.0.3 - 2023-04-18
+
+* Added `hasNoVariablesQ` and `forAllNonVariableDL` functions to help make
+  quantification require less boilerplate in `DL` properties.
+
 ## 3.0.2 - 2023-02-17
 
 * Added instances of `HasVariables` for Word types
