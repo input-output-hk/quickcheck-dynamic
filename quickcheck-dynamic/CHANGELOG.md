@@ -9,6 +9,8 @@ changes.
 
 ## UNRELEASED
 
+## 3.1.0 - 2023-04-10
+
 * **BREAKING**: Change the type of `postcondition` to allow you to
   express property monitoring (e.g. stats or counterexamples) in the
   postcondition itself - rather than duplicating code for counterexamples
