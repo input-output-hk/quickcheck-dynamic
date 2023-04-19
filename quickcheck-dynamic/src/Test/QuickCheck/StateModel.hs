@@ -24,6 +24,7 @@ module Test.QuickCheck.StateModel (
   Realized,
   Generic,
   monitorPost,
+  counterexamplePost,
   stateAfter,
   runActions,
   lookUpVar,
@@ -139,11 +140,18 @@ type instance Realized (ReaderT r m) a = Realized m a
 type instance Realized (WriterT w m) a = Realized m a
 type instance Realized Identity a = a
 
-newtype PostconditionM m a = PostconditionM {runPost :: WriterT (Endo Property) m a}
+newtype PostconditionM m a = PostconditionM {runPost :: WriterT (Endo Property, Endo Property) m a}
   deriving (Functor, Applicative, Monad, MonadTrans)
 
+-- | Apply the property transformation to the property after evaluating
+-- the postcondition. Useful for collecting statistics while avoiding
+-- duplication between `monitoring` and `postcondition`.
 monitorPost :: Monad m => (Property -> Property) -> PostconditionM m ()
-monitorPost m = PostconditionM $ tell (Endo m)
+monitorPost m = PostconditionM $ tell (Endo m, mempty)
+
+-- | Acts as `Test.QuickCheck.counterexample` if the postcondition fails.
+counterexamplePost :: Monad m => String -> PostconditionM m ()
+counterexamplePost c = PostconditionM $ tell (mempty, Endo $ counterexample c)
 
 class Monad m => RunModel state m where
   -- | Perform an `Action` in some `state` in the `Monad` `m`.  This
@@ -389,7 +397,8 @@ runActions (Actions_ rejected (Smart _ actions)) = loop initialAnnotatedState []
           s' = computeNextState s act var
           env' = (var :== ret) : env
       monitor (monitoring @state @m (underlyingState s, underlyingState s') act (lookUpVar env') ret)
-      (b, Endo mon) <- run . runWriterT . runPost $ postcondition @state @m (underlyingState s, underlyingState s') act (lookUpVar env) ret
+      (b, (Endo mon, Endo onFail)) <- run . runWriterT . runPost $ postcondition @state @m (underlyingState s, underlyingState s') act (lookUpVar env) ret
       monitor mon
+      unless b $ monitor onFail
       assert b
       loop s' env' as
