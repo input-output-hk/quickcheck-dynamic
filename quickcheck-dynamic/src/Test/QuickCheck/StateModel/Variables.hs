@@ -1,5 +1,4 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Test.QuickCheck.StateModel.Variables (
@@ -16,10 +15,11 @@ module Test.QuickCheck.StateModel.Variables (
   isWellTyped,
   allVariables,
   unsafeCoerceVar,
-  unsafeNextVarIndex,
+  unsafeNextVarIndex
 ) where
 
 import Data.Data
+import Data.Kind
 import Data.List
 import Data.Map (Map)
 import Data.Map qualified as Map
@@ -28,6 +28,7 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import GHC.Generics
 import GHC.Word
+import GHC.TypeLits
 import Test.QuickCheck as QC
 
 -- | A symbolic variable for a value of type `a`
@@ -40,12 +41,11 @@ mkVar = Var
 instance Show (Var a) where
   show (Var i) = "var" ++ show i
 
+
 -- | This type class gives you a way to get all the symbolic variables that
 -- appear in a value.
 class HasVariables a where
   getAllVariables :: a -> Set (Any Var)
-  default getAllVariables :: (Generic a, GenericHasVariables (Rep a)) => a -> Set (Any Var)
-  getAllVariables = genericGetAllVariables . from
 
 instance HasVariables a => HasVariables (Smart a) where
   getAllVariables (Smart _ a) = getAllVariables a
@@ -132,7 +132,21 @@ unsafeCoerceVar (Var i) = Var i
 unsafeNextVarIndex :: VarContext -> Int
 unsafeNextVarIndex (VarCtx vs) = 1 + maximum (0 : [i | Some (Var i) <- Set.toList vs])
 
-instance {-# OVERLAPPABLE #-} (Generic a, GenericHasVariables (Rep a)) => HasVariables a
+-- NOTE: This trick is taken from this blog post:
+-- https://blog.csongor.co.uk/report-stuck-families/
+data Dummy x
+type family Break (c :: Constraint) (rep :: Type -> Type) :: Constraint where
+  Break _ Dummy = ((), ())
+  Break _ _  = ()
+
+instance
+    {-# OVERLAPPABLE #-}
+      ( Break (TypeError ('Text "Missing instance of HasVariables for non-Generic type " ':<>: 'ShowType a))
+              (Rep a)
+      , Generic a
+      , GenericHasVariables (Rep a)
+      ) => HasVariables a where
+  getAllVariables = genericGetAllVariables . from
 
 class GenericHasVariables f where
   genericGetAllVariables :: f k -> Set (Any Var)

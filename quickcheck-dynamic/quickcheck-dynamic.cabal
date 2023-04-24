@@ -32,6 +32,8 @@ common lang
   default-language:   Haskell2010
   default-extensions:
     ConstraintKinds
+    QuantifiedConstraints
+    DataKinds
     DeriveFunctor
     DeriveFoldable
     DeriveTraversable
@@ -77,7 +79,8 @@ library
         Test.QuickCheck.StateModel.Variables
     build-depends:
         QuickCheck -any,
-        base >=4.7 && <5,
+        base >= 4.7 && <5,
         random -any,
         mtl -any,
         containers -any,
+        type-errors,
