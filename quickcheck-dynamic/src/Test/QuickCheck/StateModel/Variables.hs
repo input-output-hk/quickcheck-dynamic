@@ -1,4 +1,4 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE AllowAmbiguousTypes  #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Test.QuickCheck.StateModel.Variables (
@@ -81,13 +81,13 @@ instance Eq (Any f) where
   Some (a :: f a) == Some (b :: f b) =
     case eqT @a @b of
       Just Refl -> a == b
-      Nothing -> False
+      Nothing   -> False
 
 instance (forall a. Ord (f a)) => Ord (Any f) where
   compare (Some (a :: f a)) (Some (a' :: f a')) =
     case eqT @a @a' of
       Just Refl -> compare a a'
-      Nothing -> compare (typeRep a) (typeRep a')
+      Nothing   -> compare (typeRep a) (typeRep a')
 
 newtype VarContext = VarCtx (Set (Any Var))
   deriving (Semigroup, Monoid) via Set (Any Var)

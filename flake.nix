@@ -18,7 +18,7 @@
       haskellProjectFile = ./nix/haskell-project.nix;
       perSystemOutputsFile = null;
       shellName = "quickcheck-dynamic";
-      shellPrompt = "\n\\[\\033[1;31m\\][quickcheck-dynamic]:\\w]\\$\\[\\033[0m\\] ";
+      shellPrompt = "\n\\[\\033[1;31m\\][quickcheck-dynamic]\\$\\[\\033[0m\\] ";
       shellWelcomeMessage = "🤟 \\033[1;31mWelcome to quickcheck-dynamic\\033[0m 🤟";
       shellModuleFile = null;
       includeHydraJobs = true;

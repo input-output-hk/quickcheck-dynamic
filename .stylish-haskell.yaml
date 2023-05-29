@@ -1,0 +1,19 @@
+---
+steps:
+  - simple_align:
+      cases: always
+      top_level_patterns: always
+      records: always
+  - imports:
+      align: none
+      post_qualify: true
+  - language_pragmas:
+      remove_redundant: false
+
+  - trailing_whitespace: {}
+columns: 120
+newline: native
+language_extensions:
+  - PatternSynonyms
+  - TypeApplications
+  - ImportQualifiedPost

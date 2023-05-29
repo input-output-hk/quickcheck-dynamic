@@ -1,6 +1,6 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# LANGUAGE QuantifiedConstraints #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE UndecidableInstances  #-}
 
 -- | Simple (stateful) Model-Based Testing library for use with Haskell QuickCheck.
 --
@@ -201,12 +201,12 @@ lookUpVarMaybe [] _ = Nothing
 lookUpVarMaybe (((v' :: Var b) :== a) : env) v =
   case eqT @a @b of
     Just Refl | v == v' -> Just a
-    _ -> lookUpVarMaybe env v
+    _                   -> lookUpVarMaybe env v
 
 lookUpVar :: Typeable a => Env m -> Var a -> Realized m a
 lookUpVar env v = case lookUpVarMaybe env v of
   Nothing -> error $ "Variable " ++ show v ++ " is not bound!"
-  Just a -> a
+  Just a  -> a
 
 data WithUsedVars a = WithUsedVars VarContext a
 
@@ -302,12 +302,12 @@ instance StateModel state => Arbitrary (Actions state) where
           go m n rej
             | m > n = return (Nothing, rej)
             | otherwise = do
-                a <- resize m $ computeArbitraryAction s
-                case a of
-                  Some act ->
-                    if computePrecondition s act
-                      then return (Just (Some act), rej)
-                      else go (m + 1) n (actionName act : rej)
+              a <- resize m $ computeArbitraryAction s
+              case a of
+                Some act ->
+                  if computePrecondition s act
+                    then return (Just (Some act), rej)
+                    else go (m + 1) n (actionName act : rej)
 
   shrink (Actions_ rs as) =
     map (Actions_ rs) (shrinkSmart (map (prune . map fst) . shrinkList shrinker . withStates) as)
@@ -317,7 +317,7 @@ instance StateModel state => Arbitrary (Actions state) where
 -- Running state models
 
 data Annotated state = Metadata
-  { vars :: VarContext
+  { vars            :: VarContext
   , underlyingState :: state
   }
 
@@ -359,9 +359,9 @@ prune = loop initialAnnotatedState
     loop _s [] = []
     loop s ((var := act) : as)
       | computePrecondition s act =
-          (var := act) : loop (computeNextState s act var) as
+        (var := act) : loop (computeNextState s act var) as
       | otherwise =
-          loop s as
+        loop s as
 
 withStates :: StateModel state => [Step state] -> [(Step state, Annotated state)]
 withStates = loop initialAnnotatedState
@@ -373,7 +373,7 @@ withStates = loop initialAnnotatedState
 stateAfter :: StateModel state => Actions state -> Annotated state
 stateAfter (Actions actions) = loop initialAnnotatedState actions
   where
-    loop s [] = s
+    loop s []                  = s
     loop s ((var := act) : as) = loop (computeNextState s act var) as
 
 runActions ::
