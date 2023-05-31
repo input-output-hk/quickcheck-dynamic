@@ -52,11 +52,11 @@ Before you start using nix, please make sure you've configured haskell.nix cachi
 
 * Building with nix should be as simple as:
   ```
-  nix-build -A quickcheck-dynamic.components.library
+  nix build .#ghc927-quickcheck-dynamic-lib-quickcheck-dynamic
   ```
-* To enter a shell providing basic development tool:
+* To enter a shell providing a complete haskell toolchain:
   ```
-  nix-shell
+  nix develop
   ```
   This can automated using [direnv](https://direnv.net/):
   ```

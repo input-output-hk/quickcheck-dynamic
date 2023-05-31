@@ -27,6 +27,7 @@
       readTheDocsSiteDir = null;
       readTheDocsHaddockPrologue = "";
       readTheDocsExtraHaddockPackages = null;
+      preCommitCheckHooks = { stylish-haskell.enable = false; }; # We use fourmolu
     };
 
   nixConfig = {
