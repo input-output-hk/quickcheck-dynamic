@@ -25,8 +25,13 @@ jobs:
       uses: cachix/install-nix-action@v22
       with:
         extra_nix_config: |
+<<<<<<< HEAD
           accept-flake-config = true
           log-lines = 1000
+=======
+          extra-substituters = https://cache.iog.io https://cache.zw3rk.com
+          extra-trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= loony-tools:pr9m4BkM/5/eSTZlkQyRt57Jz7OMBxNSUiMC4FkcNfk=
+>>>>>>> 8ee2cd7 (fixed caching issue)
 
     - name: Cachix cache of nix derivations
       uses: cachix/cachix-action@v10
