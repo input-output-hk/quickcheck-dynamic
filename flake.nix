@@ -32,10 +32,12 @@
 
   nixConfig = {
     extra-substituters = [
+      "https://iohk.cachix.org"
       "https://cache.iog.io"
       "https://cache.zw3rk.com"
     ];
     extra-trusted-public-keys = [
+      "iohk.cachix.org-1:DpRUyj7h7V830dp/i6Nti+NEO2/nhblbov/8MW7Rqoo="
       "hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ="
       "loony-tools:pr9m4BkM/5/eSTZlkQyRt57Jz7OMBxNSUiMC4FkcNfk="
     ];
