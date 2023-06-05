@@ -36,16 +36,16 @@ jobs:
 
     - name: Prepare nix shell
       run:
-        nix develop --build 
+        nix develop --accept-flake-config --build 
 
     - name: Cabal check
       run: |
         cd quickcheck-dynamic
-        nix develop --command cabal check
+        nix develop --accept-flake-config --command cabal check
 
     - name: Package
       run:
-        nix develop --command cabal sdist quickcheck-dynamic
+        nix develop --accept-flake-config --command cabal sdist quickcheck-dynamic
 
     - name: Get the version
       id: get_version

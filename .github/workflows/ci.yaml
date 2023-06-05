@@ -58,20 +58,20 @@ jobs:
 
     - name: Prepare nix shell
       run: 
-        nix develop --build 
+        nix develop --accept-flake-config --build 
 
     - name: Build
       run: |
-        nix develop --command cabal update
-        nix develop --command cabal build all --ghc-options=-Werror
+        nix develop --accept-flake-config --command cabal update
+        nix develop --accept-flake-config --command cabal build all --ghc-options=-Werror
 
     - name: Test
       run: 
-        nix develop --command cabal test all --test-options "--xml=test-results.xml"
+        nix develop --accept-flake-config --command cabal test all --test-options "--xml=test-results.xml"
 
     - name: Formatting
       run: 
-        nix develop --command ./fmt.sh check
+        nix develop --accept-flake-config --command ./fmt.sh check
 
     - name: Upload build & test artifacts
       uses: actions/upload-artifact@v2
@@ -122,7 +122,7 @@ jobs:
 
     - name: Documentation (Haddock)
       run: |
-        nix develop --command .github/workflows/ci-haddock.sh
+        nix develop --accept-flake-config --command .github/workflows/ci-haddock.sh
 
     - name: Upload build & test artifacts
       uses: actions/upload-artifact@v2
