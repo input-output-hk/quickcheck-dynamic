@@ -7,7 +7,7 @@
   };
 
 
-  outputs = inputs: inputs.iogx.lib.mkFlake inputs;
+  outputs = inputs: inputs.iogx.lib.mkFlake inputs ./.;
 
 
   nixConfig = {
