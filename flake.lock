@@ -48,6 +48,23 @@
         "type": "github"
       }
     },
+    "blst": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1656163412,
+        "narHash": "sha256-xero1aTe2v4IhWIJaEDUsVDOfE77dOV5zKeHWntHogY=",
+        "owner": "supranational",
+        "repo": "blst",
+        "rev": "03b5124029979755c752eec45f3c29674b558446",
+        "type": "github"
+      },
+      "original": {
+        "owner": "supranational",
+        "repo": "blst",
+        "rev": "03b5124029979755c752eec45f3c29674b558446",
+        "type": "github"
+      }
+    },
     "cabal-32": {
       "flake": false,
       "locked": {
@@ -385,17 +402,17 @@
     "haskell-language-server-1_8_0_0": {
       "flake": false,
       "locked": {
-        "lastModified": 1663135728,
-        "narHash": "sha256-ghyyig0GZXRXS56FxH8unpDceU06i/uGBCBmRwneZPw=",
+        "lastModified": 1663402129,
+        "narHash": "sha256-El5wZDn0br/My7cxstRzUyO7VUf1q5V44T55NEQONnI=",
         "owner": "haskell",
         "repo": "haskell-language-server",
-        "rev": "ddb21a0c8d4e657c4b81ce250239bccf28fc9524",
+        "rev": "855a88238279b795634fa6144a4c0e8acc7e9644",
         "type": "github"
       },
       "original": {
         "owner": "haskell",
-        "ref": "1.8.0.0",
         "repo": "haskell-language-server",
+        "rev": "855a88238279b795634fa6144a4c0e8acc7e9644",
         "type": "github"
       }
     },
@@ -564,27 +581,35 @@
         "sphinxcontrib-haddock": "sphinxcontrib-haddock"
       },
       "locked": {
-        "lastModified": 1685527125,
-        "narHash": "sha256-hpBcJsegEYjzHGM74oNXnZdNpGSMtNasV4hNqulL2QQ=",
-        "owner": "zeme-wana",
+        "lastModified": 1687508460,
+        "narHash": "sha256-tOH0cu/ST4+eKbUnSReKkOqIKigXbkJdCmP9b7uM4lo=",
+        "owner": "input-output-hk",
         "repo": "iogx",
-        "rev": "9e41c1bfdbdd3a13482f571bb77fbb0325ed76e8",
+        "rev": "05f1a6437cc34ac5e1ded45e0bb2a7b9904ceaf7",
         "type": "github"
       },
       "original": {
-        "owner": "zeme-wana",
+        "owner": "input-output-hk",
         "repo": "iogx",
         "type": "github"
       }
     },
     "iohk-nix": {
-      "flake": false,
+      "inputs": {
+        "blst": "blst",
+        "nixpkgs": [
+          "iogx",
+          "nixpkgs"
+        ],
+        "secp256k1": "secp256k1",
+        "sodium": "sodium"
+      },
       "locked": {
-        "lastModified": 1684223806,
-        "narHash": "sha256-IyLoP+zhuyygLtr83XXsrvKyqqLQ8FHXTiySFf4FJOI=",
+        "lastModified": 1685727458,
+        "narHash": "sha256-c/pkFYCfzpRb6W2OOKE+EOzOlcw+96vwJGGg8Ir9Qfk=",
         "owner": "input-output-hk",
         "repo": "iohk-nix",
-        "rev": "86421fdd89b3af43fa716ccd07638f96c6ecd1e4",
+        "rev": "02f42375ee5c2bab1640f14c6389b7e91bbfec8b",
         "type": "github"
       },
       "original": {
@@ -1114,6 +1139,40 @@
     "root": {
       "inputs": {
         "iogx": "iogx"
+      }
+    },
+    "secp256k1": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1683999695,
+        "narHash": "sha256-9nJJVENMXjXEJZzw8DHzin1DkFkF8h9m/c6PuM7Uk4s=",
+        "owner": "bitcoin-core",
+        "repo": "secp256k1",
+        "rev": "acf5c55ae6a94e5ca847e07def40427547876101",
+        "type": "github"
+      },
+      "original": {
+        "owner": "bitcoin-core",
+        "ref": "v0.3.2",
+        "repo": "secp256k1",
+        "type": "github"
+      }
+    },
+    "sodium": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1675156279,
+        "narHash": "sha256-0uRcN5gvMwO7MCXVYnoqG/OmeBFi8qRVnDWJLnBb9+Y=",
+        "owner": "input-output-hk",
+        "repo": "libsodium",
+        "rev": "dbb48cce5429cb6585c9034f002568964f1ce567",
+        "type": "github"
+      },
+      "original": {
+        "owner": "input-output-hk",
+        "repo": "libsodium",
+        "rev": "dbb48cce5429cb6585c9034f002568964f1ce567",
+        "type": "github"
       }
     },
     "sphinxcontrib-haddock": {
