@@ -109,7 +109,7 @@ class
   -- | Shrinker for `Action`.
   -- Defaults to no-op but as usual, defining a good shrinker greatly enhances the usefulness
   -- of property-based testing.
-  shrinkAction :: Typeable a => VarContext -> state -> Action state a -> [Any (Action state)]
+  shrinkAction :: (Typeable a) => VarContext -> state -> Action state a -> [Any (Action state)]
   shrinkAction _ _ _ = []
 
   -- | Initial state of generated traces.
@@ -120,7 +120,7 @@ class
   -- by `perform`ing the `Action` inside the `state` so that further actions can use `Lookup`
   -- to retrieve that data. This allows the model to be ignorant of those values yet maintain
   -- some references that can be compared and looked for.
-  nextState :: Typeable a => state -> Action state a -> Var a -> state
+  nextState :: (Typeable a) => state -> Action state a -> Var a -> state
   nextState s _ _ = s
 
   -- | Precondition for filtering generated `Action`.
@@ -146,14 +146,14 @@ newtype PostconditionM m a = PostconditionM {runPost :: WriterT (Endo Property, 
 -- | Apply the property transformation to the property after evaluating
 -- the postcondition. Useful for collecting statistics while avoiding
 -- duplication between `monitoring` and `postcondition`.
-monitorPost :: Monad m => (Property -> Property) -> PostconditionM m ()
+monitorPost :: (Monad m) => (Property -> Property) -> PostconditionM m ()
 monitorPost m = PostconditionM $ tell (Endo m, mempty)
 
 -- | Acts as `Test.QuickCheck.counterexample` if the postcondition fails.
-counterexamplePost :: Monad m => String -> PostconditionM m ()
+counterexamplePost :: (Monad m) => String -> PostconditionM m ()
 counterexamplePost c = PostconditionM $ tell (mempty, Endo $ counterexample c)
 
-class Monad m => RunModel state m where
+class (Monad m) => RunModel state m where
   -- | Perform an `Action` in some `state` in the `Monad` `m`.  This
   -- is the function that's used to exercise the actual stateful
   -- implementation, usually through various side-effects as permitted
@@ -164,7 +164,7 @@ class Monad m => RunModel state m where
   --
   -- The `Lookup` parameter provides an /environment/ to lookup `Var
   -- a` instances from previous steps.
-  perform :: forall a. Typeable a => state -> Action state a -> LookUp m -> m (Realized m a)
+  perform :: forall a. (Typeable a) => state -> Action state a -> LookUp m -> m (Realized m a)
 
   -- | Postcondition on the `a` value produced at some step.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
@@ -179,31 +179,31 @@ class Monad m => RunModel state m where
   monitoring :: forall a. (state, state) -> Action state a -> LookUp m -> Realized m a -> Property -> Property
   monitoring _ _ _ _ prop = prop
 
-type LookUp m = forall a. Typeable a => Var a -> Realized m a
+type LookUp m = forall a. (Typeable a) => Var a -> Realized m a
 
 type Env m = [EnvEntry m]
 
 data EnvEntry m where
-  (:==) :: Typeable a => Var a -> Realized m a -> EnvEntry m
+  (:==) :: (Typeable a) => Var a -> Realized m a -> EnvEntry m
 
 infix 5 :==
 
-pattern (:=?) :: forall a m. Typeable a => Var a -> Realized m a -> EnvEntry m
+pattern (:=?) :: forall a m. (Typeable a) => Var a -> Realized m a -> EnvEntry m
 pattern v :=? val <- (viewAtType -> Just (v, val))
 
-viewAtType :: forall a m. Typeable a => EnvEntry m -> Maybe (Var a, Realized m a)
+viewAtType :: forall a m. (Typeable a) => EnvEntry m -> Maybe (Var a, Realized m a)
 viewAtType ((v :: Var b) :== val)
   | Just Refl <- eqT @a @b = Just (v, val)
   | otherwise = Nothing
 
-lookUpVarMaybe :: forall a m. Typeable a => Env m -> Var a -> Maybe (Realized m a)
+lookUpVarMaybe :: forall a m. (Typeable a) => Env m -> Var a -> Maybe (Realized m a)
 lookUpVarMaybe [] _ = Nothing
 lookUpVarMaybe (((v' :: Var b) :== a) : env) v =
   case eqT @a @b of
     Just Refl | v == v' -> Just a
     _ -> lookUpVarMaybe env v
 
-lookUpVar :: Typeable a => Env m -> Var a -> Realized m a
+lookUpVar :: (Typeable a) => Env m -> Var a -> Realized m a
 lookUpVar env v = case lookUpVarMaybe env v of
   Nothing -> error $ "Variable " ++ show v ++ " is not bound!"
   Just a -> a
@@ -259,12 +259,12 @@ instance Semigroup (Actions state) where
 instance Eq (Actions state) where
   Actions as == Actions as' = as == as'
 
-instance StateModel state => Show (Actions state) where
+instance (StateModel state) => Show (Actions state) where
   show (Actions as) =
     let as' = WithUsedVars (usedVariables (Actions as)) <$> as
      in intercalate "\n" $ zipWith (++) ("do " : repeat "   ") (map show as' ++ ["pure ()"])
 
-usedVariables :: forall state. StateModel state => Actions state -> VarContext
+usedVariables :: forall state. (StateModel state) => Actions state -> VarContext
 usedVariables (Actions as) = go initialAnnotatedState as
   where
     go :: Annotated state -> [Step state] -> VarContext
@@ -274,7 +274,7 @@ usedVariables (Actions as) = go initialAnnotatedState as
         <> allVariables (underlyingState aState)
         <> go (computeNextState aState act var) steps
 
-instance StateModel state => Arbitrary (Actions state) where
+instance (StateModel state) => Arbitrary (Actions state) where
   arbitrary = do
     (as, rejected) <- arbActions initialAnnotatedState 1
     return $ Actions_ rejected (Smart 0 as)
@@ -321,13 +321,13 @@ data Annotated state = Metadata
   , underlyingState :: state
   }
 
-instance Show state => Show (Annotated state) where
+instance (Show state) => Show (Annotated state) where
   show (Metadata ctx s) = show ctx ++ " |- " ++ show s
 
-initialAnnotatedState :: StateModel state => Annotated state
+initialAnnotatedState :: (StateModel state) => Annotated state
 initialAnnotatedState = Metadata mempty initialState
 
-computePrecondition :: StateModel state => Annotated state -> Action state a -> Bool
+computePrecondition :: (StateModel state) => Annotated state -> Action state a -> Bool
 computePrecondition s a =
   all (\(Some v) -> v `isWellTyped` vars s) (getAllVariables a)
     && precondition (underlyingState s) a
@@ -341,7 +341,7 @@ computeNextState
 computeNextState s a v = Metadata (extendContext (vars s) v) (nextState (underlyingState s) a v)
 
 computeArbitraryAction
-  :: StateModel state
+  :: (StateModel state)
   => Annotated state
   -> Gen (Any (Action state))
 computeArbitraryAction s = arbitraryAction (vars s) (underlyingState s)
@@ -353,7 +353,7 @@ computeShrinkAction
   -> [Any (Action state)]
 computeShrinkAction s = shrinkAction (vars s) (underlyingState s)
 
-prune :: StateModel state => [Step state] -> [Step state]
+prune :: (StateModel state) => [Step state] -> [Step state]
 prune = loop initialAnnotatedState
   where
     loop _s [] = []
@@ -363,14 +363,14 @@ prune = loop initialAnnotatedState
       | otherwise =
           loop s as
 
-withStates :: StateModel state => [Step state] -> [(Step state, Annotated state)]
+withStates :: (StateModel state) => [Step state] -> [(Step state, Annotated state)]
 withStates = loop initialAnnotatedState
   where
     loop _s [] = []
     loop s ((var := act) : as) =
       (var := act, s) : loop (computeNextState s act var) as
 
-stateAfter :: StateModel state => Actions state -> Annotated state
+stateAfter :: (StateModel state) => Actions state -> Annotated state
 stateAfter (Actions actions) = loop initialAnnotatedState actions
   where
     loop s [] = s

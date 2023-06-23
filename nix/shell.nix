@@ -1,0 +1,4 @@
+{ ... }:
+{
+  name = "quickcheck-dynamic";
+}
