@@ -71,7 +71,7 @@ jobs:
 
     - name: Formatting
       run: 
-        nix develop --accept-flake-config --command ./fmt.sh check
+        nix develop --accept-flake-config --command pre-commit run fourmolu
 
     - name: Upload build & test artifacts
       uses: actions/upload-artifact@v2
