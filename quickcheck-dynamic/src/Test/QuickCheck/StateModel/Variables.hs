@@ -46,22 +46,22 @@ instance Show (Var a) where
 class HasVariables a where
   getAllVariables :: a -> Set (Any Var)
 
-instance (HasVariables a) => HasVariables (Smart a) where
+instance HasVariables a => HasVariables (Smart a) where
   getAllVariables (Smart _ a) = getAllVariables a
 
-instance (Typeable a) => HasVariables (Var a) where
+instance Typeable a => HasVariables (Var a) where
   getAllVariables = Set.singleton . Some
 
 instance (HasVariables k, HasVariables v) => HasVariables (Map k v) where
   getAllVariables = getAllVariables . Map.toList
 
-instance (HasVariables a) => HasVariables (Set a) where
+instance HasVariables a => HasVariables (Set a) where
   getAllVariables = getAllVariables . Set.toList
 
 newtype HasNoVariables a = HasNoVariables a
 
-deriving via a instance (Show a) => Show (HasNoVariables a)
-deriving via a instance (Eq a) => Eq (HasNoVariables a)
+deriving via a instance Show a => Show (HasNoVariables a)
+deriving via a instance Eq a => Eq (HasNoVariables a)
 
 instance HasVariables (HasNoVariables a) where
   getAllVariables _ = mempty
@@ -83,7 +83,7 @@ instance Eq (Any f) where
       Just Refl -> a == b
       Nothing -> False
 
-instance (forall a. Ord (f a)) => Ord (Any f) where
+instance forall a. Ord (f a) => Ord (Any f) where
   compare (Some (a :: f a)) (Some (a' :: f a')) =
     case eqT @a @a' of
       Just Refl -> compare a a'
@@ -101,7 +101,7 @@ instance Show VarContext where
       -- The use of typeRep here is on purpose to avoid printing `Var` unnecessarily.
       showBinding (Some v) = show v ++ " :: " ++ show (typeRep v)
 
-isWellTyped :: (Typeable a) => Var a -> VarContext -> Bool
+isWellTyped :: Typeable a => Var a -> VarContext -> Bool
 isWellTyped v (VarCtx ctx) = Some v `Set.member` ctx
 
 -- TODO: check the invariant that no variable index is used
@@ -110,19 +110,19 @@ isWellTyped v (VarCtx ctx) = Some v `Set.member` ctx
 -- cause an issue, but it might be good practise to crash
 -- if the invariant is violated anyway as it is evidence that
 -- something is horribly broken at the use site).
-extendContext :: (Typeable a) => VarContext -> Var a -> VarContext
+extendContext :: Typeable a => VarContext -> Var a -> VarContext
 extendContext (VarCtx ctx) v = VarCtx $ Set.insert (Some v) ctx
 
-allVariables :: (HasVariables a) => a -> VarContext
+allVariables :: HasVariables a => a -> VarContext
 allVariables = VarCtx . getAllVariables
 
-ctxAtType :: (Typeable a) => VarContext -> [Var a]
+ctxAtType :: Typeable a => VarContext -> [Var a]
 ctxAtType (VarCtx vs) = [v | Some (cast -> Just v) <- Set.toList vs]
 
-arbitraryVar :: (Typeable a) => VarContext -> Gen (Var a)
+arbitraryVar :: Typeable a => VarContext -> Gen (Var a)
 arbitraryVar = elements . ctxAtType
 
-shrinkVar :: (Typeable a) => VarContext -> Var a -> [Var a]
+shrinkVar :: Typeable a => VarContext -> Var a -> [Var a]
 shrinkVar ctx v = filter (< v) $ ctxAtType ctx
 
 unsafeCoerceVar :: Var a -> Var b
@@ -153,10 +153,10 @@ instance
 class GenericHasVariables f where
   genericGetAllVariables :: f k -> Set (Any Var)
 
-instance (GenericHasVariables f) => GenericHasVariables (M1 i c f) where
+instance GenericHasVariables f => GenericHasVariables (M1 i c f) where
   genericGetAllVariables = genericGetAllVariables . unM1
 
-instance (HasVariables c) => GenericHasVariables (K1 i c) where
+instance HasVariables c => GenericHasVariables (K1 i c) where
   genericGetAllVariables = getAllVariables . unK1
 
 instance GenericHasVariables U1 where

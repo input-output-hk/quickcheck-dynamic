@@ -57,11 +57,11 @@ withGenQ :: Gen a -> (a -> [a]) -> Quantification a
 withGenQ gen = Quantification (Just gen) (const True)
 
 -- | Pack up an `Arbitrary` instance as a `Quantification`. Treats all values as being in range.
-arbitraryQ :: (Arbitrary a) => Quantification a
+arbitraryQ :: Arbitrary a => Quantification a
 arbitraryQ = Quantification (Just arbitrary) (const True) shrink
 
 -- | Generates exactly the given value. Does not shrink.
-exactlyQ :: (Eq a) => a -> Quantification a
+exactlyQ :: Eq a => a -> Quantification a
 exactlyQ a =
   Quantification
     (Just $ return a)
@@ -83,7 +83,7 @@ chooseQ r@(a, b) =
 -- @
 -- `Plutus.Contract.Test.ContractModel.forAllQ` (`elementsQ` []) == `Control.Applicative.empty`
 -- @
-elementsQ :: (Eq a) => [a] -> Quantification a
+elementsQ :: Eq a => [a] -> Quantification a
 elementsQ as = Quantification g (`elem` as) (\a -> takeWhile (/= a) as)
   where
     g
@@ -166,7 +166,7 @@ type QuantifyConstraints a = (Eq a, Show a, Typeable a, HasVariables a)
 --   ...
 -- @
 class
-  (QuantifyConstraints (Quantifies q)) =>
+  QuantifyConstraints (Quantifies q) =>
   Quantifiable q
   where
   -- | The type of values quantified over.
@@ -179,7 +179,7 @@ class
   -- | Computing the actual `Quantification`.
   quantify :: q -> Quantification (Quantifies q)
 
-instance (QuantifyConstraints a) => Quantifiable (Quantification a) where
+instance QuantifyConstraints a => Quantifiable (Quantification a) where
   type Quantifies (Quantification a) = a
   quantify = id
 
@@ -217,7 +217,7 @@ instance
       to (a, (b, (c, (d, e)))) = (a, b, c, d, e)
       from (a, b, c, d, e) = (a, (b, (c, (d, e))))
 
-instance (Quantifiable a) => Quantifiable [a] where
+instance Quantifiable a => Quantifiable [a] where
   type Quantifies [a] = [Quantifies a]
   quantify [] = Quantification (Just $ return []) null (const [])
   quantify (a : as) =
@@ -228,6 +228,6 @@ instance (Quantifiable a) => Quantifiable [a] where
       from (x : xs) = (x, xs)
       from [] = error "quantify: impossible"
 
-validQuantification :: (Show a) => Quantification a -> Property
+validQuantification :: Show a => Quantification a -> Property
 validQuantification q =
   forAllShrink (fromJust $ genQ q) (shrinkQ q) $ isaQ q
