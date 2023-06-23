@@ -83,7 +83,7 @@ instance Eq (Any f) where
       Just Refl -> a == b
       Nothing -> False
 
-instance forall a. Ord (f a) => Ord (Any f) where
+instance (forall a. Ord (f a)) => Ord (Any f) where
   compare (Some (a :: f a)) (Some (a' :: f a')) =
     case eqT @a @a' of
       Just Refl -> compare a a'

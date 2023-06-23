@@ -129,7 +129,7 @@ class
   precondition :: state -> Action state a -> Bool
   precondition _ _ = True
 
-deriving instance forall a. Show (Action state a) => Show (Any (Action state))
+deriving instance (forall a. Show (Action state a)) => Show (Any (Action state))
 
 -- TODO: maybe it makes sense to write
 -- out a long list of these instances
@@ -219,7 +219,7 @@ data Step state where
 
 infix 5 :=
 
-instance forall a. HasVariables (Action state a) => HasVariables (Step state) where
+instance (forall a. HasVariables (Action state a)) => HasVariables (Step state) where
   getAllVariables (var := act) = Set.insert (Some var) $ getAllVariables act
 
 instance Show (Step state) where

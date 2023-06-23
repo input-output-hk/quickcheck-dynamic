@@ -5,5 +5,5 @@
   nixpkgs-fmt.enable = true;
 
   fourmolu.enable = true;
-  fourmolu.extraOptions = "--unsafe -o -XImportQualifiedPost -o -XTypeApplications -o -XPatternSynonyms";
+  fourmolu.extraOptions = "-o -XImportQualifiedPost -o -XTypeApplications -o -XPatternSynonyms";
 }
