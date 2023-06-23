@@ -111,7 +111,7 @@ instance StateModel RegState where
 
 type RegM s = ReaderT (Registry (IOSim s)) (IOSim s)
 
-instance m ~ RegM s => RunModel RegState m where
+instance (m ~ RegM s) => RunModel RegState m where
   perform _ Spawn _ = do
     lift $ forkIO (threadDelay 10000000)
   perform _ (Register name tid) env = do
@@ -162,7 +162,7 @@ positive s (Unregister name) =
 positive _s _ = True
 
 data ShowDict s a where
-  ShowDict :: Show (Realized (RegM s) a) => ShowDict s a
+  ShowDict :: (Show (Realized (RegM s) a)) => ShowDict s a
 
 showDictAction :: forall s a. Action RegState a -> ShowDict s a
 showDictAction Spawn{} = ShowDict

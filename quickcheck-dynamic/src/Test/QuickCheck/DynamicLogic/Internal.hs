@@ -39,7 +39,7 @@ data DynLogic s
     Weight Double (DynLogic s)
   | -- | Generating a random value
     forall a.
-    QuantifyConstraints a =>
+    (QuantifyConstraints a) =>
     ForAll (Quantification a) (a -> DynLogic s)
   | -- | Apply a QuickCheck property modifier (like `tabulate` or `collect`)
     Monitor (Property -> Property) (DynLogic s)
@@ -89,7 +89,7 @@ DynFormula f ||| DynFormula g = DynFormula $ \n -> Alt Angelic (f n) (g n)
 -- and checked and the `Test.QuickCheck.DynamicLogic.Quantify` module defines
 -- basic combinators to build those from building blocks.
 forAllQ
-  :: Quantifiable q
+  :: (Quantifiable q)
   => q
   -> (Quantifies q -> DynFormula s)
   -> DynFormula s
@@ -139,17 +139,17 @@ data FailingAction s
   = ErrorFail String
   | forall a. (Typeable a, Eq (Action s a)) => ActionFail (Action s a)
 
-instance StateModel s => HasVariables (FailingAction s) where
+instance (StateModel s) => HasVariables (FailingAction s) where
   getAllVariables ErrorFail{} = mempty
   getAllVariables (ActionFail a) = getAllVariables a
 
-instance StateModel s => Eq (FailingAction s) where
+instance (StateModel s) => Eq (FailingAction s) where
   ErrorFail s == ErrorFail s' = s == s'
   ActionFail (a :: Action s a) == ActionFail (a' :: Action s a')
     | Just Refl <- eqT @a @a' = a == a'
   _ == _ = False
 
-instance StateModel s => Show (FailingAction s) where
+instance (StateModel s) => Show (FailingAction s) where
   show (ErrorFail s) = "Error " ++ show s
   show (ActionFail a) = show a
 
@@ -161,7 +161,7 @@ data DynLogicTest s
 
 data Witnesses r where
   Do :: r -> Witnesses r
-  Witness :: QuantifyConstraints a => a -> Witnesses r -> Witnesses r
+  Witness :: (QuantifyConstraints a) => a -> Witnesses r -> Witnesses r
 
 discardWitnesses :: Witnesses r -> r
 discardWitnesses (Do r) = r
@@ -178,7 +178,7 @@ deriving instance Functor Witnesses
 deriving instance Foldable Witnesses
 deriving instance Traversable Witnesses
 
-instance Eq r => Eq (Witnesses r) where
+instance (Eq r) => Eq (Witnesses r) where
   Do r == Do r' = r == r'
   Witness (a :: a) k == Witness (a' :: a') k' =
     case eqT @a @a' of
@@ -186,7 +186,7 @@ instance Eq r => Eq (Witnesses r) where
       Nothing -> False
   _ == _ = False
 
-instance Show r => Show (Witnesses r) where
+instance (Show r) => Show (Witnesses r) where
   show (Do r) = "Do $ " ++ show r
   show (Witness a k) = "Witness (" ++ show a ++ " :: " ++ show (typeOf a) ++ ")\n" ++ show k -- TODO
 
@@ -208,15 +208,15 @@ pattern TestSeqStep s ss = TestSeq (Do (ContStep s ss))
 -- The `()` are the constraints required to use the pattern, and the `(Typeable a, ...)` are the
 -- ones provided when you do (including a fresh type variable `a`).
 -- See https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/pattern_synonyms.html#typing-of-pattern-synonyms
-pattern TestSeqWitness :: () => forall a. QuantifyConstraints a => a -> TestSequence s -> TestSequence s
+pattern TestSeqWitness :: () => forall a. (QuantifyConstraints a) => a -> TestSequence s -> TestSequence s
 pattern TestSeqWitness a ss <- TestSeq (Witness a (TestSeq -> ss))
   where
     TestSeqWitness a (TestSeq ss) = TestSeq (Witness a ss)
 
 {-# COMPLETE TestSeqWitness, TestSeqStep, TestSeqStop #-}
 
-deriving instance StateModel s => Show (TestContinuation s)
-deriving instance StateModel s => Eq (TestContinuation s)
+deriving instance (StateModel s) => Show (TestContinuation s)
+deriving instance (StateModel s) => Eq (TestContinuation s)
 
 consSeq :: TestStep s -> TestSequence s -> TestSequence s
 consSeq step ss = TestSeq $ flip ContStep ss <$> step
@@ -275,7 +275,7 @@ prettyWitnesses :: Witnesses () -> [String]
 prettyWitnesses (Witness a w) = ("_ <- forAllQ $ exactlyQ $ " ++ show a) : prettyWitnesses w
 prettyWitnesses Do{} = []
 
-instance StateModel s => Show (DynLogicTest s) where
+instance (StateModel s) => Show (DynLogicTest s) where
   show (BadPrecondition ss bad s) =
     prettyTestSequence (usedVariables ss <> allVariables bad) ss
       ++ "\n   -- In state: "
@@ -290,7 +290,7 @@ instance StateModel s => Show (DynLogicTest s) where
   show (Stuck ss s) = prettyTestSequence (usedVariables ss) ss ++ "\n   pure ()\n   -- Stuck in state " ++ show s
   show (DLScript ss) = prettyTestSequence (usedVariables ss) ss ++ "\n   pure ()\n"
 
-usedVariables :: forall s. StateModel s => TestSequence s -> VarContext
+usedVariables :: forall s. (StateModel s) => TestSequence s -> VarContext
 usedVariables = go initialAnnotatedState
   where
     go :: Annotated s -> TestSequence s -> VarContext
@@ -305,7 +305,7 @@ usedVariables = go initialAnnotatedState
 -- in tests explicitly using "After" in order to check specific
 -- properties at controlled times, so they are likely to fail if
 -- invoked at other times.
-class StateModel s => DynLogicModel s where
+class (StateModel s) => DynLogicModel s where
   restricted :: Action s a -> Bool
   restricted _ = False
 
@@ -365,7 +365,7 @@ withDLScriptPrefix f k test =
         test' = unfailDLTest d test
      in validDLTest d test' . applyMonitoring d test' . property $ k (scriptFromDL test')
 
-generateDLTest :: DynLogicModel s => DynLogic s -> Int -> Gen (DynLogicTest s)
+generateDLTest :: (DynLogicModel s) => DynLogic s -> Int -> Gen (DynLogicTest s)
 generateDLTest d size = generate chooseNextStep d 0 (initialStateFor d) size
 
 onDLTestSeq :: (TestSequence s -> TestSequence s) -> DynLogicTest s -> DynLogicTest s
@@ -417,7 +417,7 @@ generate chooseNextStepFun d n s size =
 sizeLimit :: Int -> Int
 sizeLimit size = 2 * size + 20
 
-initialStateFor :: StateModel s => DynLogic s -> Annotated s
+initialStateFor :: (StateModel s) => DynLogic s -> Annotated s
 initialStateFor _ = initialAnnotatedState
 
 stopping :: DynLogic s -> DynLogic s
@@ -459,7 +459,7 @@ noAny (Monitor f d) = Monitor f (noAny d)
 nextSteps :: DynLogic s -> Gen [(Double, Witnesses (DynLogic s))]
 nextSteps = nextSteps' generateQ
 
-nextSteps' :: Monad m => (forall a. Quantification a -> m a) -> DynLogic s -> m [(Double, Witnesses (DynLogic s))]
+nextSteps' :: (Monad m) => (forall a. Quantification a -> m a) -> DynLogic s -> m [(Double, Witnesses (DynLogic s))]
 nextSteps' _ EmptySpec = pure []
 nextSteps' _ Stop = pure [(1, Do $ Stop)]
 nextSteps' _ (After act k) = pure [(1, Do $ After act k)]
@@ -487,7 +487,7 @@ data NextStep s
   | NoStep
   | BadAction (Witnesses (FailingAction s))
 
-chooseNextStep :: DynLogicModel s => Annotated s -> Int -> DynLogic s -> Gen (NextStep s)
+chooseNextStep :: (DynLogicModel s) => Annotated s -> Int -> DynLogic s -> Gen (NextStep s)
 chooseNextStep s n d = do
   nextSteps d >>= \case
     [] -> return NoStep
@@ -548,7 +548,7 @@ keepTryingUntil n g p = do
   x <- g
   if p x then return $ Just x else scale (+ 1) $ keepTryingUntil (n - 1) g p
 
-shrinkDLTest :: DynLogicModel s => DynLogic s -> DynLogicTest s -> [DynLogicTest s]
+shrinkDLTest :: (DynLogicModel s) => DynLogic s -> DynLogicTest s -> [DynLogicTest s]
 shrinkDLTest _ (Looping _) = []
 shrinkDLTest d tc =
   [ test | as' <- shrinkScript d (getScript tc), let pruned = pruneDLTest d as'
@@ -560,13 +560,13 @@ shrinkDLTest d tc =
     _ -> True
   ]
 
-nextStateStep :: StateModel s => Step s -> Annotated s -> Annotated s
+nextStateStep :: (StateModel s) => Step s -> Annotated s -> Annotated s
 nextStateStep (var := act) s = computeNextState s act var
 
-shrinkScript :: DynLogicModel s => DynLogic s -> TestSequence s -> [TestSequence s]
+shrinkScript :: (DynLogicModel s) => DynLogic s -> TestSequence s -> [TestSequence s]
 shrinkScript = shrink' initialAnnotatedState
   where
-    shrink' :: DynLogicModel s => Annotated s -> DynLogic s -> TestSequence s -> [TestSequence s]
+    shrink' :: (DynLogicModel s) => Annotated s -> DynLogic s -> TestSequence s -> [TestSequence s]
     shrink' s d ss = structural s d ss ++ nonstructural s d ss
 
     nonstructural s d (TestSeqWitness a ss) =
@@ -608,7 +608,7 @@ shrinkWitness AfterAny{} _ = []
 
 -- The result of pruning a list of actions is a prefix of a list of actions that
 -- could have been generated by the dynamic logic.
-pruneDLTest :: DynLogicModel s => DynLogic s -> TestSequence s -> TestSequence s
+pruneDLTest :: (DynLogicModel s) => DynLogic s -> TestSequence s -> TestSequence s
 pruneDLTest dl = prune [dl] initialAnnotatedState
   where
     prune [] _ _ = TestSeqStop
@@ -624,7 +624,7 @@ pruneDLTest dl = prune [dl] initialAnnotatedState
             ds' -> TestSeqStep step $ prune ds' (nextStateStep step s) ss
       | otherwise = prune ds s ss
 
-stepDL :: DynLogicModel s => DynLogic s -> Annotated s -> TestStep s -> [DynLogic s]
+stepDL :: (DynLogicModel s) => DynLogic s -> Annotated s -> TestStep s -> [DynLogic s]
 stepDL (After a k) s (Do (var := act))
   -- TOOD: make this nicer when we migrate to 9.2 where we can just bind
   -- the type variables cleanly and do `Just Refl <- eqT ...` here instead.
@@ -652,7 +652,7 @@ stepDLW (Weight _ d) a = stepDLW d a
 stepDLW (Stopping d) a = stepDLW d a
 stepDLW _ _ = []
 
-stepDLSeq :: DynLogicModel s => DynLogic s -> Annotated s -> TestSequence s -> DynLogic s
+stepDLSeq :: (DynLogicModel s) => DynLogic s -> Annotated s -> TestSequence s -> DynLogic s
 stepDLSeq d _ (TestSeqStopW Do{}) = d
 stepDLSeq d s (TestSeqStopW (Witness a w)) = stepDLSeq (stepDLWitness d a) s (TestSeqStopW w)
 stepDLSeq d s (step@(Witnesses _ (var := act)) :> ss) =
@@ -661,14 +661,14 @@ stepDLSeq d s (step@(Witnesses _ (var := act)) :> ss) =
 stepDLWitness :: forall a s. (DynLogicModel s, Typeable a) => DynLogic s -> a -> DynLogic s
 stepDLWitness d a = demonicAlt $ stepDLW d a
 
-stepDLStep :: DynLogicModel s => DynLogic s -> Annotated s -> Step s -> DynLogic s
+stepDLStep :: (DynLogicModel s) => DynLogic s -> Annotated s -> Step s -> DynLogic s
 stepDLStep d s step = stepDLSeq d s (TestSeqStep step TestSeqStop)
 
 demonicAlt :: [DynLogic s] -> DynLogic s
 demonicAlt [] = EmptySpec
 demonicAlt ds = foldr1 (Alt Demonic) ds
 
-propPruningGeneratedScriptIsNoop :: DynLogicModel s => DynLogic s -> Property
+propPruningGeneratedScriptIsNoop :: (DynLogicModel s) => DynLogic s -> Property
 propPruningGeneratedScriptIsNoop d =
   forAll (sized $ \n -> choose (1, max 1 n) >>= generateDLTest d) $ \test ->
     let script = case test of
@@ -684,7 +684,7 @@ getScript (Looping s) = s
 getScript (Stuck s _) = s
 getScript (DLScript s) = s
 
-makeTestFromPruned :: DynLogicModel s => DynLogic s -> TestSequence s -> DynLogicTest s
+makeTestFromPruned :: (DynLogicModel s) => DynLogic s -> TestSequence s -> DynLogicTest s
 makeTestFromPruned dl = make dl initialAnnotatedState
   where
     make d s TestSeqStop
@@ -706,7 +706,7 @@ makeTestFromPruned dl = make dl initialAnnotatedState
 
 -- | If failed, return the prefix up to the failure. Also prunes the test in case the model has
 --   changed.
-unfailDLTest :: DynLogicModel s => DynLogic s -> DynLogicTest s -> DynLogicTest s
+unfailDLTest :: (DynLogicModel s) => DynLogic s -> DynLogicTest s -> DynLogicTest s
 unfailDLTest d test = makeTestFromPruned d $ pruneDLTest d steps
   where
     steps = case test of
@@ -715,7 +715,7 @@ unfailDLTest d test = makeTestFromPruned d $ pruneDLTest d steps
       DLScript as -> as
       Looping as -> as
 
-stuck :: DynLogicModel s => DynLogic s -> Annotated s -> Bool
+stuck :: (DynLogicModel s) => DynLogic s -> Annotated s -> Bool
 stuck EmptySpec _ = True
 stuck Stop _ = False
 stuck (After _ _) _ = False
@@ -737,7 +737,7 @@ stuck (Weight w d) s = w < never || stuck d s
 stuck (ForAll _ _) _ = False
 stuck (Monitor _ d) s = stuck d s
 
-validDLTest :: StateModel s => DynLogic s -> DynLogicTest s -> Property -> Property
+validDLTest :: (StateModel s) => DynLogic s -> DynLogicTest s -> Property -> Property
 validDLTest _ Stuck{} _ = False ==> False
 validDLTest _ test@DLScript{} p = counterexample (show test) p
 validDLTest _ test _ = counterexample (show test) False
@@ -752,7 +752,7 @@ sequenceSteps (TestSeq ss) =
     ContStop -> []
     ContStep s ss' -> s : sequenceSteps ss'
 
-badActionsGiven :: StateModel s => DynLogic s -> Annotated s -> Witnesses a -> [Witnesses (FailingAction s)]
+badActionsGiven :: (StateModel s) => DynLogic s -> Annotated s -> Witnesses a -> [Witnesses (FailingAction s)]
 badActionsGiven Stop _ _ = []
 badActionsGiven EmptySpec _ _ = []
 badActionsGiven AfterAny{} _ _ = []
@@ -768,7 +768,7 @@ badActionsGiven d s (Do _) = Do <$> badActions d s
 badActionsGiven Error{} _ _ = []
 badActionsGiven After{} _ _ = []
 
-badActions :: StateModel s => DynLogic s -> Annotated s -> [FailingAction s]
+badActions :: (StateModel s) => DynLogic s -> Annotated s -> [FailingAction s]
 badActions EmptySpec _ = []
 badActions Stop _ = []
 badActions (After a _) s
@@ -782,7 +782,7 @@ badActions (Weight w d) s = if w < never then [] else badActions d s
 badActions (ForAll _ _) _ = []
 badActions (Monitor _ d) s = badActions d s
 
-applyMonitoring :: DynLogicModel s => DynLogic s -> DynLogicTest s -> Property -> Property
+applyMonitoring :: (DynLogicModel s) => DynLogic s -> DynLogicTest s -> Property -> Property
 applyMonitoring d (DLScript s) p =
   case findMonitoring d initialAnnotatedState s of
     Just f -> f p
@@ -791,7 +791,7 @@ applyMonitoring _ Stuck{} p = p
 applyMonitoring _ Looping{} p = p
 applyMonitoring _ BadPrecondition{} p = p
 
-findMonitoring :: DynLogicModel s => DynLogic s -> Annotated s -> TestSequence s -> Maybe (Property -> Property)
+findMonitoring :: (DynLogicModel s) => DynLogic s -> Annotated s -> TestSequence s -> Maybe (Property -> Property)
 findMonitoring Stop _s TestSeqStop = Just id
 findMonitoring (After a k) s (TestSeqStep (var := a') as)
   -- TODO: do nicely with eqT instead (avoids `unsafeCoerceVar`)

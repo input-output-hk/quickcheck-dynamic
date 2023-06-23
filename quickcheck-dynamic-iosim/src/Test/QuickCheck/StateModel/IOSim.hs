@@ -25,7 +25,7 @@ type family RealizeIOSim s a where
 
 type instance Realized (IOSim s) a = RealizeIOSim s a
 
-runIOSimProperty :: Testable a => (forall s. PropertyM (IOSim s) a) -> Gen (SimTrace Property, Property)
+runIOSimProperty :: (Testable a) => (forall s. PropertyM (IOSim s) a) -> Gen (SimTrace Property, Property)
 runIOSimProperty p = do
   Capture eval <- capture
   let tr = runSimTrace (eval (monadic' p))
@@ -37,5 +37,5 @@ runIOSimProperty p = do
     Left ex ->
       pure (tr, counterexample (show ex) False)
 
-runIOSimProperty_ :: Testable a => (forall s. PropertyM (IOSim s) a) -> Gen Property
+runIOSimProperty_ :: (Testable a) => (forall s. PropertyM (IOSim s) a) -> Gen Property
 runIOSimProperty_ p = fmap snd $ runIOSimProperty p

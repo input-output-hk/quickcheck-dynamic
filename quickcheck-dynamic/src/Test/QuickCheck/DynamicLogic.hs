@@ -92,7 +92,7 @@ getModelStateDL = DL $ \s k -> k (underlyingState s) s
 getVarContextDL :: DL s VarContext
 getVarContextDL = DL $ \s k -> k (vars s) s
 
-forAllVar :: forall a s. Typeable a => DL s (Var a)
+forAllVar :: forall a s. (Typeable a) => DL s (Var a)
 forAllVar = do
   xs <- ctxAtType <$> getVarContextDL
   forAllQ $ elementsQ xs
@@ -118,12 +118,12 @@ monitorDL f = DL $ \s k -> DL.monitorDL f (k () s)
 
 -- | Generate a random value using the given `Quantification` (or list/tuple of quantifications).
 --   Generated values will only shrink to smaller values that could also have been generated.
-forAllQ :: Quantifiable q => q -> DL s (Quantifies q)
+forAllQ :: (Quantifiable q) => q -> DL s (Quantifies q)
 forAllQ q = DL $ \s k -> DL.forAllQ q $ \x -> k x s
 
 -- | Generate a random value using the given `Quantification` (or list/tuple of quantifications).
 --   Generated values will only shrink to smaller values that could also have been generated.
-forAllNonVariableQ :: QuantifyConstraints (HasNoVariables a) => Quantification a -> DL s a
+forAllNonVariableQ :: (QuantifyConstraints (HasNoVariables a)) => Quantification a -> DL s a
 forAllNonVariableQ q = DL $ \s k -> DL.forAllQ (hasNoVariablesQ q) $ \(HasNoVariables x) -> k x s
 
 runDL :: Annotated s -> DL s () -> DL.DynFormula s
