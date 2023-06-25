@@ -108,7 +108,6 @@ jobs:
       with:
         extra_nix_config: |
           accept-flake-config = true
-          log-lines = 1000
 
     - name: Github cache ~/.cabal/packages, ~/.cabal/store and dist-newstyle
       uses: actions/cache@v2.1.5
