@@ -1,4 +1,3 @@
-{ ... }:
 {
   cabal-fmt.enable = true;
 
