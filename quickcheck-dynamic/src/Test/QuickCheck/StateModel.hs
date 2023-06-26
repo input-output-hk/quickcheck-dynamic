@@ -15,6 +15,8 @@ module Test.QuickCheck.StateModel (
   WithUsedVars (..),
   Annotated (..),
   Step (..),
+  Polarity (..),
+  ActionWithPolarity (..),
   LookUp,
   Actions (..),
   pattern Actions,
@@ -34,6 +36,7 @@ module Test.QuickCheck.StateModel (
   computePrecondition,
   computeArbitraryAction,
   computeShrinkAction,
+  negativeTest,
 ) where
 
 import Control.Monad
@@ -46,6 +49,7 @@ import Data.Kind
 import Data.List
 import Data.Set qualified as Set
 import GHC.Generics
+import GHC.Stack
 import Test.QuickCheck as QC
 import Test.QuickCheck.DynamicLogic.SmartShrinking
 import Test.QuickCheck.Monadic
@@ -123,11 +127,23 @@ class
   nextState :: Typeable a => state -> Action state a -> Var a -> state
   nextState s _ _ = s
 
+  -- | Transition function for negative actions. Note that most negative testing applications
+  -- should not require an implementation of this function!
+  negativeNextState :: Typeable a => state -> Action state a -> state
+  negativeNextState s _ = s
+
   -- | Precondition for filtering generated `Action`.
   -- This function is applied before the action is performed, it is useful to refine generators that
   -- can produce more values than are useful.
   precondition :: state -> Action state a -> Bool
   precondition _ _ = True
+
+  -- | Precondition for filtering an `Action` that can meaningfully run but is supposed to fail.
+  -- An action will run as a negative action if it's precondition fails. This action should have
+  -- _no effect_ on the model state. This may not be desierable in all situations - in which case
+  -- one can override this semantics for book-keeping in `negativeNextState`.
+  negativePrecondition :: state -> Action state a -> Bool
+  negativePrecondition _ _ = False
 
 deriving instance (forall a. Show (Action state a)) => Show (Any (Action state))
 
@@ -172,12 +188,28 @@ class Monad m => RunModel state m where
   postcondition :: forall a. (state, state) -> Action state a -> LookUp m -> Realized m a -> PostconditionM m Bool
   postcondition _ _ _ _ = pure True
 
+  -- | Postcondition on the `a` value produced at some _negative_ step.
+  -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
+  -- to check the implementation produces expected errors.
+  negativePostcondition :: forall a. (state, state) -> Action state a -> LookUp m -> Realized m a -> PostconditionM m Bool
+  negativePostcondition _ _ _ _ = pure True
+
   -- | Allows the user to attach additional information to the `Property` at each step of the process.
   -- This function is given the full transition that's been executed, including the start and ending
   -- `state`, the `Action`, the current environment to `Lookup` and the value produced by `perform`
   -- while executing this step.
   monitoring :: forall a. (state, state) -> Action state a -> LookUp m -> Realized m a -> Property -> Property
   monitoring _ _ _ _ prop = prop
+
+-- | Indicate that the result of an action (in `perform`)
+-- should not be inspected by the postcondition or appear in a positive test.
+negativeTest :: HasCallStack => a
+negativeTest = error "A result of a negative test has been erronesouly inspected"
+
+computePostcondition :: forall m state a. RunModel state m => (state, state) -> ActionWithPolarity state a -> LookUp m -> Realized m a -> PostconditionM m Bool
+computePostcondition ss (ActionWithPolarity a p) l r
+  | p == PosPolarity = postcondition ss a l r
+  | otherwise = negativePostcondition ss a l r
 
 type LookUp m = forall a. Typeable a => Var a -> Realized m a
 
@@ -210,26 +242,50 @@ lookUpVar env v = case lookUpVarMaybe env v of
 
 data WithUsedVars a = WithUsedVars VarContext a
 
+data Polarity
+  = PosPolarity
+  | NegPolarity
+  deriving (Ord, Eq)
+
+instance Show Polarity where
+  show PosPolarity = "+"
+  show NegPolarity = "-"
+
+data ActionWithPolarity state a = Eq (Action state a) =>
+  ActionWithPolarity
+  { polarAction :: Action state a
+  , polarity :: Polarity
+  }
+
+instance HasVariables (Action state a) => HasVariables (ActionWithPolarity state a) where
+  getAllVariables = getAllVariables . polarAction
+
+deriving instance Eq (Action state a) => Eq (ActionWithPolarity state a)
+
 data Step state where
   (:=)
     :: (Typeable a, Eq (Action state a), Show (Action state a))
     => Var a
-    -> Action state a
+    -> ActionWithPolarity state a
     -> Step state
 
 infix 5 :=
 
 instance (forall a. HasVariables (Action state a)) => HasVariables (Step state) where
-  getAllVariables (var := act) = Set.insert (Some var) $ getAllVariables act
+  getAllVariables (var := act) = Set.insert (Some var) $ getAllVariables (polarAction act)
+
+funName :: Polarity -> String
+funName PosPolarity = "action"
+funName _ = "negativeAction"
 
 instance Show (Step state) where
-  show (var := act) = show var ++ " <- action $ " ++ show act
+  show (var := act) = show var ++ " <- " ++ funName (polarity act) ++ " $ " ++ show (polarAction act)
 
 instance Show (WithUsedVars (Step state)) where
   show (WithUsedVars ctx (var := act)) =
     if isWellTyped var ctx
-      then show var ++ " <- action $ " ++ show act
-      else "action $ " ++ show act
+      then show var ++ " <- " ++ funName (polarity act) ++ " $ " ++ show (polarAction act)
+      else funName (polarity act) ++ " $ " ++ show (polarAction act)
 
 instance Eq (Step state) where
   (v := act) == (v' := act') =
@@ -270,7 +326,7 @@ usedVariables (Actions as) = go initialAnnotatedState as
     go :: Annotated state -> [Step state] -> VarContext
     go aState [] = allVariables (underlyingState aState)
     go aState ((var := act) : steps) =
-      allVariables act
+      allVariables (polarAction act)
         <> allVariables (underlyingState aState)
         <> go (computeNextState aState act var) steps
 
@@ -289,7 +345,7 @@ instance StateModel state => Arbitrary (Actions state) where
                 , do
                     (mact, rej) <- satisfyPrecondition
                     case mact of
-                      Just (Some act) -> do
+                      Just (Some act@ActionWithPolarity{}) -> do
                         let var = mkVar step
                         (as, rejected) <- arbActions (computeNextState s act var) (step + 1)
                         return ((var := act) : as, rej ++ rejected)
@@ -307,12 +363,12 @@ instance StateModel state => Arbitrary (Actions state) where
                   Some act ->
                     if computePrecondition s act
                       then return (Just (Some act), rej)
-                      else go (m + 1) n (actionName act : rej)
+                      else go (m + 1) n (actionName (polarAction act) : rej)
 
   shrink (Actions_ rs as) =
     map (Actions_ rs) (shrinkSmart (map (prune . map fst) . shrinkList shrinker . withStates) as)
     where
-      shrinker (v := act, s) = [(unsafeCoerceVar v := act', s) | Some act' <- computeShrinkAction s act]
+      shrinker (v := act, s) = [(unsafeCoerceVar v := act', s) | Some act'@ActionWithPolarity{} <- computeShrinkAction s act]
 
 -- Running state models
 
@@ -327,31 +383,47 @@ instance Show state => Show (Annotated state) where
 initialAnnotatedState :: StateModel state => Annotated state
 initialAnnotatedState = Metadata mempty initialState
 
-computePrecondition :: StateModel state => Annotated state -> Action state a -> Bool
-computePrecondition s a =
-  all (\(Some v) -> v `isWellTyped` vars s) (getAllVariables a)
-    && precondition (underlyingState s) a
+actionWithPolarity :: (StateModel state, Eq (Action state a)) => Annotated state -> Action state a -> ActionWithPolarity state a
+actionWithPolarity s a =
+  let p
+        | precondition (underlyingState s) a = PosPolarity
+        | negativePrecondition (underlyingState s) a = NegPolarity
+        | otherwise = PosPolarity
+   in ActionWithPolarity a p
+
+computePrecondition :: StateModel state => Annotated state -> ActionWithPolarity state a -> Bool
+computePrecondition s (ActionWithPolarity a p) =
+  let polarPrecondition
+        | p == PosPolarity = precondition (underlyingState s) a
+        | otherwise = negativePrecondition (underlyingState s) a && not (precondition (underlyingState s) a)
+   in all (\(Some v) -> v `isWellTyped` vars s) (getAllVariables a)
+        && polarPrecondition
 
 computeNextState
   :: (StateModel state, Typeable a)
   => Annotated state
-  -> Action state a
+  -> ActionWithPolarity state a
   -> Var a
   -> Annotated state
-computeNextState s a v = Metadata (extendContext (vars s) v) (nextState (underlyingState s) a v)
+computeNextState s a v
+  | polarity a == PosPolarity = Metadata (extendContext (vars s) v) (nextState (underlyingState s) (polarAction a) v)
+  | otherwise = Metadata (vars s) (negativeNextState (underlyingState s) (polarAction a))
 
 computeArbitraryAction
   :: StateModel state
   => Annotated state
-  -> Gen (Any (Action state))
-computeArbitraryAction s = arbitraryAction (vars s) (underlyingState s)
+  -> Gen (Any (ActionWithPolarity state))
+computeArbitraryAction s = do
+  Some a <- arbitraryAction (vars s) (underlyingState s)
+  pure $ Some $ actionWithPolarity s a
 
 computeShrinkAction
   :: (Typeable a, StateModel state)
   => Annotated state
-  -> Action state a
-  -> [Any (Action state)]
-computeShrinkAction s = shrinkAction (vars s) (underlyingState s)
+  -> ActionWithPolarity state a
+  -> [Any (ActionWithPolarity state)]
+computeShrinkAction s (ActionWithPolarity a _) =
+  [Some (actionWithPolarity s a') | Some a' <- shrinkAction (vars s) (underlyingState s) a]
 
 prune :: StateModel state => [Step state] -> [Step state]
 prune = loop initialAnnotatedState
@@ -386,18 +458,28 @@ runActions (Actions_ rejected (Smart _ actions)) = loop initialAnnotatedState []
     loop :: Annotated state -> Env m -> [Step state] -> PropertyM m (Annotated state, Env m)
     loop _s env [] = do
       unless (null rejected) $
-        monitor (tabulate "Actions rejected by precondition" rejected)
+        monitor $
+          tabulate "Actions rejected by precondition" rejected
       return (_s, reverse env)
     loop s env ((v := act) : as) = do
       pre $ computePrecondition s act
-      ret <- run (perform (underlyingState s) act (lookUpVar env))
-      let name = actionName act
-      monitor (tabulate "Actions" [name])
+      ret <- run $ perform (underlyingState s) (polarAction act) (lookUpVar env)
+      let name = show (polarity act) ++ actionName (polarAction act)
+      monitor $ tabulate "Actions" [name]
       let var = unsafeCoerceVar v
           s' = computeNextState s act var
           env' = (var :== ret) : env
-      monitor (monitoring @state @m (underlyingState s, underlyingState s') act (lookUpVar env') ret)
-      (b, (Endo mon, Endo onFail)) <- run . runWriterT . runPost $ postcondition @state @m (underlyingState s, underlyingState s') act (lookUpVar env) ret
+      monitor $ tabulate "Action polarity" [show $ polarity act]
+      monitor $ monitoring @state @m (underlyingState s, underlyingState s') (polarAction act) (lookUpVar env') ret
+      (b, (Endo mon, Endo onFail)) <-
+        run
+          . runWriterT
+          . runPost
+          $ computePostcondition @m
+            (underlyingState s, underlyingState s')
+            act
+            (lookUpVar env)
+            ret
       monitor mon
       unless b $ monitor onFail
       assert b
