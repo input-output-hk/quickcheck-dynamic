@@ -9,6 +9,11 @@ changes.
 
 ## UNRELEASED
 
+## 3.1.1 - 2023-06-26
+
+* Added instances for `HasVariables` with custom error messages to avoid the issue of
+  missing `Generic` instances causing difficult to understand type errors.
+
 ## 3.1.0 - 2023-04-10
 
 * **BREAKING**: Change the type of `postcondition` to allow you to
