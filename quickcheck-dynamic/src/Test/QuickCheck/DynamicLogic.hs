@@ -9,6 +9,7 @@
 module Test.QuickCheck.DynamicLogic (
   DL,
   action,
+  negativeAction,
   anyAction,
   anyActions,
   anyActions_,
@@ -61,6 +62,9 @@ instance MonadFail (DL s) where
 
 action :: (Typeable a, Eq (Action s a), Show (Action s a)) => Action s a -> DL s (Var a)
 action cmd = DL $ \_ k -> DL.after cmd k
+
+negativeAction :: (Typeable a, Eq (Action s a), Show (Action s a)) => Action s a -> DL s ()
+negativeAction cmd = DL $ \_ k -> DL.afterNegative cmd (k ())
 
 anyAction :: DL s ()
 anyAction = DL $ \_ k -> DL.afterAny $ k ()

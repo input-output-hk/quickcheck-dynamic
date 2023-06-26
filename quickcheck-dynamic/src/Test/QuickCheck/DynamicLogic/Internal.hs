@@ -33,7 +33,7 @@ data DynLogic s
   | -- | After a specific action the predicate should hold
     forall a.
     (Eq (Action s a), Show (Action s a), Typeable a) =>
-    After (Action s a) (Var a -> DynPred s)
+    After (ActionWithPolarity s a) (Var a -> DynPred s)
   | Error String (DynPred s)
   | -- | Adjust the probability of picking a branch
     Weight Double (DynLogic s)
@@ -64,6 +64,13 @@ passTest = DynFormula . const $ Stop
 afterAny :: (Annotated s -> DynFormula s) -> DynFormula s
 afterAny f = DynFormula $ \n -> AfterAny $ \s -> unDynFormula (f s) n
 
+afterPolar
+  :: (Typeable a, Eq (Action s a), Show (Action s a))
+  => ActionWithPolarity s a
+  -> (Var a -> Annotated s -> DynFormula s)
+  -> DynFormula s
+afterPolar act f = DynFormula $ \n -> After act $ \x s -> unDynFormula (f x s) n
+
 -- | Given `f` must be `True` after /some/ action.
 -- `f` is passed the state resulting from executing the `Action`.
 after
@@ -71,7 +78,16 @@ after
   => Action s a
   -> (Var a -> Annotated s -> DynFormula s)
   -> DynFormula s
-after act f = DynFormula $ \n -> After act $ \x s -> unDynFormula (f x s) n
+after act f = afterPolar (ActionWithPolarity act PosPolarity) f
+
+-- | Given `f` must be `True` after /some/ action.
+-- `f` is passed the state resulting from executing the `Action`.
+afterNegative
+  :: (Typeable a, Eq (Action s a), Show (Action s a))
+  => Action s a
+  -> (Annotated s -> DynFormula s)
+  -> DynFormula s
+afterNegative act f = afterPolar (ActionWithPolarity act NegPolarity) (const f)
 
 -- | Disjunction for DL formulae.
 -- Is `True` if either formula is `True`. The choice is /angelic/, ie. it is
@@ -137,7 +153,7 @@ always p s = withSize $ \n -> toStop (p s) ||| p s ||| weight (fromIntegral n) (
 
 data FailingAction s
   = ErrorFail String
-  | forall a. (Typeable a, Eq (Action s a)) => ActionFail (Action s a)
+  | forall a. (Typeable a, Eq (Action s a)) => ActionFail (ActionWithPolarity s a)
 
 instance StateModel s => HasVariables (FailingAction s) where
   getAllVariables ErrorFail{} = mempty
@@ -145,13 +161,13 @@ instance StateModel s => HasVariables (FailingAction s) where
 
 instance StateModel s => Eq (FailingAction s) where
   ErrorFail s == ErrorFail s' = s == s'
-  ActionFail (a :: Action s a) == ActionFail (a' :: Action s a')
+  ActionFail (a :: ActionWithPolarity s a) == ActionFail (a' :: ActionWithPolarity s a')
     | Just Refl <- eqT @a @a' = a == a'
   _ == _ = False
 
 instance StateModel s => Show (FailingAction s) where
   show (ErrorFail s) = "Error " ++ show s
-  show (ActionFail a) = show a
+  show (ActionFail (ActionWithPolarity a pol)) = show pol ++ " : " ++ show a
 
 data DynLogicTest s
   = BadPrecondition (TestSequence s) (FailingAction s) (Annotated s)
@@ -285,7 +301,11 @@ instance StateModel s => Show (DynLogicTest s) where
     where
       prettyBad :: FailingAction s -> String
       prettyBad (ErrorFail e) = "assert " ++ show e ++ " False"
-      prettyBad (ActionFail a) = "action $ " ++ show a ++ "  -- Failed precondition\n   pure ()"
+      prettyBad (ActionFail (ActionWithPolarity a p)) = f ++ " $ " ++ show a ++ "  -- Failed precondition\n   pure ()"
+        where
+          f
+            | p == PosPolarity = "action"
+            | otherwise = "negativeAction"
   show (Looping ss) = prettyTestSequence (usedVariables ss) ss ++ "\n   pure ()\n   -- Looping"
   show (Stuck ss s) = prettyTestSequence (usedVariables ss) ss ++ "\n   pure ()\n   -- Stuck in state " ++ show s
   show (DLScript ss) = prettyTestSequence (usedVariables ss) ss ++ "\n   pure ()\n"
@@ -308,6 +328,9 @@ usedVariables = go initialAnnotatedState
 class StateModel s => DynLogicModel s where
   restricted :: Action s a -> Bool
   restricted _ = False
+
+restrictedPolar :: DynLogicModel s => ActionWithPolarity s a -> Bool
+restrictedPolar (ActionWithPolarity a _) = restricted a
 
 -- * Generate Properties
 
@@ -504,10 +527,10 @@ chooseNextStep s n d = do
                 AfterAny k -> do
                   m <- keepTryingUntil 100 (computeArbitraryAction s) $
                     \case
-                      Some act -> computePrecondition s act && not (restricted act)
+                      Some act -> computePrecondition s act && not (restrictedPolar act)
                   case m of
                     Nothing -> return NoStep
-                    Just (Some a) ->
+                    Just (Some a@ActionWithPolarity{}) ->
                       return $
                         Stepping
                           (Do $ mkVar n := a)
@@ -575,7 +598,7 @@ shrinkScript = shrink' initialAnnotatedState
       , ss' <- ss : shrink' s (stepDLSeq d s $ TestSeqWitness a TestSeqStop) ss
       ]
     nonstructural s d (TestSeqStep step@(var := act) ss) =
-      [TestSeqStep (unsafeCoerceVar var := act') ss | Some act' <- computeShrinkAction s act]
+      [TestSeqStep (unsafeCoerceVar var := act') ss | Some act'@ActionWithPolarity{} <- computeShrinkAction s act]
         ++ [ TestSeqStep step ss'
            | ss' <-
               shrink'
@@ -630,7 +653,7 @@ stepDL (After a k) s (Do (var := act))
   -- the type variables cleanly and do `Just Refl <- eqT ...` here instead.
   | Some a == Some act = [k (unsafeCoerceVar var) (computeNextState s act (unsafeCoerceVar var))]
 stepDL (AfterAny k) s (Do (var := act))
-  | not (restricted act) = [k (computeNextState s act var)]
+  | not (restrictedPolar act) = [k (computeNextState s act var)]
 stepDL (Alt _ d d') s step = stepDL d s step ++ stepDL d' s step
 stepDL (Stopping d) s step = stepDL d s step
 stepDL (Weight _ d) s step = stepDL d s step
@@ -728,7 +751,7 @@ stuck (AfterAny _) s =
       ( \case
           Some act ->
             computePrecondition s act
-              && not (restricted act)
+              && not (restrictedPolar act)
       )
 stuck (Alt Angelic d d') s = stuck d s && stuck d' s
 stuck (Alt Demonic d d') s = stuck d s || stuck d' s
@@ -799,7 +822,7 @@ findMonitoring (After a k) s (TestSeqStep (var := a') as)
   where
     s' = computeNextState s a' (unsafeCoerceVar var)
 findMonitoring (AfterAny k) s as@(TestSeqStep (_var := a) _)
-  | not (restricted a) = findMonitoring (After a $ const k) s as
+  | not (restrictedPolar a) = findMonitoring (After a $ const k) s as
 findMonitoring (Alt _b d d') s as =
   -- Give priority to monitoring matches to the left. Combining both
   -- results in repeated monitoring from always, which is unexpected.

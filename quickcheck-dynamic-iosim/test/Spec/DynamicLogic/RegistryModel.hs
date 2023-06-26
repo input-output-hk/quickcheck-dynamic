@@ -39,7 +39,6 @@ deriving instance Eq (Action RegState a)
 instance HasVariables (Action RegState a) where
   getAllVariables (Register _ v) = getAllVariables v
   getAllVariables (KillThread v) = getAllVariables v
-  getAllVariables (Successful a) = getAllVariables a
   getAllVariables _ = mempty
 
 instance StateModel RegState where
@@ -49,8 +48,16 @@ instance StateModel RegState where
     Register :: String -> Var ThreadId -> Action RegState (Either SomeException ())
     Unregister :: String -> Action RegState (Either SomeException ())
     KillThread :: Var ThreadId -> Action RegState ()
-    -- not generated
-    Successful :: Action RegState a -> Action RegState a
+
+  precondition s (Register name tid) =
+    name `Map.notMember` regs s
+      && tid `notElem` Map.elems (regs s)
+      && tid `notElem` dead s
+  precondition s (Unregister name) =
+    name `Map.member` regs s
+  precondition _ _ = True
+
+  negativePrecondition _ _ = True
 
   arbitraryAction ctx s =
     frequency $
@@ -89,16 +96,11 @@ instance StateModel RegState where
   shrinkAction _ _ Spawn = []
   shrinkAction ctx _ (KillThread tid) =
     [Some (KillThread tid') | tid' <- shrinkVar ctx tid]
-  shrinkAction ctx s (Successful act) =
-    Some act : [Some (Successful act') | Some act' <- shrinkAction ctx s act]
 
   initialState = RegState mempty []
 
   nextState s Spawn _ = s
-  nextState s (Register name tid) _step
-    | positive s (Register name tid) =
-        s{regs = Map.insert name tid (regs s)}
-    | otherwise = s
+  nextState s (Register name tid) _step = s{regs = Map.insert name tid (regs s)}
   nextState s (Unregister name) _step =
     s{regs = Map.delete name (regs s)}
   nextState s (KillThread tid) _ =
@@ -106,7 +108,6 @@ instance StateModel RegState where
       { dead = tid : dead s
       , regs = Map.filter (/= tid) (regs s)
       }
-  nextState s (Successful act) step = nextState s act step
   nextState s WhereIs{} _ = s
 
 type RegM s = ReaderT (Registry (IOSim s)) (IOSim s)
@@ -126,40 +127,26 @@ instance m ~ RegM s => RunModel RegState m where
   perform _ (KillThread tid) env = do
     lift $ killThread (env tid)
     lift $ threadDelay 1
-  perform s (Successful act) env = do
-    perform s act env
 
   postcondition (s, _) (WhereIs name) env mtid = do
-    monitorPost $ tabu "WhereIs" [case mtid of Nothing -> "fails"; Just _ -> "succeeds"]
     pure $ (env <$> Map.lookup name (regs s)) == mtid
-  postcondition _s Spawn _ _ = pure True
-  postcondition (s, _) act@(Register name step) _ res = do
+  postcondition _ Register{} _ res = do
+    pure $ isRight res
+  postcondition _ _ _ _ = pure True
+
+  negativePostcondition (s, _) act@Register{} _ res = do
     monitorPost $
-      tabu
-        "Register"
-        [ case res of
-            Left _ -> "fails " ++ why s act
-            Right () -> "succeeds"
+      tabulate
+        "Reason for -Register"
+        [ why s act
+        | Left{} <- [res]
         ]
-    pure $ positive s (Register name step) == isRight res
-  postcondition _s (Unregister _name) _ res = do
-    monitorPost $ tabu "Unregister" [case res of Left _ -> "fails"; Right () -> "succeeds"]
-    pure True
-  postcondition _s (KillThread _) _ _ = pure True
-  postcondition ss@(s, _) (Successful act) env res = (positive s act &&) <$> postcondition ss act env res
+    pure $ isLeft res
+  negativePostcondition _s _ _ _ = pure True
 
   monitoring (_s, s') act@(showDictAction @s -> ShowDict) _ res =
     counterexample (show res ++ " <- " ++ show act ++ "\n  -- State: " ++ show s')
       . tabulate "Registry size" [show $ Map.size (regs s')]
-
-positive :: RegState -> Action RegState a -> Bool
-positive s (Register name tid) =
-  name `Map.notMember` regs s
-    && tid `notElem` Map.elems (regs s)
-    && tid `notElem` dead s
-positive s (Unregister name) =
-  name `Map.notMember` regs s
-positive _s _ = True
 
 data ShowDict s a where
   ShowDict :: Show (Realized (RegM s) a) => ShowDict s a
@@ -170,13 +157,8 @@ showDictAction WhereIs{} = ShowDict
 showDictAction Register{} = ShowDict
 showDictAction Unregister{} = ShowDict
 showDictAction KillThread{} = ShowDict
-showDictAction (Successful a) = showDictAction a
-
-tabu :: String -> [String] -> Property -> Property
-tabu tab xs = tabulate tab xs . foldr (.) id [classify True (tab ++ ": " ++ x) | x <- xs]
 
 instance DynLogicModel RegState where
-  restricted (Successful _) = True
   restricted _ = False
 
 why :: RegState -> Action RegState a -> String
@@ -213,17 +195,6 @@ prop_Registry s =
 
 propDL :: DL RegState () -> Property
 propDL d = forAllDL d prop_Registry
-
--- Generate normal test cases
-
-canSpawn :: DL RegState (Var ThreadId)
-canSpawn = action Spawn
-
-canRegisterA :: DL RegState ()
-canRegisterA = do
-  void $ action $ Unregister "a"
-  tid <- action Spawn
-  void $ action $ Successful $ Register "a" tid
 
 -- DL helpers
 
@@ -279,7 +250,7 @@ canRegisterAlive :: String -> DL RegState ()
 canRegisterAlive name = do
   tid <- pickAlive
   unregisterNameAndTid name tid
-  action $ Successful $ Register name tid
+  action $ Register name tid
   pure ()
 
 canRegister :: DL RegState ()
@@ -293,7 +264,7 @@ canRegisterNoUnregister = do
   anyActions_
   name <- pickFreshName
   tid <- pickAlive
-  action $ Successful $ Register name tid
+  action $ Register name tid
   pure ()
 
 tests :: TestTree

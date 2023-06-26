@@ -9,6 +9,11 @@ changes.
 
 ## UNRELEASED
 
+## 3.2.0 - 2023-06-26
+
+* Added support for negative testing via `negative` and `negativePostcondition`
+  callbacks in `StateModel` and `RunModel`.
+
 ## 3.1.1 - 2023-06-26
 
 * Added instances for `HasVariables` with custom error messages to avoid the issue of
