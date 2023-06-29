@@ -25,8 +25,8 @@ jobs:
       uses: cachix/install-nix-action@v22
       with:
         extra_nix_config: |
-          trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= loony-tools:pr9m4BkM/5/eSTZlkQyRt57Jz7OMBxNSUiMC4FkcNfk=
-          substituters = https://cache.iog.io https://cache.zw3rk.com
+          extra-substituters = https://cache.iog.io https://iohk.cachix.org
+          extra-trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= iohk.cachix.org-1:DpRUyj7h7V830dp/i6Nti+NEO2/nhblbov/8MW7Rqoo=
           accept-flake-config = true
           log-lines = 1000
 
@@ -93,8 +93,8 @@ jobs:
       uses: cachix/install-nix-action@v22
       with:
         extra_nix_config: |
-          trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= loony-tools:pr9m4BkM/5/eSTZlkQyRt57Jz7OMBxNSUiMC4FkcNfk=
-          substituters = https://cache.iog.io https://cache.zw3rk.com
+          extra-substituters = https://cache.iog.io https://iohk.cachix.org
+          extra-trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= iohk.cachix.org-1:DpRUyj7h7V830dp/i6Nti+NEO2/nhblbov/8MW7Rqoo=
           accept-flake-config = true
           log-lines = 1000
 
