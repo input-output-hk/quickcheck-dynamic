@@ -22,7 +22,7 @@ jobs:
         fetch-depth: 0
 
     - name: Prepare nix
-      uses: cachix/install-nix-action@22
+      uses: cachix/install-nix-action@v22
       with:
         extra_nix_config: |
           trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= loony-tools:pr9m4BkM/5/eSTZlkQyRt57Jz7OMBxNSUiMC4FkcNfk=
@@ -90,7 +90,7 @@ jobs:
         repository: input-output-hk/quickcheck-dynamic
 
     - name: Prepare nix
-      uses: cachix/install-nix-action@22
+      uses: cachix/install-nix-action@v22
       with:
         extra_nix_config: |
           trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= loony-tools:pr9m4BkM/5/eSTZlkQyRt57Jz7OMBxNSUiMC4FkcNfk=
