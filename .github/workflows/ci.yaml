@@ -55,7 +55,6 @@ jobs:
 
     - name: Formatting
       run: 
-        # nix develop --accept-flake-config --command git add .pre-commit-config.yaml 
         nix develop --accept-flake-config --command pre-commit run fourmolu
         
     - name: Upload build & test artifacts
