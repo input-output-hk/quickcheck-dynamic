@@ -111,7 +111,7 @@ instance StateModel RegState where
 
 type RegM s = ReaderT (Registry (IOSim s)) (IOSim s)
 
-instance (m ~ RegM s) => RunModel RegState m where
+instance m ~ RegM s => RunModel RegState m where
   perform _ Spawn _ = do
     lift $ forkIO (threadDelay 10000000)
   perform _ (Register name tid) env = do

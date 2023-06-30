@@ -141,12 +141,12 @@ type family Break (c :: Constraint) (rep :: Type -> Type) :: Constraint where
 instance
   {-# OVERLAPPABLE #-}
   ( Break
-      (TypeError ( 'Text "Missing instance of HasVariables for non-Generic type " ':<>: 'ShowType a))
+      (TypeError ('Text "Missing instance of HasVariables for non-Generic type " ':<>: 'ShowType a))
       (Rep a)
   , Generic a
   , GenericHasVariables (Rep a)
-  ) =>
-  HasVariables a
+  )
+  => HasVariables a
   where
   getAllVariables = genericGetAllVariables . from
 

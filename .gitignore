@@ -2,3 +2,5 @@
 cabal.project.local
 *~
 /.direnv/
+.pre-commit-config.yaml
+result 

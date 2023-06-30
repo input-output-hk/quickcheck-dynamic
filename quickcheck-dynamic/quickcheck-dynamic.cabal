@@ -6,11 +6,10 @@ license-files:
   LICENSE
   NOTICE
 
-maintainer:      arnaud.bailly@iohk.io
-author:          Ulf Norell
-category:        Testing
-synopsis:
-  A library for stateful property-based testing
+maintainer:         arnaud.bailly@iohk.io
+author:             Ulf Norell
+category:           Testing
+synopsis:           A library for stateful property-based testing
 homepage:
   https://github.com/input-output-hk/quickcheck-dynamic#readme
 
@@ -20,8 +19,8 @@ bug-reports:
 description:
   Please see the README on GitHub at <https://github.com/input-output-hk/quickcheck-dynamic#readme>
 
-build-type:      Simple
-extra-doc-files: README.md
+build-type:         Simple
+extra-doc-files:    README.md
 extra-source-files: CHANGELOG.md
 
 source-repository head
@@ -32,54 +31,54 @@ common lang
   default-language:   Haskell2010
   default-extensions:
     ConstraintKinds
-    QuantifiedConstraints
     DataKinds
-    DeriveFunctor
-    DeriveFoldable
-    DeriveTraversable
+    DefaultSignatures
     DeriveDataTypeable
-    StandaloneDeriving
-    ImportQualifiedPost
-    TupleSections
-    LambdaCase
-    PatternSynonyms
-    GADTs
-    TypeApplications
-    ScopedTypeVariables
-    TypeFamilies
+    DeriveFoldable
+    DeriveFunctor
+    DeriveGeneric
+    DeriveTraversable
+    DerivingVia
     FlexibleContexts
     FlexibleInstances
-    MultiParamTypeClasses
-    RankNTypes
-    ViewPatterns
-    DefaultSignatures
-    TypeOperators
-    DerivingVia
-    DeriveGeneric
+    GADTs
     GeneralizedNewtypeDeriving
+    ImportQualifiedPost
+    LambdaCase
+    MultiParamTypeClasses
+    PatternSynonyms
+    QuantifiedConstraints
+    RankNTypes
+    ScopedTypeVariables
+    StandaloneDeriving
+    TupleSections
+    TypeApplications
+    TypeFamilies
+    TypeOperators
+    ViewPatterns
 
   ghc-options:
     -Wall -Wnoncanonical-monad-instances -Wunused-packages
     -Wincomplete-uni-patterns -Wincomplete-record-updates
-    -Wredundant-constraints -Widentities
-    -Wno-unused-do-bind
+    -Wredundant-constraints -Widentities -Wno-unused-do-bind
 
 library
-    import: lang
-    hs-source-dirs: src
-    exposed-modules:
-        Test.QuickCheck.DynamicLogic
-        Test.QuickCheck.DynamicLogic.CanGenerate
-        Test.QuickCheck.DynamicLogic.Internal
-        Test.QuickCheck.DynamicLogic.Quantify
-        Test.QuickCheck.DynamicLogic.SmartShrinking
-        Test.QuickCheck.DynamicLogic.Utils
-        Test.QuickCheck.Extras
-        Test.QuickCheck.StateModel
-        Test.QuickCheck.StateModel.Variables
-    build-depends:
-        QuickCheck -any,
-        base >= 4.7 && <5,
-        random -any,
-        mtl -any,
-        containers -any,
+  import:          lang
+  hs-source-dirs:  src
+  exposed-modules:
+    Test.QuickCheck.DynamicLogic
+    Test.QuickCheck.DynamicLogic.CanGenerate
+    Test.QuickCheck.DynamicLogic.Internal
+    Test.QuickCheck.DynamicLogic.Quantify
+    Test.QuickCheck.DynamicLogic.SmartShrinking
+    Test.QuickCheck.DynamicLogic.Utils
+    Test.QuickCheck.Extras
+    Test.QuickCheck.StateModel
+    Test.QuickCheck.StateModel.Variables
+
+  build-depends:
+    , base        >=4.7 && <5
+    , containers
+    , mtl
+    , QuickCheck
+    , random
