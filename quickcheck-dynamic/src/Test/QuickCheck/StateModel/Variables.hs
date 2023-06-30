@@ -15,7 +15,7 @@ module Test.QuickCheck.StateModel.Variables (
   isWellTyped,
   allVariables,
   unsafeCoerceVar,
-  unsafeNextVarIndex
+  unsafeNextVarIndex,
 ) where
 
 import Data.Data
@@ -27,8 +27,8 @@ import Data.Ord
 import Data.Set (Set)
 import Data.Set qualified as Set
 import GHC.Generics
-import GHC.Word
 import GHC.TypeLits
+import GHC.Word
 import Test.QuickCheck as QC
 
 -- | A symbolic variable for a value of type `a`
@@ -40,7 +40,6 @@ mkVar = Var
 
 instance Show (Var a) where
   show (Var i) = "var" ++ show i
-
 
 -- | This type class gives you a way to get all the symbolic variables that
 -- appear in a value.
@@ -137,15 +136,18 @@ unsafeNextVarIndex (VarCtx vs) = 1 + maximum (0 : [i | Some (Var i) <- Set.toLis
 data Dummy x
 type family Break (c :: Constraint) (rep :: Type -> Type) :: Constraint where
   Break _ Dummy = ((), ())
-  Break _ _  = ()
+  Break _ _ = ()
 
 instance
-    {-# OVERLAPPABLE #-}
-      ( Break (TypeError ('Text "Missing instance of HasVariables for non-Generic type " ':<>: 'ShowType a))
-              (Rep a)
-      , Generic a
-      , GenericHasVariables (Rep a)
-      ) => HasVariables a where
+  {-# OVERLAPPABLE #-}
+  ( Break
+      (TypeError ( 'Text "Missing instance of HasVariables for non-Generic type " ':<>: 'ShowType a))
+      (Rep a)
+  , Generic a
+  , GenericHasVariables (Rep a)
+  ) =>
+  HasVariables a
+  where
   getAllVariables = genericGetAllVariables . from
 
 class GenericHasVariables f where
