@@ -83,4 +83,3 @@ library
         random -any,
         mtl -any,
         containers -any,
-        type-errors,
