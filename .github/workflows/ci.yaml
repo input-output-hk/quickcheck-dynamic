@@ -25,8 +25,6 @@ jobs:
       uses: cachix/install-nix-action@v22
       with:
         extra_nix_config: |
-          extra-substituters = https://cache.iog.io https://iohk.cachix.org
-          extra-trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= iohk.cachix.org-1:DpRUyj7h7V830dp/i6Nti+NEO2/nhblbov/8MW7Rqoo=
           accept-flake-config = true
           log-lines = 1000
 
@@ -42,22 +40,22 @@ jobs:
         restore-keys: |
           cabal-${{ runner.os }}-${{ hashFiles('cabal.project', 'default.nix', 'shell.nix') }}
 
-    - name: Prepare nix-shell
-      run: |
-        nix-build --arg withoutDevTools true shell.nix
+    - name: Prepare nix shell
+      run: 
+        nix develop --build 
 
     - name: Build
       run: |
-        nix-shell --arg withoutDevTools true --run 'cabal update'
-        nix-shell --arg withoutDevTools true --run 'cabal build all --ghc-options=-Werror'
+        nix develop --command cabal update
+        nix develop --command cabal build all --ghc-options=-Werror
 
     - name: Test
-      run: |
-        nix-shell --arg withoutDevTools true --run 'cabal test all --test-options "--xml=test-results.xml"'
+      run: 
+        nix develop --command cabal test all --test-options "--xml=test-results.xml"
 
     - name: Formatting
-      run: |
-        nix-shell --arg withoutDevTools false --run './fmt.sh check'
+      run: 
+        nix develop --command ./fmt.sh check
 
     - name: Upload build & test artifacts
       uses: actions/upload-artifact@v2
@@ -93,8 +91,6 @@ jobs:
       uses: cachix/install-nix-action@v22
       with:
         extra_nix_config: |
-          extra-substituters = https://cache.iog.io https://iohk.cachix.org
-          extra-trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= iohk.cachix.org-1:DpRUyj7h7V830dp/i6Nti+NEO2/nhblbov/8MW7Rqoo=
           accept-flake-config = true
           log-lines = 1000
 
@@ -110,7 +106,7 @@ jobs:
 
     - name: Documentation (Haddock)
       run: |
-        nix-shell --arg withoutDevTools true --run '.github/workflows/ci-haddock.sh'
+        nix develop --command .github/workflows/ci-haddock.sh
 
     - name: Upload build & test artifacts
       uses: actions/upload-artifact@v2
