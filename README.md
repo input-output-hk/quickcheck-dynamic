@@ -52,7 +52,7 @@ Before you start using nix, please make sure you've configured haskell.nix cachi
 
 * Building with nix should be as simple as:
   ```
-  nix build .#ghc927-quickcheck-dynamic-lib-quickcheck-dynamic
+  nix build .#quickcheck-dynamic-lib-quickcheck-dynamic-ghc927
   ```
 * To enter a shell providing a complete haskell toolchain:
   ```

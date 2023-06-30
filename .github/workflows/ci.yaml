@@ -28,12 +28,6 @@ jobs:
           accept-flake-config = true
           log-lines = 1000
 
-    - name: Cachix cache of nix derivations
-      uses: cachix/cachix-action@v10
-      with:
-        name: hydra-node
-        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-
     - name: Github cache ~/.cabal/packages, ~/.cabal/store and dist-newstyle
       uses: actions/cache@v2.1.5
       with:
@@ -61,7 +55,7 @@ jobs:
 
     - name: Formatting
       run: 
-        nix develop --accept-flake-config --command git add .pre-commit-config.yaml 
+        # nix develop --accept-flake-config --command git add .pre-commit-config.yaml 
         nix develop --accept-flake-config --command pre-commit run fourmolu
         
     - name: Upload build & test artifacts
