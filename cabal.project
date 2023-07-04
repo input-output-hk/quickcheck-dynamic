@@ -4,12 +4,5 @@ packages:
 
 tests: true
 
--- TODO: remove once io-sim is on hackage
-source-repository-package
-  type: git
-  location: https://github.com/input-output-hk/io-sim
-  tag: 6b81d7c6f0d61b508f423ea93c9fd2085d5f7254
-  --sha256: 091mgpwm4bq2cbysmmvgwzdyzzycgmp5vznlwmlryj64mcmnd0wi
-  subdir:
-    io-classes
-    io-sim
+allow-newer:
+  text
