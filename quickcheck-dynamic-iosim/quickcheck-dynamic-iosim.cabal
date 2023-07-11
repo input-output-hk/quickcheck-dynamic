@@ -62,26 +62,3 @@ library
     , QuickCheck
     , quickcheck-dynamic
     , stm
-
-test-suite quickcheck-dynamic-iosim-test
-  import:         lang
-  type:           exitcode-stdio-1.0
-  main-is:        Spec.hs
-  hs-source-dirs: test
-  other-modules:
-    Spec.DynamicLogic.Registry
-    Spec.DynamicLogic.RegistryModel
-
-  ghc-options:    -rtsopts
-  build-depends:
-    , base                      >=4.7 && <5
-    , containers
-    , io-classes
-    , io-sim
-    , mtl
-    , QuickCheck
-    , quickcheck-dynamic
-    , quickcheck-dynamic-iosim
-    , tasty
-    , tasty-quickcheck
-    , tasty-test-reporter
