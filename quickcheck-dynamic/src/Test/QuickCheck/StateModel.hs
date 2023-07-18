@@ -139,11 +139,11 @@ class
   precondition _ _ = True
 
   -- | Precondition for filtering an `Action` that can meaningfully run but is supposed to fail.
-  -- An action will run as a negative action if it's precondition fails. This action should have
-  -- _no effect_ on the model state. This may not be desierable in all situations - in which case
-  -- one can override this semantics for book-keeping in `negativeNextState`.
-  negativePrecondition :: state -> Action state a -> Bool
-  negativePrecondition _ _ = False
+  -- An action will run as a _negative_ action if the `precondition` fails and `validFailingAction` succeeds.
+  -- A negative action should have _no effect_ on the model state. This may not be desierable in all
+  -- situations - in which case one can override this semantics for book-keeping in `negativeNextState`.
+  validFailingAction :: state -> Action state a -> Bool
+  validFailingAction _ _ = False
 
 deriving instance (forall a. Show (Action state a)) => Show (Any (Action state))
 
@@ -387,7 +387,7 @@ actionWithPolarity :: (StateModel state, Eq (Action state a)) => Annotated state
 actionWithPolarity s a =
   let p
         | precondition (underlyingState s) a = PosPolarity
-        | negativePrecondition (underlyingState s) a = NegPolarity
+        | validFailingAction (underlyingState s) a = NegPolarity
         | otherwise = PosPolarity
    in ActionWithPolarity a p
 
@@ -395,7 +395,7 @@ computePrecondition :: StateModel state => Annotated state -> ActionWithPolarity
 computePrecondition s (ActionWithPolarity a p) =
   let polarPrecondition
         | p == PosPolarity = precondition (underlyingState s) a
-        | otherwise = negativePrecondition (underlyingState s) a && not (precondition (underlyingState s) a)
+        | otherwise = validFailingAction (underlyingState s) a && not (precondition (underlyingState s) a)
    in all (\(Some v) -> v `isWellTyped` vars s) (getAllVariables a)
         && polarPrecondition
 
