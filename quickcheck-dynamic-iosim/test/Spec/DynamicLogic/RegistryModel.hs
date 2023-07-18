@@ -134,7 +134,7 @@ instance m ~ RegM s => RunModel RegState m where
     pure $ isRight res
   postcondition _ _ _ _ = pure True
 
-  negativePostcondition (s, _) act@Register{} _ res = do
+  postconditionOnFailure (s, _) act@Register{} _ res = do
     monitorPost $
       tabulate
         "Reason for -Register"
@@ -142,7 +142,7 @@ instance m ~ RegM s => RunModel RegState m where
         | Left{} <- [res]
         ]
     pure $ isLeft res
-  negativePostcondition _s _ _ _ = pure True
+  postconditionOnFailure _s _ _ _ = pure True
 
   monitoring (_s, s') act@(showDictAction @s -> ShowDict) _ res =
     counterexample (show res ++ " <- " ++ show act ++ "\n  -- State: " ++ show s')
