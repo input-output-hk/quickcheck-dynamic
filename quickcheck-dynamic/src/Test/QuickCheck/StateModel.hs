@@ -73,6 +73,12 @@ import Test.QuickCheck.StateModel.Variables
 --    the action is /rejected/ and a new one is tried. This is also useful when shrinking a trace
 --    in order to ensure that removing some `Action` still produces a valid trace. The `precondition` can be
 --    somewhat redundant with the generator's conditions,
+--  * `validFailingAction`: Specifies when an action that fails it's `precondition` can still run as what is
+--    called a _negative_ action. This means that the action is (1) expected to fail and (2) not expected to
+--    change the model state. This is very useful for testing the checks and failure conditions in the SUT
+--    are implemented correctly. Should it be necessary to update the model state with e.g. book-keeping for
+--    a negative action one can define `negativeNextState` - but it is generally recommended to let this be
+--    as simple an action as possible.
 class
   ( forall a. Show (Action state a)
   , forall a. HasVariables (Action state a)
@@ -188,11 +194,12 @@ class Monad m => RunModel state m where
   postcondition :: forall a. (state, state) -> Action state a -> LookUp m -> Realized m a -> PostconditionM m Bool
   postcondition _ _ _ _ = pure True
 
-  -- | Postcondition on the `a` value produced at some _negative_ step.
+  -- | Postcondition on the result of running a _negative_ `Action`.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
-  -- to check the implementation produces expected errors.
-  negativePostcondition :: forall a. (state, state) -> Action state a -> LookUp m -> Realized m a -> PostconditionM m Bool
-  negativePostcondition _ _ _ _ = pure True
+  -- to check the implementation produces e.g. the expected errors or to check that the SUT hasn't
+  -- been updated during the execution of the negative action.
+  postconditionOnFailure :: forall a. (state, state) -> Action state a -> LookUp m -> Realized m a -> PostconditionM m Bool
+  postconditionOnFailure _ _ _ _ = pure True
 
   -- | Allows the user to attach additional information to the `Property` at each step of the process.
   -- This function is given the full transition that's been executed, including the start and ending
@@ -202,14 +209,18 @@ class Monad m => RunModel state m where
   monitoring _ _ _ _ prop = prop
 
 -- | Indicate that the result of an action (in `perform`)
--- should not be inspected by the postcondition or appear in a positive test.
+-- should not be inspected by the postcondition or appear
+-- in a positive test. Useful when we want to give a type
+-- for an `Action` like `SomeAct :: Action SomeState SomeType`
+-- instead of `SomeAct :: Action SomeState (Either SomeError SomeType)`
+-- but still need to return something in `perform` in the failure case.
 negativeTest :: HasCallStack => a
 negativeTest = error "A result of a negative test has been erronesouly inspected"
 
 computePostcondition :: forall m state a. RunModel state m => (state, state) -> ActionWithPolarity state a -> LookUp m -> Realized m a -> PostconditionM m Bool
 computePostcondition ss (ActionWithPolarity a p) l r
   | p == PosPolarity = postcondition ss a l r
-  | otherwise = negativePostcondition ss a l r
+  | otherwise = postconditionOnFailure ss a l r
 
 type LookUp m = forall a. Typeable a => Var a -> Realized m a
 
