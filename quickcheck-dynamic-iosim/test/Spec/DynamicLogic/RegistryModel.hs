@@ -57,7 +57,7 @@ instance StateModel RegState where
     name `Map.member` regs s
   precondition _ _ = True
 
-  negativePrecondition _ _ = True
+  validFailingAction _ _ = True
 
   arbitraryAction ctx s =
     frequency $
