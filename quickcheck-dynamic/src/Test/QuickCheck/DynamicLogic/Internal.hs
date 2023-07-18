@@ -80,8 +80,9 @@ after
   -> DynFormula s
 after act f = afterPolar (ActionWithPolarity act PosPolarity) f
 
--- | Given `f` must be `True` after /some/ action.
--- `f` is passed the state resulting from executing the `Action`.
+-- | Given `f` must be `True` after /some/ negative action.
+-- `f` is passed the state resulting from executing the `Action`
+-- as a negative action.
 afterNegative
   :: (Typeable a, Eq (Action s a), Show (Action s a))
   => Action s a
