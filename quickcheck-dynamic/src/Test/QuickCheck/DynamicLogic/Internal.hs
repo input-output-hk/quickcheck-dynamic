@@ -306,7 +306,7 @@ instance StateModel s => Show (DynLogicTest s) where
         where
           f
             | p == PosPolarity = "action"
-            | otherwise = "negativeAction"
+            | otherwise = "failingAction"
   show (Looping ss) = prettyTestSequence (usedVariables ss) ss ++ "\n   pure ()\n   -- Looping"
   show (Stuck ss s) = prettyTestSequence (usedVariables ss) ss ++ "\n   pure ()\n   -- Stuck in state " ++ show s
   show (DLScript ss) = prettyTestSequence (usedVariables ss) ss ++ "\n   pure ()\n"
