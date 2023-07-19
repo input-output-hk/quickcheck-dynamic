@@ -36,7 +36,7 @@ module Test.QuickCheck.StateModel (
   computePrecondition,
   computeArbitraryAction,
   computeShrinkAction,
-  negativeTest,
+  failureResult,
 ) where
 
 import Control.Monad
@@ -77,7 +77,7 @@ import Test.QuickCheck.StateModel.Variables
 --    called a _negative_ action. This means that the action is (1) expected to fail and (2) not expected to
 --    change the model state. This is very useful for testing the checks and failure conditions in the SUT
 --    are implemented correctly. Should it be necessary to update the model state with e.g. book-keeping for
---    a negative action one can define `negativeNextState` - but it is generally recommended to let this be
+--    a negative action one can define `failureNextState` - but it is generally recommended to let this be
 --    as simple an action as possible.
 class
   ( forall a. Show (Action state a)
@@ -135,8 +135,8 @@ class
 
   -- | Transition function for negative actions. Note that most negative testing applications
   -- should not require an implementation of this function!
-  negativeNextState :: Typeable a => state -> Action state a -> state
-  negativeNextState s _ = s
+  failureNextState :: Typeable a => state -> Action state a -> state
+  failureNextState s _ = s
 
   -- | Precondition for filtering generated `Action`.
   -- This function is applied before the action is performed, it is useful to refine generators that
@@ -147,7 +147,7 @@ class
   -- | Precondition for filtering an `Action` that can meaningfully run but is supposed to fail.
   -- An action will run as a _negative_ action if the `precondition` fails and `validFailingAction` succeeds.
   -- A negative action should have _no effect_ on the model state. This may not be desierable in all
-  -- situations - in which case one can override this semantics for book-keeping in `negativeNextState`.
+  -- situations - in which case one can override this semantics for book-keeping in `failureNextState`.
   validFailingAction :: state -> Action state a -> Bool
   validFailingAction _ _ = False
 
@@ -214,8 +214,8 @@ class Monad m => RunModel state m where
 -- for an `Action` like `SomeAct :: Action SomeState SomeType`
 -- instead of `SomeAct :: Action SomeState (Either SomeError SomeType)`
 -- but still need to return something in `perform` in the failure case.
-negativeTest :: HasCallStack => a
-negativeTest = error "A result of a negative test has been erronesouly inspected"
+failureResult :: HasCallStack => a
+failureResult = error "A result of a failing action has been erronesouly inspected"
 
 computePostcondition :: forall m state a. RunModel state m => (state, state) -> ActionWithPolarity state a -> LookUp m -> Realized m a -> PostconditionM m Bool
 computePostcondition ss (ActionWithPolarity a p) l r
@@ -287,7 +287,7 @@ instance (forall a. HasVariables (Action state a)) => HasVariables (Step state) 
 
 funName :: Polarity -> String
 funName PosPolarity = "action"
-funName _ = "negativeAction"
+funName _ = "failingAction"
 
 instance Show (Step state) where
   show (var := act) = show var ++ " <- " ++ funName (polarity act) ++ " $ " ++ show (polarAction act)
@@ -418,7 +418,7 @@ computeNextState
   -> Annotated state
 computeNextState s a v
   | polarity a == PosPolarity = Metadata (extendContext (vars s) v) (nextState (underlyingState s) (polarAction a) v)
-  | otherwise = Metadata (vars s) (negativeNextState (underlyingState s) (polarAction a))
+  | otherwise = Metadata (vars s) (failureNextState (underlyingState s) (polarAction a))
 
 computeArbitraryAction
   :: StateModel state
