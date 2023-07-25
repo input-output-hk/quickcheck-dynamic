@@ -429,35 +429,36 @@ computeArbitraryAction s = do
   pure $ Some $ actionWithPolarity s a
 
 computeShrinkAction
-  :: (Typeable a, StateModel state)
+  :: forall state a
+   . (Typeable a, StateModel state)
   => Annotated state
   -> ActionWithPolarity state a
   -> [Any (ActionWithPolarity state)]
 computeShrinkAction s (ActionWithPolarity a _) =
   [Some (actionWithPolarity s a') | Some a' <- shrinkAction (vars s) (underlyingState s) a]
 
-prune :: StateModel state => [Step state] -> [Step state]
+prune :: forall state. StateModel state => [Step state] -> [Step state]
 prune = loop initialAnnotatedState
   where
     loop _s [] = []
     loop s ((var := act) : as)
-      | computePrecondition s act =
+      | computePrecondition @state s act =
           (var := act) : loop (computeNextState s act var) as
       | otherwise =
           loop s as
 
-withStates :: StateModel state => [Step state] -> [(Step state, Annotated state)]
+withStates :: forall state. StateModel state => [Step state] -> [(Step state, Annotated state)]
 withStates = loop initialAnnotatedState
   where
     loop _s [] = []
     loop s ((var := act) : as) =
-      (var := act, s) : loop (computeNextState s act var) as
+      (var := act, s) : loop (computeNextState @state s act var) as
 
-stateAfter :: StateModel state => Actions state -> Annotated state
+stateAfter :: forall state. StateModel state => Actions state -> Annotated state
 stateAfter (Actions actions) = loop initialAnnotatedState actions
   where
     loop s [] = s
-    loop s ((var := act) : as) = loop (computeNextState s act var) as
+    loop s ((var := act) : as) = loop (computeNextState @state s act var) as
 
 runActions
   :: forall state m
