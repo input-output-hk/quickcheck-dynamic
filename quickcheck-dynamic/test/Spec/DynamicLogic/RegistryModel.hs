@@ -1,12 +1,8 @@
 module Spec.DynamicLogic.RegistryModel where
 
-import Control.Concurrent (ThreadId)
-import Control.Exception (SomeException (..))
-import Control.Monad.Class.MonadFork hiding (ThreadId)
+import Control.Concurrent
+import Control.Exception
 
-import Control.Monad.Class.MonadThrow (try)
-import Control.Monad.Class.MonadTimer (threadDelay)
-import Control.Monad.IOSim
 import GHC.Generics
 
 import Control.Monad.Reader
@@ -25,7 +21,6 @@ import Spec.DynamicLogic.Registry
 import Test.QuickCheck.DynamicLogic
 import Test.QuickCheck.Extras
 import Test.QuickCheck.StateModel
-import Test.QuickCheck.StateModel.IOSim
 
 data RegState = RegState
   { regs :: Map String (Var ThreadId)
@@ -110,9 +105,9 @@ instance StateModel RegState where
       }
   nextState s WhereIs{} _ = s
 
-type RegM s = ReaderT (Registry (IOSim s)) (IOSim s)
+type RegM = ReaderT Registry IO
 
-instance m ~ RegM s => RunModel RegState m where
+instance RunModel RegState RegM where
   perform _ Spawn _ = do
     lift $ forkIO (threadDelay 10000000)
   perform _ (Register name tid) env = do
@@ -126,7 +121,7 @@ instance m ~ RegM s => RunModel RegState m where
     lift $ whereis reg name
   perform _ (KillThread tid) env = do
     lift $ killThread (env tid)
-    lift $ threadDelay 1
+    lift $ threadDelay 100
 
   postcondition (s, _) (WhereIs name) env mtid = do
     pure $ (env <$> Map.lookup name (regs s)) == mtid
@@ -144,14 +139,14 @@ instance m ~ RegM s => RunModel RegState m where
     pure $ isLeft res
   postconditionOnFailure _s _ _ _ = pure True
 
-  monitoring (_s, s') act@(showDictAction @s -> ShowDict) _ res =
+  monitoring (_s, s') act@(showDictAction -> ShowDict) _ res =
     counterexample (show res ++ " <- " ++ show act ++ "\n  -- State: " ++ show s')
       . tabulate "Registry size" [show $ Map.size (regs s')]
 
-data ShowDict s a where
-  ShowDict :: Show (Realized (RegM s) a) => ShowDict s a
+data ShowDict a where
+  ShowDict :: Show (Realized RegM a) => ShowDict a
 
-showDictAction :: forall s a. Action RegState a -> ShowDict s a
+showDictAction :: forall a. Action RegState a -> ShowDict a
 showDictAction Spawn{} = ShowDict
 showDictAction WhereIs{} = ShowDict
 showDictAction Register{} = ShowDict
@@ -186,12 +181,11 @@ allNames = ["a", "b", "c", "d", "e"]
 
 prop_Registry :: Actions RegState -> Property
 prop_Registry s =
-  property $
-    runIOSimProperty_ $ do
-      monitor $ counterexample "\nExecution\n"
-      reg <- lift setupRegistry
-      runPropertyReaderT (runActions s) reg
-      QC.assert True
+  monadicIO $ do
+    monitor $ counterexample "\nExecution\n"
+    reg <- lift setupRegistry
+    runPropertyReaderT (runActions s) reg
+    QC.assert True
 
 propDL :: DL RegState () -> Property
 propDL d = forAllDL d prop_Registry
