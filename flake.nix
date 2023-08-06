@@ -10,7 +10,7 @@
   };
 
 
-  outputs = inputs: inputs.iogx.lib.mkFlake inputs ["x86_64-darwin"];
+  outputs = inputs: inputs.iogx.lib.mkFlake inputs ["x86_64-linux" "x86_64-darwin" "aarch64-darwin"];
 
 
   nixConfig = {
