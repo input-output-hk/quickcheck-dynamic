@@ -10,7 +10,10 @@
   };
 
 
-  outputs = inputs: inputs.iogx.lib.mkFlake ./. { inherit inputs; };
+  outputs = inputs: inputs.iogx.lib.mkFlake { 
+    inherit inputs;
+    repoRoot = ./.;
+  };
 
 
   nixConfig = {
