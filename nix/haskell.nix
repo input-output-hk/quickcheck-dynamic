@@ -2,5 +2,5 @@
 # https://www.github.com/input-output-hk/iogx#32-nixhaskellnix
 
 {
-  supportedCompilers = ["ghc928"];
+  supportedCompilers = ["ghc927"];
 }
