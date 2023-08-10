@@ -117,6 +117,22 @@
         "type": "github"
       }
     },
+    "easy-purescript-nix": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1689933391,
+        "narHash": "sha256-jUuy2OzmxegEn0KT3u1uf87eGGA33+of9HodIqS3PLY=",
+        "owner": "justinwoo",
+        "repo": "easy-purescript-nix",
+        "rev": "5dcea83eecb56241ed72e3631d47e87bb11e45b9",
+        "type": "github"
+      },
+      "original": {
+        "owner": "justinwoo",
+        "repo": "easy-purescript-nix",
+        "type": "github"
+      }
+    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -416,6 +432,7 @@
     "iogx": {
       "inputs": {
         "CHaP": "CHaP",
+        "easy-purescript-nix": "easy-purescript-nix",
         "flake-utils": "flake-utils",
         "hackage": "hackage",
         "haskell-language-server-1_8_0_0": "haskell-language-server-1_8_0_0",
@@ -431,11 +448,11 @@
         "sphinxcontrib-haddock": "sphinxcontrib-haddock"
       },
       "locked": {
-        "lastModified": 1691533306,
-        "narHash": "sha256-xPBQprB9edO8SEcbG316hBiId+rL1hzI6E5QC56+UXg=",
+        "lastModified": 1691655486,
+        "narHash": "sha256-y6NCaFSAe/OtrK09K9NlTpQOhiBEDVfK1DR7Kpw7Kso=",
         "owner": "input-output-hk",
         "repo": "iogx",
-        "rev": "ea4b683ad0ffc5cd9b7eb05aebdd3a15b66668d3",
+        "rev": "2f081f1e9a71f04b0adf795445956ea84fc60313",
         "type": "github"
       },
       "original": {
