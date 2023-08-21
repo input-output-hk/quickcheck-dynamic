@@ -9,6 +9,8 @@ changes.
 
 ## UNRELEASED
 
+## 3.2.0
+
 * Added support for negative testing via `validFailingAction` and `postconditionOnFailure`
   callbacks in `StateModel` and `RunModel`.
 
