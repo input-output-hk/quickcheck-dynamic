@@ -341,7 +341,7 @@ usedVariables (Actions as) = go initialAnnotatedState as
         <> allVariables (underlyingState aState)
         <> go (computeNextState aState act var) steps
 
-instance StateModel state => Arbitrary (Actions state) where
+instance forall state. StateModel state => Arbitrary (Actions state) where
   arbitrary = do
     (as, rejected) <- arbActions initialAnnotatedState 1
     return $ Actions_ rejected (Smart 0 as)
@@ -377,9 +377,27 @@ instance StateModel state => Arbitrary (Actions state) where
                       else go (m + 1) n (actionName (polarAction act) : rej)
 
   shrink (Actions_ rs as) =
-    map (Actions_ rs) (shrinkSmart (map (prune . map fst) . shrinkList shrinker . withStates) as)
+    map (Actions_ rs) (shrinkSmart (map (prune . map fst) . concatMap customActionsShrinker . shrinkList shrinker . withStates) as)
     where
       shrinker (v := act, s) = [(unsafeCoerceVar v := act', s) | Some act'@ActionWithPolarity{} <- computeShrinkAction s act]
+      customActionsShrinker :: [(Step state, Annotated state)] -> [[(Step state, Annotated state)]]
+      customActionsShrinker acts =
+        let usedVars = mconcat [getAllVariables a <> getAllVariables (underlyingState s) | (_ := a, s) <- acts]
+            onlyBinding as' = [p | p@(v := _, _) <- as', Some v `Set.member` usedVars]
+         in -- Don't do any shrinking
+            [ acts
+            ]
+              ++
+              -- Remove all actions that bind an unused variable
+              [ onlyBinding acts
+              ]
+              ++
+              -- Remove all actions that bind an unused variable
+              -- unless it's the first action (to capture e.g. an
+              -- initial setup action)
+              [ head acts : onlyBinding (tail acts)
+              | not $ null acts
+              ]
 
 -- Running state models
 
