@@ -383,21 +383,13 @@ instance forall state. StateModel state => Arbitrary (Actions state) where
       customActionsShrinker :: [(Step state, Annotated state)] -> [[(Step state, Annotated state)]]
       customActionsShrinker acts =
         let usedVars = mconcat [getAllVariables a <> getAllVariables (underlyingState s) | (_ := a, s) <- acts]
-            onlyBinding as' = [p | p@(v := _, _) <- as', Some v `Set.member` usedVars]
-         in -- Don't do any shrinking
-            [ acts
-            ]
-              ++
-              -- Remove all actions that bind an unused variable
-              [ onlyBinding acts
-              ]
-              ++
-              -- Remove all actions that bind an unused variable
-              -- unless it's the first action (to capture e.g. an
-              -- initial setup action)
-              [ head acts : onlyBinding (tail acts)
-              | not $ null acts
-              ]
+            binding (v := _, _) = Some v `Set.member` usedVars
+            -- Remove at most one non-binding action
+            go [] = [[]]
+            go (p : ps)
+              | binding p = map (p :) (go ps)
+              | otherwise = ps : map (p :) (go ps)
+         in go acts
 
 -- Running state models
 
