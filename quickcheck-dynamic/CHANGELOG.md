@@ -9,6 +9,8 @@ changes.
 
 ## UNRELEASED
 
+* Added some lightweight negative-shrinking based on a simple dependency analysis.
+
 ## 3.2.0
 
 * Added support for negative testing via `validFailingAction` and `postconditionOnFailure`
