@@ -94,7 +94,7 @@ test-suite quickcheck-dynamic-test
 
   ghc-options:    -rtsopts
   build-depends:
-    , base                 >=4.7 && <5
+    , base
     , containers
     , mtl
     , QuickCheck
