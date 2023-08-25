@@ -381,6 +381,7 @@ instance forall state. StateModel state => Arbitrary (Actions state) where
     where
       shrinker :: (Step state, Annotated state) -> [(Step state, Annotated state)]
       shrinker (v := act, s) = [(unsafeCoerceVar v := act', s) | Some act'@ActionWithPolarity{} <- computeShrinkAction s act]
+
       customActionsShrinker :: [(Step state, Annotated state)] -> [[(Step state, Annotated state)]]
       customActionsShrinker acts =
         let usedVars = mconcat [getAllVariables a <> getAllVariables (underlyingState s) | (_ := a, s) <- acts]
