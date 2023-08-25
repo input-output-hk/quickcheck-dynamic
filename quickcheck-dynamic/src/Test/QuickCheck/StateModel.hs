@@ -379,6 +379,7 @@ instance forall state. StateModel state => Arbitrary (Actions state) where
   shrink (Actions_ rs as) =
     map (Actions_ rs) (shrinkSmart (map (prune . map fst) . concatMap customActionsShrinker . shrinkList shrinker . withStates) as)
     where
+      shrinker :: (Step state, Annotated state) -> [(Step state, Annotated state)]
       shrinker (v := act, s) = [(unsafeCoerceVar v := act', s) | Some act'@ActionWithPolarity{} <- computeShrinkAction s act]
       customActionsShrinker :: [(Step state, Annotated state)] -> [[(Step state, Annotated state)]]
       customActionsShrinker acts =

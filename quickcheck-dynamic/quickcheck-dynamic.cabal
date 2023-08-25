@@ -77,7 +77,7 @@ library
     Test.QuickCheck.StateModel.Variables
 
   build-depends:
-    , base
+    , base        >=4.7 && <5
     , containers
     , mtl
     , QuickCheck
