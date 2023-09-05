@@ -43,7 +43,7 @@ import Control.Monad
 import Control.Monad.Identity
 import Control.Monad.Reader
 import Control.Monad.State
-import Control.Monad.Writer (Endo (..), WriterT, runWriterT, tell)
+import Control.Monad.Writer (WriterT, runWriterT, tell)
 import Data.Data
 import Data.Kind
 import Data.List
@@ -54,6 +54,7 @@ import Test.QuickCheck as QC
 import Test.QuickCheck.DynamicLogic.SmartShrinking
 import Test.QuickCheck.Monadic
 import Test.QuickCheck.StateModel.Variables
+import Data.Monoid (Endo (..))
 
 -- | The typeclass users implement to define a model against which to validate some implementation.
 --
@@ -163,7 +164,7 @@ type instance Realized (WriterT w m) a = Realized m a
 type instance Realized Identity a = a
 
 newtype PostconditionM m a = PostconditionM {runPost :: WriterT (Endo Property, Endo Property) m a}
-  deriving (Functor, Applicative, Monad, MonadTrans)
+  deriving (Functor, Applicative, Monad)
 
 -- | Apply the property transformation to the property after evaluating
 -- the postcondition. Useful for collecting statistics while avoiding
