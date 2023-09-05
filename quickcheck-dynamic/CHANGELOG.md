@@ -11,6 +11,10 @@ changes.
 
 * Added some lightweight negative-shrinking based on a simple dependency analysis.
 
+## 3.3.0
+
+* Added suppport for GHC 9.6.2 compiler
+
 ## 3.2.0
 
 * Added support for negative testing via `validFailingAction` and `postconditionOnFailure`
