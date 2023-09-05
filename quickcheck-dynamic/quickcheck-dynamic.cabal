@@ -102,4 +102,3 @@ test-suite quickcheck-dynamic-test
     , stm
     , tasty
     , tasty-quickcheck
-    , tasty-test-reporter

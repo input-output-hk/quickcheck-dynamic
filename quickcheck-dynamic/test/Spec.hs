@@ -4,10 +4,9 @@ module Main (main) where
 
 import Spec.DynamicLogic.RegistryModel qualified
 import Test.Tasty
-import Test.Tasty.Runners.Reporter qualified as Reporter
 
 main :: IO ()
-main = defaultMainWithIngredients [Reporter.ingredient] tests
+main = defaultMain tests
 
 tests :: TestTree
 tests =
