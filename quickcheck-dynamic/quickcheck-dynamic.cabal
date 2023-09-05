@@ -79,7 +79,7 @@ library
   build-depends:
     , base        >=4.7 && <5
     , containers
-    , mtl
+    , mtl         ^>=2.2
     , QuickCheck
     , random
 
