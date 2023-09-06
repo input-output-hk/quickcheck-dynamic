@@ -55,7 +55,7 @@ jobs:
 
     - name: Formatting
       run:
-        nix develop --accept-flake-config --command pre-commit run fourmolu
+        nix develop --accept-flake-config --command fourmolu --mode check .
 
   haddock:
     name: "Haddock & benchmarks"
