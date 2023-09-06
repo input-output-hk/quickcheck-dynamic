@@ -51,7 +51,7 @@ jobs:
 
     - name: Test
       run:
-        nix develop --accept-flake-config --command cabal test all --test-options "--xml=test-results.xml"
+        nix develop --accept-flake-config --command cabal test all
 
     - name: Formatting
       run:
