@@ -47,6 +47,7 @@ import Control.Monad.Writer (WriterT, runWriterT, tell)
 import Data.Data
 import Data.Kind
 import Data.List
+import Data.Monoid (Endo (..))
 import Data.Set qualified as Set
 import GHC.Generics
 import GHC.Stack
@@ -54,7 +55,6 @@ import Test.QuickCheck as QC
 import Test.QuickCheck.DynamicLogic.SmartShrinking
 import Test.QuickCheck.Monadic
 import Test.QuickCheck.StateModel.Variables
-import Data.Monoid (Endo (..))
 
 -- | The typeclass users implement to define a model against which to validate some implementation.
 --
