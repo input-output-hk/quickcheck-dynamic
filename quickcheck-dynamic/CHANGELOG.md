@@ -11,6 +11,10 @@ changes.
 
 * Added some lightweight negative-shrinking based on a simple dependency analysis.
 
+## 3.3.1
+
+* Adapt code to _not_ constrain [mtl](https://hackage.haskell.org/package/mtl) version too much
+
 ## 3.3.0
 
 * Added suppport for GHC 9.6.2 compiler
