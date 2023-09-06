@@ -41,8 +41,8 @@ jobs:
           cabal-${{ runner.os }}-${{ hashFiles('cabal.project', 'default.nix', 'shell.nix') }}
 
     - name: Prepare nix shell
-      run: 
-        nix develop --accept-flake-config --build 
+      run:
+        nix develop --accept-flake-config --build
 
     - name: Build
       run: |
@@ -50,33 +50,12 @@ jobs:
         nix develop --accept-flake-config --command cabal build all --ghc-options=-Werror
 
     - name: Test
-      run: 
-        nix develop --accept-flake-config --command cabal test all --test-options "--xml=test-results.xml"
+      run:
+        nix develop --accept-flake-config --command cabal test all
 
     - name: Formatting
-      run: 
-        nix develop --accept-flake-config --command pre-commit run fourmolu
-        
-    - name: Upload build & test artifacts
-      uses: actions/upload-artifact@v2
-      with:
-        path: ./**/test-results.xml
-
-  publish-test-results:
-    name: Publish test results
-    needs: [build-test]
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2.3.1
-      with:
-        repository: input-output-hk/quickcheck-dynamic
-
-    - uses: actions/download-artifact@v3
-
-    - name: Publish Unit Test Results
-      uses: EnricoMi/publish-unit-test-result-action@v1
-      with:
-        files: ./**/test-results.xml
+      run:
+        nix develop --accept-flake-config --command fourmolu --mode check .
 
   haddock:
     name: "Haddock & benchmarks"

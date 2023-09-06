@@ -1,6 +1,6 @@
 cabal-version:      2.2
 name:               quickcheck-dynamic
-version:            3.3.0
+version:            3.3.1
 license:            Apache-2.0
 license-files:
   LICENSE
@@ -102,4 +102,3 @@ test-suite quickcheck-dynamic-test
     , stm
     , tasty
     , tasty-quickcheck
-    , tasty-test-reporter
