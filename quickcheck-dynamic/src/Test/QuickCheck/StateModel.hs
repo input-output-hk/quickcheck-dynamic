@@ -43,7 +43,7 @@ import Control.Monad
 import Control.Monad.Identity
 import Control.Monad.Reader
 import Control.Monad.State
-import Control.Monad.Writer (WriterT, runWriterT, tell)
+import Control.Monad.Writer (WriterT (..), runWriterT, tell)
 import Data.Data
 import Data.Kind
 import Data.List
@@ -165,6 +165,12 @@ type instance Realized Identity a = a
 
 newtype PostconditionM m a = PostconditionM {runPost :: WriterT (Endo Property, Endo Property) m a}
   deriving (Functor, Applicative, Monad)
+
+instance MonadTrans PostconditionM where
+  lift m =
+    PostconditionM $
+      WriterT $
+        m >>= \a -> pure (a, (mempty, mempty))
 
 -- | Apply the property transformation to the property after evaluating
 -- the postcondition. Useful for collecting statistics while avoiding
