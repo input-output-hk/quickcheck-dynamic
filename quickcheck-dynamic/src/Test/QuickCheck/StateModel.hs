@@ -167,10 +167,7 @@ newtype PostconditionM m a = PostconditionM {runPost :: WriterT (Endo Property, 
   deriving (Functor, Applicative, Monad)
 
 instance MonadTrans PostconditionM where
-  lift m =
-    PostconditionM $
-      WriterT $
-        m >>= \a -> pure (a, (mempty, mempty))
+  lift = PostconditionM . lift
 
 -- | Apply the property transformation to the property after evaluating
 -- the postcondition. Useful for collecting statistics while avoiding
