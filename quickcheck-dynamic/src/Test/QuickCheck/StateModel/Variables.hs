@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Test.QuickCheck.StateModel.Variables (
@@ -57,6 +58,9 @@ instance (HasVariables k, HasVariables v) => HasVariables (Map k v) where
 
 instance HasVariables a => HasVariables (Set a) where
   getAllVariables = getAllVariables . Set.toList
+
+instance (forall a. HasVariables (f a)) => HasVariables (Any f) where
+  getAllVariables (Some a) = getAllVariables a
 
 newtype HasNoVariables a = HasNoVariables a
 
