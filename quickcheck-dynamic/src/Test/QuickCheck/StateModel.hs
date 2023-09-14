@@ -43,7 +43,7 @@ import Control.Monad
 import Control.Monad.Identity
 import Control.Monad.Reader
 import Control.Monad.State
-import Control.Monad.Writer (WriterT (..), runWriterT, tell)
+import Control.Monad.Writer (WriterT, runWriterT, tell)
 import Data.Data
 import Data.Kind
 import Data.List
