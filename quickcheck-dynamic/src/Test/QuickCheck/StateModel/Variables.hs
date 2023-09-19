@@ -15,6 +15,7 @@ module Test.QuickCheck.StateModel.Variables (
   extendContext,
   isWellTyped,
   allVariables,
+  isEmptyCtx,
   unsafeCoerceVar,
   unsafeNextVarIndex,
 ) where
@@ -105,8 +106,11 @@ instance Show VarContext where
       -- The use of typeRep here is on purpose to avoid printing `Var` unnecessarily.
       showBinding (Some v) = show v ++ " :: " ++ show (typeRep v)
 
+isEmptyCtx :: VarContext -> Bool
+isEmptyCtx (VarCtx ctx) = null ctx
+
 isWellTyped :: Typeable a => Var a -> VarContext -> Bool
-isWellTyped v (VarCtx ctx) = Some v `Set.member` ctx
+isWellTyped v (VarCtx ctx) = not (null ctx) && Some v `Set.member` ctx
 
 -- TODO: check the invariant that no variable index is used
 -- twice at different types. This is generally not an issue
