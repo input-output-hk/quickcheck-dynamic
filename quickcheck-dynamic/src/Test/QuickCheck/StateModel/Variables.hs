@@ -5,6 +5,7 @@
 module Test.QuickCheck.StateModel.Variables (
   Var,
   Any (..),
+  AnyErr (..),
   HasVariables (..),
   HasNoVariables (..),
   VarContext,
@@ -63,6 +64,9 @@ instance HasVariables a => HasVariables (Set a) where
 instance (forall a. HasVariables (f a)) => HasVariables (Any f) where
   getAllVariables (Some a) = getAllVariables a
 
+instance (forall e a. HasVariables (f e a)) => HasVariables (AnyErr f) where
+  getAllVariables (SomeErr a) = getAllVariables a
+
 newtype HasNoVariables a = HasNoVariables a
 
 deriving via a instance Show a => Show (HasNoVariables a)
@@ -82,11 +86,21 @@ deriving via HasNoVariables Word64 instance HasVariables Word64
 data Any f where
   Some :: (Typeable a, Eq (f a)) => f a -> Any f
 
+data AnyErr f where
+  SomeErr :: (Typeable e, Typeable a, Eq (f e a)) => f e a -> AnyErr f
+
 instance Eq (Any f) where
   Some (a :: f a) == Some (b :: f b) =
     case eqT @a @b of
       Just Refl -> a == b
       Nothing -> False
+
+instance Eq (AnyErr f) where
+  SomeErr (a :: f e a) == SomeErr (b :: f e' b)
+    | Just Refl <- eqT @a @b
+    , Just Refl <- eqT @e @e' =
+        a == b
+    | otherwise = False
 
 instance (forall a. Ord (f a)) => Ord (Any f) where
   compare (Some (a :: f a)) (Some (a' :: f a')) =
