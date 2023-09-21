@@ -166,6 +166,9 @@ type instance Realized Identity a = a
 newtype PostconditionM m a = PostconditionM {runPost :: WriterT (Endo Property, Endo Property) m a}
   deriving (Functor, Applicative, Monad)
 
+instance MonadTrans PostconditionM where
+  lift = PostconditionM . lift
+
 -- | Apply the property transformation to the property after evaluating
 -- the postcondition. Useful for collecting statistics while avoiding
 -- duplication between `monitoring` and `postcondition`.
