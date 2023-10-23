@@ -9,8 +9,8 @@ let
 
     compiler-nix-name = lib.mkDefault "ghc962";
 
-    flake.variangs.ghc8107.compiler-nix-name = "ghc8107";
-    flake.variangs.ghc928.compiler-nix-name = "ghc928";
+    flake.variants.ghc8107.compiler-nix-name = "ghc8107";
+    flake.variants.ghc928.compiler-nix-name = "ghc928";
 
     shell.withHoogle = false;
 
