@@ -47,13 +47,18 @@ This package uses [Cabal](https://www.haskell.org/cabal/)-based build. To build 
 
 ### With nix
 
-This repository comes with some [nix](https://nixos.org) files which might or might not help hacking on quickcheck-dynamic simpler.
-Before you start using nix, please make sure you've configured haskell.nix caching as per [those instructions](https://input-output-hk.github.io/haskell.nix/tutorials/getting-started.html#setting-up-the-binary-cache).
+This repository uses nix to provide a development and build environment.
 
-* Building with nix should be as simple as:
-  ```
-  nix build .#quickcheck-dynamic-lib-quickcheck-dynamic-ghc927
-  ```
+If you know nix, simply run `nix develop` to enter the shell; if prompted, trust 
+the flake config values to enable access to our binary caches.   
+
+The nix code is based on a template from the 
+[IOGX flake](https://github.com/input-output-hk/iogx). 
+For instructions on how to install and configure nix (including how to enable 
+access to our binary caches), and how keep the flake inputs up to date, refer to 
+[this section](https://github.com/input-output-hk/iogx/blob/main/doc/api.md#flakenix)
+of the IOGX manual.
+
 * To enter a shell providing a complete haskell toolchain:
   ```
   nix develop
