@@ -254,7 +254,7 @@ lookUpVarMaybe (((v' :: Var b) :== a) : env) v =
 
 lookUpVar :: Typeable a => Env m -> Var a -> Realized m a
 lookUpVar env v = case lookUpVarMaybe env v of
-  Nothing -> error $ "Variable " ++ show v ++ " is not bound!"
+  Nothing -> error $ "Variable " ++ show v ++ " is not bound at type " ++ show (typeRep v) ++ "!"
   Just a -> a
 
 data WithUsedVars a = WithUsedVars VarContext a
