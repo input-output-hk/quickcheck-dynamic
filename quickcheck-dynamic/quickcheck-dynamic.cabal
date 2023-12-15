@@ -46,6 +46,7 @@ common lang
     ImportQualifiedPost
     LambdaCase
     MultiParamTypeClasses
+    MultiWayIf
     PatternSynonyms
     QuantifiedConstraints
     RankNTypes

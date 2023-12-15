@@ -44,6 +44,7 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Writer (WriterT, runWriterT, tell)
 import Data.Data
+import Data.Either
 import Data.Kind
 import Data.List
 import Data.Monoid (Endo (..))
@@ -225,6 +226,9 @@ computePostcondition
 computePostcondition ss (ActionWithPolarity a p) l r
   | p == PosPolarity = case r of
       Right ra -> postcondition ss a l ra
+      -- NOTE: this is actually redundant as this handled
+      -- at the call site for this function, but this is
+      -- good hygiene?
       Left _ -> pure False
   | otherwise = postconditionOnFailure ss a l r
 
@@ -496,27 +500,33 @@ runActions (Actions_ rejected (Smart _ actions)) = loop initialAnnotatedState []
       ret <- run $ perform (underlyingState s) (polarAction act) (lookUpVar env)
       let name = show (polarity act) ++ actionName (polarAction act)
       monitor $ tabulate "Actions" [name]
-      let var = unsafeCoerceVar v
-          s' = computeNextState s act var
-          env'
-            | Right val <- ret = (var :== val) : env
-            | otherwise = env
       monitor $ tabulate "Action polarity" [show $ polarity act]
-      monitor $ monitoring @state @m (underlyingState s, underlyingState s') (polarAction act) (lookUpVar env') ret
-      when (polarity act == PosPolarity) $ do
-        case ret of
-          Left e -> monitor $ monitoringFailure @state @m (underlyingState s) (polarAction act) (lookUpVar env') e
-          _ -> pure ()
-      (b, (Endo mon, Endo onFail)) <-
-        run
-          . runWriterT
-          . runPost
-          $ computePostcondition @m
-            (underlyingState s, underlyingState s')
-            act
-            (lookUpVar env)
-            ret
-      monitor mon
-      unless b $ monitor onFail
-      assert b
-      loop s' env' as
+      if
+        | polarity act == PosPolarity && isLeft ret -> do
+            monitor $
+              monitoringFailure @state @m
+                (underlyingState s)
+                (polarAction act)
+                (lookUpVar env)
+                (fromLeft (error "impossible") ret)
+            stop False
+        | otherwise -> do
+            let var = unsafeCoerceVar v
+                s' = computeNextState s act var
+                env'
+                  | Right val <- ret = (var :== val) : env
+                  | otherwise = env
+            monitor $ monitoring @state @m (underlyingState s, underlyingState s') (polarAction act) (lookUpVar env') ret
+            (b, (Endo mon, Endo onFail)) <-
+              run
+                . runWriterT
+                . runPost
+                $ computePostcondition @m
+                  (underlyingState s, underlyingState s')
+                  act
+                  (lookUpVar env)
+                  ret
+            monitor mon
+            unless b $ monitor onFail
+            assert b
+            loop s' env' as
