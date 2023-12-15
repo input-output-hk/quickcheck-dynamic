@@ -36,7 +36,6 @@ module Test.QuickCheck.StateModel (
   computePrecondition,
   computeArbitraryAction,
   computeShrinkAction,
-  failureResult,
 ) where
 
 import Control.Monad
@@ -211,15 +210,6 @@ class (forall a e. Show (Action state e a), Monad m) => RunModel state m where
   -- while executing this step.
   monitoring :: (state, state) -> Action state e a -> LookUp m -> Either (Realized m e) (Realized m a) -> Property -> Property
   monitoring _ _ _ _ prop = prop
-
--- | Indicate that the result of an action (in `perform`)
--- should not be inspected by the postcondition or appear
--- in a positive test. Useful when we want to give a type
--- for an `Action` like `SomeAct :: Action SomeState SomeType`
--- instead of `SomeAct :: Action SomeState (Either SomeError SomeType)`
--- but still need to return something in `perform` in the failure case.
-failureResult :: HasCallStack => a
-failureResult = error "A result of a failing action has been erronesouly inspected"
 
 computePostcondition
   :: forall m state e a
