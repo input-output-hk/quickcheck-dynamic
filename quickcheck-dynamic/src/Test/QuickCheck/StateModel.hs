@@ -49,7 +49,6 @@ import Data.List
 import Data.Monoid (Endo (..))
 import Data.Set qualified as Set
 import GHC.Generics
-import GHC.Stack
 import Test.QuickCheck as QC
 import Test.QuickCheck.DynamicLogic.SmartShrinking
 import Test.QuickCheck.Monadic
@@ -210,6 +209,10 @@ class (forall a e. Show (Action state e a), Monad m) => RunModel state m where
   -- while executing this step.
   monitoring :: (state, state) -> Action state e a -> LookUp m -> Either (Realized m e) (Realized m a) -> Property -> Property
   monitoring _ _ _ _ prop = prop
+
+  -- | Allows the user to attach additional information to the `Property` if a positive action fails.
+  monitoringFailure :: state -> Action state e a -> LookUp m -> Realized m e -> Property -> Property
+  monitoringFailure _ _ _ _ prop = prop
 
 computePostcondition
   :: forall m state e a
@@ -500,6 +503,10 @@ runActions (Actions_ rejected (Smart _ actions)) = loop initialAnnotatedState []
             | otherwise = env
       monitor $ tabulate "Action polarity" [show $ polarity act]
       monitor $ monitoring @state @m (underlyingState s, underlyingState s') (polarAction act) (lookUpVar env') ret
+      when (polarity act == PosPolarity) $ do
+        case ret of
+          Left e -> monitor $ monitoringFailure @state @m (underlyingState s) (polarAction act) (lookUpVar env') e
+          _ -> pure ()
       (b, (Endo mon, Endo onFail)) <-
         run
           . runWriterT
