@@ -221,11 +221,18 @@ class (forall a e. Show (Action state e a), Monad m) => RunModel state m where
 failureResult :: HasCallStack => a
 failureResult = error "A result of a failing action has been erronesouly inspected"
 
-computePostcondition :: forall m state e a. RunModel state m => (state, state) -> ActionWithPolarity state e a -> LookUp m -> Either (Realized m e) (Realized m a) -> PostconditionM m Bool
+computePostcondition
+  :: forall m state e a
+   . RunModel state m
+  => (state, state)
+  -> ActionWithPolarity state e a
+  -> LookUp m
+  -> Either (Realized m e) (Realized m a)
+  -> PostconditionM m Bool
 computePostcondition ss (ActionWithPolarity a p) l r
-  | p == PosPolarity
-  , Right ra <- r =
-      postcondition ss a l ra
+  | p == PosPolarity = case r of
+      Right ra -> postcondition ss a l ra
+      Left _ -> pure False
   | otherwise = postconditionOnFailure ss a l r
 
 type LookUp m = forall a. Typeable a => Var a -> Realized m a
