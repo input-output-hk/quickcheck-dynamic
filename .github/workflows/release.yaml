@@ -36,7 +36,7 @@ jobs:
 
     - name: Prepare nix shell
       run:
-        nix develop --accept-flake-config --build 
+        nix develop --accept-flake-config --build
 
     - name: Cabal check
       run: |
@@ -49,7 +49,7 @@ jobs:
 
     - name: Get the version
       id: get_version
-      run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+      run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
 
     - name: Upload distribution
       uses: actions/upload-artifact@v2
