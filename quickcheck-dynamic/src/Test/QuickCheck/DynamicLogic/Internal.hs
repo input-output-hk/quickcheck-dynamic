@@ -169,6 +169,7 @@ instance StateModel s => Eq (FailingAction s) where
 instance StateModel s => Show (FailingAction s) where
   show (ErrorFail s) = "Error " ++ show s
   show (ActionFail (ActionWithPolarity a pol)) = show pol ++ " : " ++ show a
+  show (ActionFail (Pure v)) = "pure " ++ show v
 
 data DynLogicTest s
   = BadPrecondition (TestSequence s) (FailingAction s) (Annotated s)
@@ -309,6 +310,7 @@ instance StateModel s => Show (DynLogicTest s) where
           f
             | p == PosPolarity = "action"
             | otherwise = "failingAction"
+      prettyBad (ActionFail (Pure v)) = "pure " ++ show v ++ "  -- Failed precondition (this shouldn't happen!)"
   show (Looping ss) = prettyTestSequence (usedVariables ss) ss ++ "\n   pure ()\n   -- Looping"
   show (Stuck ss s) = prettyTestSequence (usedVariables ss) ss ++ "\n   pure ()\n   -- Stuck in state " ++ show s
   show (DLScript ss) = prettyTestSequence (usedVariables ss) ss ++ "\n   pure ()\n"
@@ -334,6 +336,7 @@ class StateModel s => DynLogicModel s where
 
 restrictedPolar :: DynLogicModel s => ActionWithPolarity s a -> Bool
 restrictedPolar (ActionWithPolarity a _) = restricted a
+restrictedPolar Pure{} = False
 
 -- * Generate Properties
 
@@ -533,6 +536,7 @@ chooseNextStep s n d = do
                       Some act -> computePrecondition s act && not (restrictedPolar act)
                   case m of
                     Nothing -> return NoStep
+                    Just (Some Pure{}) -> error "chooseNextStep: AfterAny: Pure"
                     Just (Some a@ActionWithPolarity{}) ->
                       return $
                         Stepping
