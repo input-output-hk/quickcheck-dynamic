@@ -157,6 +157,19 @@ class
 
 deriving instance (forall a. Show (Action state a)) => Show (Any (Action state))
 
+type family PerformResult e a where
+  PerformResult Void a = a
+  PerformResult e a = Either e a
+
+class IsPerformResult e a where
+  performResultToEither :: PerformResult e a -> Either e a
+
+instance {-# OVERLAPPING #-} IsPerformResult Void a where
+  performResultToEither = Right
+
+instance {-# OVERLAPPABLE #-} (PerformResult e a ~ Either e a) => IsPerformResult e a where
+  performResultToEither = id
+
 -- TODO: maybe it makes sense to write
 -- out a long list of these instances
 type family Realized (m :: Type -> Type) a :: Type
@@ -193,7 +206,7 @@ class (forall a. Show (Action state a), Monad m) => RunModel state m where
   --
   -- The `Lookup` parameter provides an /environment/ to lookup `Var
   -- a` instances from previous steps.
-  perform :: Typeable a => state -> Action state a -> LookUp m -> m (Either (Error state) (Realized m a))
+  perform :: Typeable a => state -> Action state a -> LookUp m -> m (PerformResult (Error state) (Realized m a))
 
   -- | Postcondition on the `a` value produced at some step.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
@@ -487,8 +500,12 @@ stateAfter (Actions actions) = loop initialAnnotatedState actions
     loop s ((var := act) : as) = loop (computeNextState @state s act var) as
 
 runActions
-  :: forall state m
-   . (StateModel state, RunModel state m)
+  :: forall state m e
+   . ( StateModel state
+     , RunModel state m
+     , e ~ Error state
+     , forall a. IsPerformResult e a
+     )
   => Actions state
   -> PropertyM m (Annotated state, Env m)
 runActions (Actions_ rejected (Smart _ actions)) = loop initialAnnotatedState [] actions
@@ -501,7 +518,7 @@ runActions (Actions_ rejected (Smart _ actions)) = loop initialAnnotatedState []
       return (_s, reverse env)
     loop s env ((v := act) : as) = do
       pre $ computePrecondition s act
-      ret <- run $ perform (underlyingState s) (polarAction act) (lookUpVar env)
+      ret <- run $ performResultToEither <$> perform (underlyingState s) (polarAction act) (lookUpVar env)
       let name = show (polarity act) ++ actionName (polarAction act)
       monitor $ tabulate "Actions" [name]
       monitor $ tabulate "Action polarity" [show $ polarity act]
