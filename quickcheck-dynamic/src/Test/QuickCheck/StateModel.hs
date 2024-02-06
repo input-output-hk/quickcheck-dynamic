@@ -44,11 +44,11 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Writer (WriterT, runWriterT, tell)
 import Data.Data
-import Data.Either
 import Data.Kind
 import Data.List
 import Data.Monoid (Endo (..))
 import Data.Set qualified as Set
+import Data.Void
 import GHC.Generics
 import Test.QuickCheck as QC
 import Test.QuickCheck.DynamicLogic.SmartShrinking
@@ -80,8 +80,8 @@ import Test.QuickCheck.StateModel.Variables
 --    a negative action one can define `failureNextState` - but it is generally recommended to let this be
 --    as simple an action as possible.
 class
-  ( forall a e. Show (Action state e a)
-  , forall a e. HasVariables (Action state e a)
+  ( forall a. Show (Action state a)
+  , forall a. HasVariables (Action state a)
   , Show state
   , HasVariables state
   ) =>
@@ -102,7 +102,11 @@ class
   --
   -- The @Spawn@ action should produce a @ThreadId@, whereas the @KillThread@ action does not return
   -- anything.
-  data Action state e a
+  data Action state a
+
+  -- | TODO docs
+  type Error state
+  type Error state = Void
 
   -- | Display name for `Action`.
   -- This is useful to provide sensible statistics about the distribution of `Action`s run
@@ -110,16 +114,16 @@ class
   --
   -- Default implementation uses a poor-man's string manipulation method to extract the
   -- constructor name from the value.
-  actionName :: Action state a e -> String
+  actionName :: Action state a -> String
   actionName = head . words . show
 
   -- | Generator for `Action` depending on `state`.
-  arbitraryAction :: VarContext -> state -> Gen (AnyErr (Action state))
+  arbitraryAction :: VarContext -> state -> Gen (Any (Action state))
 
   -- | Shrinker for `Action`.
   -- Defaults to no-op but as usual, defining a good shrinker greatly enhances the usefulness
   -- of property-based testing.
-  shrinkAction :: Typeable a => VarContext -> state -> Action state e a -> [AnyErr (Action state)]
+  shrinkAction :: Typeable a => VarContext -> state -> Action state a -> [Any (Action state)]
   shrinkAction _ _ _ = []
 
   -- | Initial state of generated traces.
@@ -130,28 +134,28 @@ class
   -- by `perform`ing the `Action` inside the `state` so that further actions can use `Lookup`
   -- to retrieve that data. This allows the model to be ignorant of those values yet maintain
   -- some references that can be compared and looked for.
-  nextState :: Typeable a => state -> Action state e a -> Var a -> state
+  nextState :: Typeable a => state -> Action state a -> Var a -> state
   nextState s _ _ = s
 
   -- | Transition function for negative actions. Note that most negative testing applications
   -- should not require an implementation of this function!
-  failureNextState :: Typeable a => state -> Action state e a -> state
+  failureNextState :: Typeable a => state -> Action state a -> state
   failureNextState s _ = s
 
   -- | Precondition for filtering generated `Action`.
   -- This function is applied before the action is performed, it is useful to refine generators that
   -- can produce more values than are useful.
-  precondition :: state -> Action state e a -> Bool
+  precondition :: state -> Action state a -> Bool
   precondition _ _ = True
 
   -- | Precondition for filtering an `Action` that can meaningfully run but is supposed to fail.
   -- An action will run as a _negative_ action if the `precondition` fails and `validFailingAction` succeeds.
   -- A negative action should have _no effect_ on the model state. This may not be desierable in all
   -- situations - in which case one can override this semantics for book-keeping in `failureNextState`.
-  validFailingAction :: state -> Action state e a -> Bool
+  validFailingAction :: state -> Action state a -> Bool
   validFailingAction _ _ = False
 
-deriving instance (forall e a. Show (Action state e a)) => Show (AnyErr (Action state))
+deriving instance (forall a. Show (Action state a)) => Show (Any (Action state))
 
 -- TODO: maybe it makes sense to write
 -- out a long list of these instances
@@ -178,7 +182,7 @@ monitorPost m = PostconditionM $ tell (Endo m, mempty)
 counterexamplePost :: Monad m => String -> PostconditionM m ()
 counterexamplePost c = PostconditionM $ tell (mempty, Endo $ counterexample c)
 
-class (forall a e. Show (Action state e a), Monad m) => RunModel state m where
+class (forall a. Show (Action state a), Monad m) => RunModel state m where
   -- | Perform an `Action` in some `state` in the `Monad` `m`.  This
   -- is the function that's used to exercise the actual stateful
   -- implementation, usually through various side-effects as permitted
@@ -189,39 +193,39 @@ class (forall a e. Show (Action state e a), Monad m) => RunModel state m where
   --
   -- The `Lookup` parameter provides an /environment/ to lookup `Var
   -- a` instances from previous steps.
-  perform :: Typeable a => state -> Action state e a -> LookUp m -> m (Either (Realized m e) (Realized m a))
+  perform :: Typeable a => state -> Action state a -> LookUp m -> m (Either (Error state) (Realized m a))
 
   -- | Postcondition on the `a` value produced at some step.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
   -- to check the implementation produces expected values.
-  postcondition :: (state, state) -> Action state e a -> LookUp m -> Realized m a -> PostconditionM m Bool
+  postcondition :: (state, state) -> Action state a -> LookUp m -> Realized m a -> PostconditionM m Bool
   postcondition _ _ _ _ = pure True
 
   -- | Postcondition on the result of running a _negative_ `Action`.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
   -- to check the implementation produces e.g. the expected errors or to check that the SUT hasn't
   -- been updated during the execution of the negative action.
-  postconditionOnFailure :: (state, state) -> Action state e a -> LookUp m -> Either (Realized m e) (Realized m a) -> PostconditionM m Bool
+  postconditionOnFailure :: (state, state) -> Action state a -> LookUp m -> Either (Error state) (Realized m a) -> PostconditionM m Bool
   postconditionOnFailure _ _ _ _ = pure True
 
   -- | Allows the user to attach additional information to the `Property` at each step of the process.
   -- This function is given the full transition that's been executed, including the start and ending
   -- `state`, the `Action`, the current environment to `Lookup` and the value produced by `perform`
   -- while executing this step.
-  monitoring :: (state, state) -> Action state e a -> LookUp m -> Either (Realized m e) (Realized m a) -> Property -> Property
+  monitoring :: (state, state) -> Action state a -> LookUp m -> Either (Error state) (Realized m a) -> Property -> Property
   monitoring _ _ _ _ prop = prop
 
   -- | Allows the user to attach additional information to the `Property` if a positive action fails.
-  monitoringFailure :: state -> Action state e a -> LookUp m -> Realized m e -> Property -> Property
+  monitoringFailure :: state -> Action state a -> LookUp m -> Error state -> Property -> Property
   monitoringFailure _ _ _ _ prop = prop
 
 computePostcondition
-  :: forall m state e a
+  :: forall m state a
    . RunModel state m
   => (state, state)
-  -> ActionWithPolarity state e a
+  -> ActionWithPolarity state a
   -> LookUp m
-  -> Either (Realized m e) (Realized m a)
+  -> Either (Error state) (Realized m a)
   -> PostconditionM m Bool
 computePostcondition ss (ActionWithPolarity a p) l r
   | p == PosPolarity = case r of
@@ -272,27 +276,27 @@ instance Show Polarity where
   show PosPolarity = "+"
   show NegPolarity = "-"
 
-data ActionWithPolarity state e a = Eq (Action state e a) =>
+data ActionWithPolarity state a = Eq (Action state a) =>
   ActionWithPolarity
-  { polarAction :: Action state e a
+  { polarAction :: Action state a
   , polarity :: Polarity
   }
 
-instance HasVariables (Action state e a) => HasVariables (ActionWithPolarity state e a) where
+instance HasVariables (Action state a) => HasVariables (ActionWithPolarity state a) where
   getAllVariables = getAllVariables . polarAction
 
-deriving instance Eq (Action state e a) => Eq (ActionWithPolarity state e a)
+deriving instance Eq (Action state a) => Eq (ActionWithPolarity state a)
 
 data Step state where
   (:=)
-    :: (Typeable a, Typeable e, Eq (Action state e a), Show (Action state e a))
+    :: (Typeable a, Eq (Action state a), Show (Action state a))
     => Var a
-    -> ActionWithPolarity state e a
+    -> ActionWithPolarity state a
     -> Step state
 
 infix 5 :=
 
-instance (forall e a. HasVariables (Action state e a)) => HasVariables (Step state) where
+instance (forall a. HasVariables (Action state a)) => HasVariables (Step state) where
   getAllVariables (var := act) = Set.insert (Some var) $ getAllVariables (polarAction act)
 
 funName :: Polarity -> String
@@ -310,7 +314,7 @@ instance Show (WithUsedVars (Step state)) where
 
 instance Eq (Step state) where
   (v := act) == (v' := act') =
-    unsafeCoerceVar v == v' && SomeErr act == SomeErr act'
+    unsafeCoerceVar v == v' && Some act == Some act'
 
 -- Action sequences use Smart shrinking, but this is invisible to
 -- client code because the extra Smart constructor is concealed by a
@@ -366,7 +370,7 @@ instance forall state. StateModel state => Arbitrary (Actions state) where
                 , do
                     (mact, rej) <- satisfyPrecondition
                     case mact of
-                      Just (SomeErr act@ActionWithPolarity{}) -> do
+                      Just (Some act@ActionWithPolarity{}) -> do
                         let var = mkVar step
                         (as, rejected) <- arbActions (computeNextState s act var) (step + 1)
                         return ((var := act) : as, rej ++ rejected)
@@ -381,16 +385,16 @@ instance forall state. StateModel state => Arbitrary (Actions state) where
             | otherwise = do
                 a <- resize m $ computeArbitraryAction s
                 case a of
-                  SomeErr act ->
+                  Some act ->
                     if computePrecondition s act
-                      then return (Just (SomeErr act), rej)
+                      then return (Just (Some act), rej)
                       else go (m + 1) n (actionName (polarAction act) : rej)
 
   shrink (Actions_ rs as) =
     map (Actions_ rs) (shrinkSmart (map (prune . map fst) . concatMap customActionsShrinker . shrinkList shrinker . withStates) as)
     where
       shrinker :: (Step state, Annotated state) -> [(Step state, Annotated state)]
-      shrinker (v := act, s) = [(unsafeCoerceVar v := act', s) | SomeErr act'@ActionWithPolarity{} <- computeShrinkAction s act]
+      shrinker (v := act, s) = [(unsafeCoerceVar v := act', s) | Some act'@ActionWithPolarity{} <- computeShrinkAction s act]
 
       customActionsShrinker :: [(Step state, Annotated state)] -> [[(Step state, Annotated state)]]
       customActionsShrinker acts =
@@ -416,7 +420,7 @@ instance Show state => Show (Annotated state) where
 initialAnnotatedState :: StateModel state => Annotated state
 initialAnnotatedState = Metadata mempty initialState
 
-actionWithPolarity :: (StateModel state, Eq (Action state e a)) => Annotated state -> Action state e a -> ActionWithPolarity state e a
+actionWithPolarity :: (StateModel state, Eq (Action state a)) => Annotated state -> Action state a -> ActionWithPolarity state a
 actionWithPolarity s a =
   let p
         | precondition (underlyingState s) a = PosPolarity
@@ -424,7 +428,7 @@ actionWithPolarity s a =
         | otherwise = PosPolarity
    in ActionWithPolarity a p
 
-computePrecondition :: StateModel state => Annotated state -> ActionWithPolarity state e a -> Bool
+computePrecondition :: StateModel state => Annotated state -> ActionWithPolarity state a -> Bool
 computePrecondition s (ActionWithPolarity a p) =
   let polarPrecondition
         | p == PosPolarity = precondition (underlyingState s) a
@@ -435,7 +439,7 @@ computePrecondition s (ActionWithPolarity a p) =
 computeNextState
   :: (StateModel state, Typeable a)
   => Annotated state
-  -> ActionWithPolarity state e a
+  -> ActionWithPolarity state a
   -> Var a
   -> Annotated state
 computeNextState s a v
@@ -445,19 +449,19 @@ computeNextState s a v
 computeArbitraryAction
   :: StateModel state
   => Annotated state
-  -> Gen (AnyErr (ActionWithPolarity state))
+  -> Gen (Any (ActionWithPolarity state))
 computeArbitraryAction s = do
-  SomeErr a <- arbitraryAction (vars s) (underlyingState s)
-  pure $ SomeErr $ actionWithPolarity s a
+  Some a <- arbitraryAction (vars s) (underlyingState s)
+  pure $ Some $ actionWithPolarity s a
 
 computeShrinkAction
-  :: forall state e a
+  :: forall state a
    . (Typeable a, StateModel state)
   => Annotated state
-  -> ActionWithPolarity state e a
-  -> [AnyErr (ActionWithPolarity state)]
+  -> ActionWithPolarity state a
+  -> [Any (ActionWithPolarity state)]
 computeShrinkAction s (ActionWithPolarity a _) =
-  [SomeErr (actionWithPolarity s a') | SomeErr a' <- shrinkAction (vars s) (underlyingState s) a]
+  [Some (actionWithPolarity s a') | Some a' <- shrinkAction (vars s) (underlyingState s) a]
 
 prune :: forall state. StateModel state => [Step state] -> [Step state]
 prune = loop initialAnnotatedState
@@ -502,13 +506,14 @@ runActions (Actions_ rejected (Smart _ actions)) = loop initialAnnotatedState []
       monitor $ tabulate "Actions" [name]
       monitor $ tabulate "Action polarity" [show $ polarity act]
       if
-        | polarity act == PosPolarity && isLeft ret -> do
+        | polarity act == PosPolarity
+        , Left err <- ret -> do
             monitor $
               monitoringFailure @state @m
                 (underlyingState s)
                 (polarAction act)
                 (lookUpVar env)
-                (fromLeft (error "impossible") ret)
+                err
             stop False
         | otherwise -> do
             let var = unsafeCoerceVar v

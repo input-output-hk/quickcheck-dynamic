@@ -28,21 +28,23 @@ data RegState = RegState
   }
   deriving (Show, Generic)
 
-deriving instance Show (Action RegState e a)
-deriving instance Eq (Action RegState e a)
+deriving instance Show (Action RegState a)
+deriving instance Eq (Action RegState a)
 
-instance HasVariables (Action RegState e a) where
+instance HasVariables (Action RegState a) where
   getAllVariables (Register _ v) = getAllVariables v
   getAllVariables (KillThread v) = getAllVariables v
   getAllVariables _ = mempty
 
 instance StateModel RegState where
-  data Action RegState e a where
-    Spawn :: Action RegState () ThreadId
-    WhereIs :: String -> Action RegState () (Maybe ThreadId)
-    Register :: String -> Var ThreadId -> Action RegState SomeException ()
-    Unregister :: String -> Action RegState SomeException ()
-    KillThread :: Var ThreadId -> Action RegState SomeException ()
+  data Action RegState a where
+    Spawn :: Action RegState ThreadId
+    WhereIs :: String -> Action RegState (Maybe ThreadId)
+    Register :: String -> Var ThreadId -> Action RegState ()
+    Unregister :: String -> Action RegState ()
+    KillThread :: Var ThreadId -> Action RegState ()
+
+  type Error RegState = SomeException
 
   precondition s (Register name tid) =
     name `Map.notMember` regs s
@@ -58,39 +60,39 @@ instance StateModel RegState where
     frequency $
       [
         ( max 1 $ 10 - length (ctxAtType @ThreadId ctx)
-        , return $ SomeErr Spawn
+        , return $ Some Spawn
         )
       ,
         ( 2 * Map.size (regs s)
-        , SomeErr <$> (Unregister <$> probablyRegistered s)
+        , Some <$> (Unregister <$> probablyRegistered s)
         )
       ,
         ( 10
-        , SomeErr <$> (WhereIs <$> probablyRegistered s)
+        , Some <$> (WhereIs <$> probablyRegistered s)
         )
       ]
         ++ [ ( max 1 $ 3 - length (dead s)
-             , SomeErr <$> (KillThread <$> arbitraryVar ctx)
+             , Some <$> (KillThread <$> arbitraryVar ctx)
              )
            | not . null $ ctxAtType @ThreadId ctx
            ]
         ++ [ ( max 1 $ 10 - Map.size (regs s)
-             , SomeErr <$> (Register <$> probablyUnregistered s <*> arbitraryVar ctx)
+             , Some <$> (Register <$> probablyUnregistered s <*> arbitraryVar ctx)
              )
            | not . null $ ctxAtType @ThreadId ctx
            ]
 
   shrinkAction ctx _ (Register name tid) =
-    [SomeErr (Unregister name)]
-      ++ [SomeErr (Register name' tid) | name' <- shrinkName name]
-      ++ [SomeErr (Register name tid') | tid' <- shrinkVar ctx tid]
+    [Some (Unregister name)]
+      ++ [Some (Register name' tid) | name' <- shrinkName name]
+      ++ [Some (Register name tid') | tid' <- shrinkVar ctx tid]
   shrinkAction _ _ (Unregister name) =
-    SomeErr (WhereIs name) : [SomeErr (Unregister name') | name' <- shrinkName name]
+    Some (WhereIs name) : [Some (Unregister name') | name' <- shrinkName name]
   shrinkAction _ _ (WhereIs name) =
-    [SomeErr (WhereIs name') | name' <- shrinkName name]
+    [Some (WhereIs name') | name' <- shrinkName name]
   shrinkAction _ _ Spawn = []
   shrinkAction ctx _ (KillThread tid) =
-    [SomeErr (KillThread tid') | tid' <- shrinkVar ctx tid]
+    [Some (KillThread tid') | tid' <- shrinkVar ctx tid]
 
   initialState = RegState mempty []
 
@@ -142,10 +144,10 @@ instance RunModel RegState RegM where
     counterexample (show res ++ " <- " ++ show act ++ "\n  -- State: " ++ show s')
       . tabulate "Registry size" [show $ Map.size (regs s')]
 
-data ShowDict e a where
-  ShowDict :: (Show (Realized RegM e), Show (Realized RegM a)) => ShowDict e a
+data ShowDict a where
+  ShowDict :: Show (Realized RegM a) => ShowDict a
 
-showDictAction :: forall e a. Action RegState e a -> ShowDict e a
+showDictAction :: forall a. Action RegState a -> ShowDict a
 showDictAction Spawn{} = ShowDict
 showDictAction WhereIs{} = ShowDict
 showDictAction Register{} = ShowDict
@@ -155,7 +157,7 @@ showDictAction KillThread{} = ShowDict
 instance DynLogicModel RegState where
   restricted _ = False
 
-why :: RegState -> Action RegState e a -> String
+why :: RegState -> Action RegState a -> String
 why s (Register name tid) =
   unwords $
     ["name already registered" | name `Map.member` regs s]

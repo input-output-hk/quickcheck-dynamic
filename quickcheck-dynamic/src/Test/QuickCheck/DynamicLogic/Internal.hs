@@ -31,9 +31,9 @@ data DynLogic s
   | -- | Prefer this branch if trying to stop.
     Stopping (DynLogic s)
   | -- | After a specific action the predicate should hold
-    forall e a.
-    (Eq (Action s e a), Show (Action s e a), Typeable e, Typeable a) =>
-    After (ActionWithPolarity s e a) (Var a -> DynPred s)
+    forall a.
+    (Eq (Action s a), Show (Action s a), Typeable a) =>
+    After (ActionWithPolarity s a) (Var a -> DynPred s)
   | Error String (DynPred s)
   | -- | Adjust the probability of picking a branch
     Weight Double (DynLogic s)
@@ -65,8 +65,8 @@ afterAny :: (Annotated s -> DynFormula s) -> DynFormula s
 afterAny f = DynFormula $ \n -> AfterAny $ \s -> unDynFormula (f s) n
 
 afterPolar
-  :: (Typeable e, Typeable a, Eq (Action s e a), Show (Action s e a))
-  => ActionWithPolarity s e a
+  :: (Typeable a, Eq (Action s a), Show (Action s a))
+  => ActionWithPolarity s a
   -> (Var a -> Annotated s -> DynFormula s)
   -> DynFormula s
 afterPolar act f = DynFormula $ \n -> After act $ \x s -> unDynFormula (f x s) n
@@ -74,8 +74,8 @@ afterPolar act f = DynFormula $ \n -> After act $ \x s -> unDynFormula (f x s) n
 -- | Given `f` must be `True` after /some/ action.
 -- `f` is passed the state resulting from executing the `Action`.
 after
-  :: (Typeable e, Typeable a, Eq (Action s e a), Show (Action s e a))
-  => Action s e a
+  :: (Typeable a, Eq (Action s a), Show (Action s a))
+  => Action s a
   -> (Var a -> Annotated s -> DynFormula s)
   -> DynFormula s
 after act f = afterPolar (ActionWithPolarity act PosPolarity) f
@@ -84,8 +84,8 @@ after act f = afterPolar (ActionWithPolarity act PosPolarity) f
 -- `f` is passed the state resulting from executing the `Action`
 -- as a negative action.
 afterNegative
-  :: (Typeable e, Typeable a, Eq (Action s e a), Show (Action s e a))
-  => Action s e a
+  :: (Typeable a, Eq (Action s a), Show (Action s a))
+  => Action s a
   -> (Annotated s -> DynFormula s)
   -> DynFormula s
 afterNegative act f = afterPolar (ActionWithPolarity act NegPolarity) (const f)
@@ -154,7 +154,7 @@ always p s = withSize $ \n -> toStop (p s) ||| p s ||| weight (fromIntegral n) (
 
 data FailingAction s
   = ErrorFail String
-  | forall e a. (Typeable e, Typeable a, Eq (Action s e a)) => ActionFail (ActionWithPolarity s e a)
+  | forall a. (Typeable a, Eq (Action s a)) => ActionFail (ActionWithPolarity s a)
 
 instance StateModel s => HasVariables (FailingAction s) where
   getAllVariables ErrorFail{} = mempty
@@ -162,10 +162,8 @@ instance StateModel s => HasVariables (FailingAction s) where
 
 instance StateModel s => Eq (FailingAction s) where
   ErrorFail s == ErrorFail s' = s == s'
-  ActionFail (a :: ActionWithPolarity s e a) == ActionFail (a' :: ActionWithPolarity s e' a')
-    | Just Refl <- eqT @a @a'
-    , Just Refl <- eqT @e @e' =
-        a == a'
+  ActionFail (a :: ActionWithPolarity s a) == ActionFail (a' :: ActionWithPolarity s' a')
+    | Just Refl <- eqT @a @a' = a == a'
   _ == _ = False
 
 instance StateModel s => Show (FailingAction s) where
@@ -331,10 +329,10 @@ usedVariables = go initialAnnotatedState
 -- properties at controlled times, so they are likely to fail if
 -- invoked at other times.
 class StateModel s => DynLogicModel s where
-  restricted :: Action s e a -> Bool
+  restricted :: Action s a -> Bool
   restricted _ = False
 
-restrictedPolar :: DynLogicModel s => ActionWithPolarity s e a -> Bool
+restrictedPolar :: DynLogicModel s => ActionWithPolarity s a -> Bool
 restrictedPolar (ActionWithPolarity a _) = restricted a
 
 -- * Generate Properties
@@ -532,10 +530,10 @@ chooseNextStep s n d = do
                 AfterAny k -> do
                   m <- keepTryingUntil 100 (computeArbitraryAction s) $
                     \case
-                      SomeErr act -> computePrecondition s act && not (restrictedPolar act)
+                      Some act -> computePrecondition s act && not (restrictedPolar act)
                   case m of
                     Nothing -> return NoStep
-                    Just (SomeErr a@ActionWithPolarity{}) ->
+                    Just (Some a@ActionWithPolarity{}) ->
                       return $
                         Stepping
                           (Do $ mkVar n := a)
@@ -603,7 +601,7 @@ shrinkScript = shrink' initialAnnotatedState
       , ss' <- ss : shrink' s (stepDLSeq d s $ TestSeqWitness a TestSeqStop) ss
       ]
     nonstructural s d (TestSeqStep step@(var := act) ss) =
-      [TestSeqStep (unsafeCoerceVar var := act') ss | SomeErr act'@ActionWithPolarity{} <- computeShrinkAction s act]
+      [TestSeqStep (unsafeCoerceVar var := act') ss | Some act'@ActionWithPolarity{} <- computeShrinkAction s act]
         ++ [ TestSeqStep step ss'
            | ss' <-
               shrink'
@@ -656,7 +654,7 @@ stepDL :: DynLogicModel s => DynLogic s -> Annotated s -> TestStep s -> [DynLogi
 stepDL (After a k) s (Do (var := act))
   -- TOOD: make this nicer when we migrate to 9.2 where we can just bind
   -- the type variables cleanly and do `Just Refl <- eqT ...` here instead.
-  | SomeErr a == SomeErr act = [k (unsafeCoerceVar var) (computeNextState s act (unsafeCoerceVar var))]
+  | Some a == Some act = [k (unsafeCoerceVar var) (computeNextState s act (unsafeCoerceVar var))]
 stepDL (AfterAny k) s (Do (var := act))
   | not (restrictedPolar act) = [k (computeNextState s act var)]
 stepDL (Alt _ d d') s step = stepDL d s step ++ stepDL d' s step
@@ -754,7 +752,7 @@ stuck (AfterAny _) s =
       0.01
       (computeArbitraryAction s)
       ( \case
-          SomeErr act ->
+          Some act ->
             computePrecondition s act
               && not (restrictedPolar act)
       )
@@ -823,7 +821,7 @@ findMonitoring :: DynLogicModel s => DynLogic s -> Annotated s -> TestSequence s
 findMonitoring Stop _s TestSeqStop = Just id
 findMonitoring (After a k) s (TestSeqStep (var := a') as)
   -- TODO: do nicely with eqT instead (avoids `unsafeCoerceVar`)
-  | SomeErr a == SomeErr a' = findMonitoring (k (unsafeCoerceVar var) s') s' as
+  | Some a == Some a' = findMonitoring (k (unsafeCoerceVar var) s') s' as
   where
     s' = computeNextState s a' (unsafeCoerceVar var)
 findMonitoring (AfterAny k) s as@(TestSeqStep (_var := a) _)
