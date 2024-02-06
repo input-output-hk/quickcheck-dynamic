@@ -1,4 +1,3 @@
-
 module Spec.DynamicLogic.CounterModel where
 
 import Control.Monad.Reader
@@ -7,6 +6,8 @@ import Test.QuickCheck
 import Test.QuickCheck.Extras
 import Test.QuickCheck.Monadic
 import Test.QuickCheck.StateModel
+import Test.Tasty hiding (after)
+import Test.Tasty.QuickCheck
 
 data Counter = Counter Int
   deriving (Show, Generic)
@@ -17,9 +18,8 @@ instance HasVariables (Action Counter a) where
   getAllVariables _ = mempty
 
 instance StateModel Counter where
-
   data Action Counter a where
-    Inc   :: Action Counter ()
+    Inc :: Action Counter ()
     Reset :: Action Counter Int
 
   initialState = Counter 0
@@ -49,3 +49,9 @@ prop_counter as = monadicIO $ do
   runPropertyReaderT (runActions as) ref
   assert True
 
+tests :: TestTree
+tests =
+  testGroup
+    "counter tests"
+    [ testProperty "prop_conter" $ prop_counter
+    ]
