@@ -104,7 +104,9 @@ class
   -- anything.
   data Action state a
 
-  -- | TODO docs
+  -- | The type of errors that actions can throw. If this is defined as anything
+  -- other than `Void` `perform` is required to return `Either (Error state) a`
+  -- instead of `a`.
   type Error state
 
   type Error state = Void
@@ -158,6 +160,9 @@ class
 
 deriving instance (forall a. Show (Action state a)) => Show (Any (Action state))
 
+-- | The result required of `perform` depending on the `Error` type
+-- of a state model. If there are no errors, `Error state = Void`, and
+-- so we don't need to specify if the action failed or not.
 type family PerformResult e a where
   PerformResult Void a = a
   PerformResult e a = Either e a
