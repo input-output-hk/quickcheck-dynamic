@@ -106,6 +106,7 @@ class
 
   -- | TODO docs
   type Error state
+
   type Error state = Void
 
   -- | Display name for `Action`.
