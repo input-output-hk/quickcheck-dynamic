@@ -95,9 +95,9 @@ class
   --
   -- @
   --   data Action RegState a where
-  --     Spawn      ::                           Action RegState () ThreadId
-  --     Register   :: String -> Var ThreadId -> Action RegState ErrorCall ()
-  --     KillThread :: Var ThreadId           -> Action RegState () ()
+  --     Spawn      ::                           Action RegState ThreadId
+  --     Register   :: String -> Var ThreadId -> Action RegState ()
+  --     KillThread :: Var ThreadId           -> Action RegState ()
   -- @
   --
   -- The @Spawn@ action should produce a @ThreadId@, whereas the @KillThread@ action does not return
