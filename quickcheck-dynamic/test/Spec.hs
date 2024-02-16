@@ -2,6 +2,7 @@
 
 module Main (main) where
 
+import Spec.DynamicLogic.CounterModel qualified
 import Spec.DynamicLogic.RegistryModel qualified
 import Test.Tasty
 
@@ -13,4 +14,5 @@ tests =
   testGroup
     "dynamic logic"
     [ Spec.DynamicLogic.RegistryModel.tests
+    , Spec.DynamicLogic.CounterModel.tests
     ]

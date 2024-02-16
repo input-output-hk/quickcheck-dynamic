@@ -46,6 +46,7 @@ common lang
     ImportQualifiedPost
     LambdaCase
     MultiParamTypeClasses
+    MultiWayIf
     PatternSynonyms
     QuantifiedConstraints
     RankNTypes
@@ -89,6 +90,7 @@ test-suite quickcheck-dynamic-test
   main-is:        Spec.hs
   hs-source-dirs: test
   other-modules:
+    Spec.DynamicLogic.CounterModel
     Spec.DynamicLogic.Registry
     Spec.DynamicLogic.RegistryModel
 

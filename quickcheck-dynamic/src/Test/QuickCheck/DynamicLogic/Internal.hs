@@ -162,7 +162,7 @@ instance StateModel s => HasVariables (FailingAction s) where
 
 instance StateModel s => Eq (FailingAction s) where
   ErrorFail s == ErrorFail s' = s == s'
-  ActionFail (a :: ActionWithPolarity s a) == ActionFail (a' :: ActionWithPolarity s a')
+  ActionFail (a :: ActionWithPolarity s a) == ActionFail (a' :: ActionWithPolarity s' a')
     | Just Refl <- eqT @a @a' = a == a'
   _ == _ = False
 

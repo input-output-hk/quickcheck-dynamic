@@ -36,7 +36,6 @@ module Test.QuickCheck.StateModel (
   computePrecondition,
   computeArbitraryAction,
   computeShrinkAction,
-  failureResult,
 ) where
 
 import Control.Monad
@@ -49,8 +48,8 @@ import Data.Kind
 import Data.List
 import Data.Monoid (Endo (..))
 import Data.Set qualified as Set
+import Data.Void
 import GHC.Generics
-import GHC.Stack
 import Test.QuickCheck as QC
 import Test.QuickCheck.DynamicLogic.SmartShrinking
 import Test.QuickCheck.Monadic
@@ -97,13 +96,20 @@ class
   -- @
   --   data Action RegState a where
   --     Spawn      ::                           Action RegState ThreadId
-  --     Register   :: String -> Var ThreadId -> Action RegState (Either ErrorCall ())
+  --     Register   :: String -> Var ThreadId -> Action RegState ()
   --     KillThread :: Var ThreadId           -> Action RegState ()
   -- @
   --
   -- The @Spawn@ action should produce a @ThreadId@, whereas the @KillThread@ action does not return
   -- anything.
   data Action state a
+
+  -- | The type of errors that actions can throw. If this is defined as anything
+  -- other than `Void` `perform` is required to return `Either (Error state) a`
+  -- instead of `a`.
+  type Error state
+
+  type Error state = Void
 
   -- | Display name for `Action`.
   -- This is useful to provide sensible statistics about the distribution of `Action`s run
@@ -154,6 +160,22 @@ class
 
 deriving instance (forall a. Show (Action state a)) => Show (Any (Action state))
 
+-- | The result required of `perform` depending on the `Error` type
+-- of a state model. If there are no errors, `Error state = Void`, and
+-- so we don't need to specify if the action failed or not.
+type family PerformResult e a where
+  PerformResult Void a = a
+  PerformResult e a = Either e a
+
+class IsPerformResult e a where
+  performResultToEither :: PerformResult e a -> Either e a
+
+instance {-# OVERLAPPING #-} IsPerformResult Void a where
+  performResultToEither = Right
+
+instance {-# OVERLAPPABLE #-} (PerformResult e a ~ Either e a) => IsPerformResult e a where
+  performResultToEither = id
+
 -- TODO: maybe it makes sense to write
 -- out a long list of these instances
 type family Realized (m :: Type -> Type) a :: Type
@@ -179,7 +201,7 @@ monitorPost m = PostconditionM $ tell (Endo m, mempty)
 counterexamplePost :: Monad m => String -> PostconditionM m ()
 counterexamplePost c = PostconditionM $ tell (mempty, Endo $ counterexample c)
 
-class Monad m => RunModel state m where
+class (forall a. Show (Action state a), Monad m) => RunModel state m where
   -- | Perform an `Action` in some `state` in the `Monad` `m`.  This
   -- is the function that's used to exercise the actual stateful
   -- implementation, usually through various side-effects as permitted
@@ -190,40 +212,47 @@ class Monad m => RunModel state m where
   --
   -- The `Lookup` parameter provides an /environment/ to lookup `Var
   -- a` instances from previous steps.
-  perform :: forall a. Typeable a => state -> Action state a -> LookUp m -> m (Realized m a)
+  perform :: Typeable a => state -> Action state a -> LookUp m -> m (PerformResult (Error state) (Realized m a))
 
   -- | Postcondition on the `a` value produced at some step.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
   -- to check the implementation produces expected values.
-  postcondition :: forall a. (state, state) -> Action state a -> LookUp m -> Realized m a -> PostconditionM m Bool
+  postcondition :: (state, state) -> Action state a -> LookUp m -> Realized m a -> PostconditionM m Bool
   postcondition _ _ _ _ = pure True
 
   -- | Postcondition on the result of running a _negative_ `Action`.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
   -- to check the implementation produces e.g. the expected errors or to check that the SUT hasn't
   -- been updated during the execution of the negative action.
-  postconditionOnFailure :: forall a. (state, state) -> Action state a -> LookUp m -> Realized m a -> PostconditionM m Bool
+  postconditionOnFailure :: (state, state) -> Action state a -> LookUp m -> Either (Error state) (Realized m a) -> PostconditionM m Bool
   postconditionOnFailure _ _ _ _ = pure True
 
   -- | Allows the user to attach additional information to the `Property` at each step of the process.
   -- This function is given the full transition that's been executed, including the start and ending
   -- `state`, the `Action`, the current environment to `Lookup` and the value produced by `perform`
   -- while executing this step.
-  monitoring :: forall a. (state, state) -> Action state a -> LookUp m -> Realized m a -> Property -> Property
+  monitoring :: (state, state) -> Action state a -> LookUp m -> Either (Error state) (Realized m a) -> Property -> Property
   monitoring _ _ _ _ prop = prop
 
--- | Indicate that the result of an action (in `perform`)
--- should not be inspected by the postcondition or appear
--- in a positive test. Useful when we want to give a type
--- for an `Action` like `SomeAct :: Action SomeState SomeType`
--- instead of `SomeAct :: Action SomeState (Either SomeError SomeType)`
--- but still need to return something in `perform` in the failure case.
-failureResult :: HasCallStack => a
-failureResult = error "A result of a failing action has been erronesouly inspected"
+  -- | Allows the user to attach additional information to the `Property` if a positive action fails.
+  monitoringFailure :: state -> Action state a -> LookUp m -> Error state -> Property -> Property
+  monitoringFailure _ _ _ _ prop = prop
 
-computePostcondition :: forall m state a. RunModel state m => (state, state) -> ActionWithPolarity state a -> LookUp m -> Realized m a -> PostconditionM m Bool
+computePostcondition
+  :: forall m state a
+   . RunModel state m
+  => (state, state)
+  -> ActionWithPolarity state a
+  -> LookUp m
+  -> Either (Error state) (Realized m a)
+  -> PostconditionM m Bool
 computePostcondition ss (ActionWithPolarity a p) l r
-  | p == PosPolarity = postcondition ss a l r
+  | p == PosPolarity = case r of
+      Right ra -> postcondition ss a l ra
+      -- NOTE: this is actually redundant as this handled
+      -- at the call site for this function, but this is
+      -- good hygiene?
+      Left _ -> pure False
   | otherwise = postconditionOnFailure ss a l r
 
 type LookUp m = forall a. Typeable a => Var a -> Realized m a
@@ -252,7 +281,7 @@ lookUpVarMaybe (((v' :: Var b) :== a) : env) v =
 
 lookUpVar :: Typeable a => Env m -> Var a -> Realized m a
 lookUpVar env v = case lookUpVarMaybe env v of
-  Nothing -> error $ "Variable " ++ show v ++ " is not bound!"
+  Nothing -> error $ "Variable " ++ show v ++ " is not bound at type " ++ show (typeRep v) ++ "!"
   Just a -> a
 
 data WithUsedVars a = WithUsedVars VarContext a
@@ -477,8 +506,12 @@ stateAfter (Actions actions) = loop initialAnnotatedState actions
     loop s ((var := act) : as) = loop (computeNextState @state s act var) as
 
 runActions
-  :: forall state m
-   . (StateModel state, RunModel state m)
+  :: forall state m e
+   . ( StateModel state
+     , RunModel state m
+     , e ~ Error state
+     , forall a. IsPerformResult e a
+     )
   => Actions state
   -> PropertyM m (Annotated state, Env m)
 runActions (Actions_ rejected (Smart _ actions)) = loop initialAnnotatedState [] actions
@@ -491,24 +524,37 @@ runActions (Actions_ rejected (Smart _ actions)) = loop initialAnnotatedState []
       return (_s, reverse env)
     loop s env ((v := act) : as) = do
       pre $ computePrecondition s act
-      ret <- run $ perform (underlyingState s) (polarAction act) (lookUpVar env)
+      ret <- run $ performResultToEither <$> perform (underlyingState s) (polarAction act) (lookUpVar env)
       let name = show (polarity act) ++ actionName (polarAction act)
       monitor $ tabulate "Actions" [name]
-      let var = unsafeCoerceVar v
-          s' = computeNextState s act var
-          env' = (var :== ret) : env
       monitor $ tabulate "Action polarity" [show $ polarity act]
-      monitor $ monitoring @state @m (underlyingState s, underlyingState s') (polarAction act) (lookUpVar env') ret
-      (b, (Endo mon, Endo onFail)) <-
-        run
-          . runWriterT
-          . runPost
-          $ computePostcondition @m
-            (underlyingState s, underlyingState s')
-            act
-            (lookUpVar env)
-            ret
-      monitor mon
-      unless b $ monitor onFail
-      assert b
-      loop s' env' as
+      if
+        | polarity act == PosPolarity
+        , Left err <- ret -> do
+            monitor $
+              monitoringFailure @state @m
+                (underlyingState s)
+                (polarAction act)
+                (lookUpVar env)
+                err
+            stop False
+        | otherwise -> do
+            let var = unsafeCoerceVar v
+                s' = computeNextState s act var
+                env'
+                  | Right val <- ret = (var :== val) : env
+                  | otherwise = env
+            monitor $ monitoring @state @m (underlyingState s, underlyingState s') (polarAction act) (lookUpVar env') ret
+            (b, (Endo mon, Endo onFail)) <-
+              run
+                . runWriterT
+                . runPost
+                $ computePostcondition @m
+                  (underlyingState s, underlyingState s')
+                  act
+                  (lookUpVar env)
+                  ret
+            monitor mon
+            unless b $ monitor onFail
+            assert b
+            loop s' env' as

@@ -40,9 +40,11 @@ instance StateModel RegState where
   data Action RegState a where
     Spawn :: Action RegState ThreadId
     WhereIs :: String -> Action RegState (Maybe ThreadId)
-    Register :: String -> Var ThreadId -> Action RegState (Either SomeException ())
-    Unregister :: String -> Action RegState (Either SomeException ())
+    Register :: String -> Var ThreadId -> Action RegState ()
+    Unregister :: String -> Action RegState ()
     KillThread :: Var ThreadId -> Action RegState ()
+
+  type Error RegState = SomeException
 
   precondition s (Register name tid) =
     name `Map.notMember` regs s
@@ -109,7 +111,8 @@ type RegM = ReaderT Registry IO
 
 instance RunModel RegState RegM where
   perform _ Spawn _ = do
-    lift $ forkIO (threadDelay 10000000)
+    tid <- lift $ forkIO (threadDelay 10000000)
+    pure $ Right tid
   perform _ (Register name tid) env = do
     reg <- ask
     lift $ try $ register reg name (env tid)
@@ -118,24 +121,22 @@ instance RunModel RegState RegM where
     lift $ try $ unregister reg name
   perform _ (WhereIs name) _ = do
     reg <- ask
-    lift $ whereis reg name
+    res <- lift $ whereis reg name
+    pure $ Right res
   perform _ (KillThread tid) env = do
     lift $ killThread (env tid)
     lift $ threadDelay 100
+    pure $ Right ()
 
   postcondition (s, _) (WhereIs name) env mtid = do
     pure $ (env <$> Map.lookup name (regs s)) == mtid
-  postcondition _ Register{} _ res = do
-    pure $ isRight res
   postcondition _ _ _ _ = pure True
 
   postconditionOnFailure (s, _) act@Register{} _ res = do
     monitorPost $
       tabulate
         "Reason for -Register"
-        [ why s act
-        | Left{} <- [res]
-        ]
+        [why s act]
     pure $ isLeft res
   postconditionOnFailure _s _ _ _ = pure True
 
