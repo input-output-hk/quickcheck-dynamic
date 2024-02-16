@@ -37,16 +37,19 @@ import Test.QuickCheck.StateModel
 --
 -- A `Quantification` is similar to a  `Test.QuickCheck.Arbitrary`, it groups together:
 --
--- * A standard QuickCheck _generator_ in the `Gen` monad,
+-- * A standard QuickCheck _generator_ in the `Gen` monad, which can be "empty",
 -- * A _shrinking_ strategy for generated values in the case of a
 --   failures ensuring they stay within the domain,
 -- * A _predicate_ allowing finer grained control on generation
 --   and shrinking process, e.g in the case the range of the generator
 --   depends on trace context.
+--
+-- NOTE: Leaving the possibility of generating `Nothing` is useful to simplify the generation
+-- process for `elements` or `frequency` which may normally crash when the list to select
+-- elements from is empty. This makes writing `DL` formulas cleaner, removing the need to
+-- handle non-existence cases explicitly.
 data Quantification a = Quantification
-  { -- FIXME: why is this a Maybe? It makes things annoying down the road, smells like
-    -- something which would benefit from better typing?
-    genQ :: Maybe (Gen a)
+  { genQ :: Maybe (Gen a)
   , isaQ :: a -> Bool
   , shrQ :: a -> [a]
   }
