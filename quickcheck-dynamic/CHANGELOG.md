@@ -10,6 +10,9 @@ changes.
 ## UNRELEASED
 
 * Added some lightweight negative-shrinking based on a simple dependency analysis.
+* Added the option to return errors from actions by defining `type Error state`.
+  When this is defined `perform` has return type `m (Either (Error state) (Realized m a))`,
+  when it is left as the default the type remains `m (Realized m a)`.
 
 ## 3.3.1
 
