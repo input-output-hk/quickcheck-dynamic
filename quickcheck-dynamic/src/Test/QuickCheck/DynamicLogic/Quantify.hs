@@ -64,8 +64,10 @@ shrinkQ :: Quantification a -> a -> [a]
 shrinkQ q a = filter (isaQ q) (shrQ q a)
 
 -- | Construct a `Quantification a` from its constituents.
+-- Note the predicate provided is used to restrict both the range of values
+-- generated and the list of possible shrinked values.
 withGenQ :: Gen a -> (a -> Bool) -> (a -> [a]) -> Quantification a
-withGenQ gen = Quantification (Just gen)
+withGenQ gen isA = Quantification (Just $ gen `suchThat` isA) isA
 
 -- | Pack up an `Arbitrary` instance as a `Quantification`. Treats all values as being in range.
 arbitraryQ :: Arbitrary a => Quantification a
@@ -239,6 +241,8 @@ instance Quantifiable a => Quantifiable [a] where
       from (x : xs) = (x, xs)
       from [] = error "quantify: impossible"
 
+-- | Turns a `Quantification` into a `Property` to enable QuickChecking its
+-- validity.
 validQuantification :: Show a => Quantification a -> Property
 validQuantification q =
   forAllShrink (fromJust $ genQ q) (shrinkQ q) $ isaQ q
