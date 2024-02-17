@@ -4,5 +4,7 @@ packages:
 
 tests: true
 
+test-show-details: direct
+
 allow-newer:
   text
