@@ -13,6 +13,7 @@ changes.
 * Added the option to return errors from actions by defining `type Error state`.
   When this is defined `perform` has return type `m (Either (Error state) (Realized m a))`,
   when it is left as the default the type remains `m (Realized m a)`.
+* Changed `withGenQ` to _require_ a predicate when defining a `Quantification`
 
 ## 3.3.1
 

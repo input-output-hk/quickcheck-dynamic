@@ -32,10 +32,22 @@ import Test.QuickCheck
 import Test.QuickCheck.DynamicLogic.CanGenerate
 import Test.QuickCheck.StateModel
 
--- | A `Quantification` over a type @a@ is a generator that can be used with
---   `Plutus.Contract.Test.ContractModel.forAllQ` to generate random values in
---   DL scenarios. In addition to a QuickCheck generator a `Quantification` contains a shrinking
---   strategy that ensures that shrunk values stay in the range of the generator.
+-- | A `Quantification` over a type @a@ is a generator that can be used to generate random values in
+-- DL scenarios.
+--
+-- A `Quantification` is similar to a  `Test.QuickCheck.Arbitrary`, it groups together:
+--
+-- * A standard QuickCheck _generator_ in the `Gen` monad, which can be "empty",
+-- * A _shrinking_ strategy for generated values in the case of a
+--   failures ensuring they stay within the domain,
+-- * A _predicate_ allowing finer grained control on generation
+--   and shrinking process, e.g in the case the range of the generator
+--   depends on trace context.
+--
+-- NOTE: Leaving the possibility of generating `Nothing` is useful to simplify the generation
+-- process for `elements` or `frequency` which may normally crash when the list to select
+-- elements from is empty. This makes writing `DL` formulas cleaner, removing the need to
+-- handle non-existence cases explicitly.
 data Quantification a = Quantification
   { genQ :: Maybe (Gen a)
   , isaQ :: a -> Bool
@@ -51,10 +63,11 @@ generateQ q = fromJust (genQ q) `suchThat` isaQ q
 shrinkQ :: Quantification a -> a -> [a]
 shrinkQ q a = filter (isaQ q) (shrQ q a)
 
--- | Wrap a `Gen a` generator in a `Quantification a`.
--- Uses given shrinker.
-withGenQ :: Gen a -> (a -> [a]) -> Quantification a
-withGenQ gen = Quantification (Just gen) (const True)
+-- | Construct a `Quantification a` from its constituents.
+-- Note the predicate provided is used to restrict both the range of values
+-- generated and the list of possible shrinked values.
+withGenQ :: Gen a -> (a -> Bool) -> (a -> [a]) -> Quantification a
+withGenQ gen isA = Quantification (Just $ gen `suchThat` isA) isA
 
 -- | Pack up an `Arbitrary` instance as a `Quantification`. Treats all values as being in range.
 arbitraryQ :: Arbitrary a => Quantification a
@@ -228,6 +241,8 @@ instance Quantifiable a => Quantifiable [a] where
       from (x : xs) = (x, xs)
       from [] = error "quantify: impossible"
 
+-- | Turns a `Quantification` into a `Property` to enable QuickChecking its
+-- validity.
 validQuantification :: Show a => Quantification a -> Property
 validQuantification q =
   forAllShrink (fromJust $ genQ q) (shrinkQ q) $ isaQ q
