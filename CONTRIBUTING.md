@@ -66,9 +66,11 @@ During development
 
 ### Releasing
 
-To perform a release
+To perform a release (requires maintainers' rights on the repository):
 + Check version to be released is also correct in software components, e.g. `.cabal` files.
 + Replace `UNRELEASED` with a date in [ISO8601](https://en.wikipedia.org/wiki/ISO_8601)
-+ Create a signed, annotated git tag of the version: `git tag -as <version>`
-+ Use the released changes as annotation
-+ (TBD) Publish package on [hackage](https://hackage.haskell.org/)
++ Create a signed, annotated git tag of the version: `git tag -as <version>`, using the released changes as annotation
++ Push the new tag to the remote repository `git push --tags`. This should trigger the [Release](https://github.com/input-output-hk/quickcheck-dynamic/actions/workflows/release.yaml) workflow.
+  * Note that it's fine to "repush" the tag and retrigger the workflow if a problem is spotted at this moment
+* _(Optional)_ Retrieve the artifact attached to the workflow and upload it as a _candidate_ on [Hackage](https://hackage.haskell.org/packages/candidates/upload). This is useful to check everything's right before publishing the release
++ Publish package on [Hackage](https://hackage.haskell.org/) by manually triggering the [Publish workflow](https://github.com/input-output-hk/quickcheck-dynamic/actions/workflows/publish.yaml)
