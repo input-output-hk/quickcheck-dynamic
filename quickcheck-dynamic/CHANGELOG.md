@@ -7,13 +7,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 As a minor extension, we also keep a semantic version for the `UNRELEASED`
 changes.
 
-## UNRELEASED
+## 3.4.0 - 2024-03-01
 
 * Added some lightweight negative-shrinking based on a simple dependency analysis.
 * Added the option to return errors from actions by defining `type Error state`.
   When this is defined `perform` has return type `m (Either (Error state) (Realized m a))`,
   when it is left as the default the type remains `m (Realized m a)`.
-* Changed `withGenQ` to _require_ a predicate when defining a `Quantification`
+* Changed `withGenQ` to _require_ a predicate when defining a `Quantification`. **Note**: This is technically a breaking change as the interface changed
 
 ## 3.3.1
 
