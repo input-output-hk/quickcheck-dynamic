@@ -2,6 +2,8 @@
 
 module Main (main) where
 
+import Spec.CircularBuffer.Model qualified
+import Spec.DynamicLogic.CounterModel qualified
 import Spec.DynamicLogic.RegistryModel qualified
 import Test.QuickCheck.DynamicLogic.QuantifySpec qualified
 import Test.QuickCheck.StateModelSpec qualified
@@ -15,6 +17,8 @@ tests =
   testGroup
     "dynamic logic"
     [ Spec.DynamicLogic.RegistryModel.tests
+    , Spec.DynamicLogic.CounterModel.tests
+    , Spec.CircularBuffer.Model.tests
     , Test.QuickCheck.DynamicLogic.QuantifySpec.tests
     , Test.QuickCheck.StateModelSpec.tests
     ]
