@@ -25,6 +25,7 @@ module Test.QuickCheck.StateModel (
   Env,
   Realized,
   Generic,
+  IsPerformResult,
   monitorPost,
   counterexamplePost,
   stateAfter,
