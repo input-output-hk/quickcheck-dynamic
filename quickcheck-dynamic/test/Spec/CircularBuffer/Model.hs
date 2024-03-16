@@ -14,7 +14,7 @@ import Data.Maybe (fromJust)
 import GHC.Generics (Generic)
 import Spec.CircularBuffer.Buffer (Buffer, getBuffer, lenBuffer, newBuffer, putBuffer)
 import Test.QuickCheck (Arbitrary (..), Property, getPositive, oneof)
-import Test.QuickCheck.DynamicLogic (DL, DynLogicModel (..), forAllDL)
+import Test.QuickCheck.DynamicLogic (DL, DynLogicModel (..), action, forAllDL)
 import Test.QuickCheck.Extras (runPropertyStateT)
 import Test.QuickCheck.Monadic (monadicIO)
 import Test.QuickCheck.Monadic qualified as QC
@@ -113,4 +113,5 @@ tests :: TestTree
 tests =
   testGroup
     "Circular Buffer"
-    [testProperty "implementation respects its model" prop_CircularBuffer]
+    [ testProperty "implementation respects its model" prop_CircularBuffer
+    ]

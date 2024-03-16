@@ -63,4 +63,4 @@ lenBuffer :: Buffer -> IO Int
 lenBuffer Buffer{inp, outp, size} = do
   i <- readIORef inp
   j <- readIORef outp
-  pure $ (i - j) `mod` size
+  pure $ (i - j + size) `rem` size

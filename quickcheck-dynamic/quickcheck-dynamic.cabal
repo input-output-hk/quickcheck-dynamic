@@ -108,5 +108,6 @@ test-suite quickcheck-dynamic-test
                 , quickcheck-dynamic
                 , stm
                 , tasty
+                , tasty-hunit
                 , tasty-quickcheck
                 , vector
