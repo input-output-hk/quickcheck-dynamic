@@ -36,10 +36,12 @@ instance Eq Buffer where
 -- | See 'New'.
 newBuffer :: Int -> IO Buffer
 newBuffer n =
-  Buffer n
+  Buffer size
     <$> newIORef 0
     <*> newIORef 0
-    <*> V.new n
+    <*> V.new size
+  where
+    size = n + 1
 
 -- | See 'Put'.
 putBuffer :: Int -> Buffer -> IO ()
@@ -61,4 +63,4 @@ lenBuffer :: Buffer -> IO Int
 lenBuffer Buffer{inp, outp, size} = do
   i <- readIORef inp
   j <- readIORef outp
-  return $ (i - j) `mod` size
+  pure $ (i - j) `mod` size
