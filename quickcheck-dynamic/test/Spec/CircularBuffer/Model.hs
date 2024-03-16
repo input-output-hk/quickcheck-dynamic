@@ -56,7 +56,7 @@ instance StateModel CircularBufferModel where
 
   precondition NoBuffer New{} = True
   precondition CircularBufferModel{buffer} Get{} = length buffer > 0
-  precondition CircularBufferModel{} Put{} = True
+  precondition CircularBufferModel{buffer, size} Put{} = length buffer < size
   precondition CircularBufferModel{} Len{} = True
   precondition _ _ = False
 
@@ -94,6 +94,10 @@ instance RunModel CircularBufferModel (StateT (Maybe Buffer) IO) where
      in do
           counterexamplePost ("Expected: " <> show v <> ", got: " <> show res)
           pure $ v == res
+  postcondition (CircularBufferModel{buffer}, after) Len lookup res = do
+    let len = length buffer
+    counterexamplePost $ "Expected; " <> show len <> ", got: " <> show res
+    pure $ res == len
   postcondition _ _ _ _ = pure True
 
 prop_CircularBuffer :: Actions CircularBufferModel -> Property
