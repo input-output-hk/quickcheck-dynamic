@@ -9,15 +9,17 @@ import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Vector.Unboxed.Mutable (
   IOVector,
  )
-import qualified Data.Vector.Unboxed.Mutable as V
+import Data.Vector.Unboxed.Mutable qualified as V
 
 -- | An efficient mutable circular buffer.
 data Buffer = Buffer
-  { top :: IORef Int
-  -- ^ Index to the top: where to 'Put' the next element
-  , bot :: IORef Int
-  -- ^ Index to the bottom: where to 'Get' the next element
-  , arr :: IOVector Int
+  { size :: Int
+  -- ^ Size of buffer
+  , inp :: IORef Int
+  -- ^ Index to the next free slot where to 'Put' the next element
+  , outp :: IORef Int
+  -- ^ Index to the last occupied slot to 'Get' an element from
+  , buf :: IOVector Int
   -- ^ Array of elements of fixed capacity
   }
 
@@ -25,38 +27,38 @@ data Buffer = Buffer
 -- so we can use 'V.overlaps' to check equality.
 instance Eq Buffer where
   (==) =
-    ((==) `on` top)
-      `also` ((==) `on` bot)
-      `also` (V.overlaps `on` arr)
+    ((==) `on` inp)
+      `also` ((==) `on` outp)
+      `also` (V.overlaps `on` buf)
     where
       also = (liftA2 . liftA2) (&&)
 
 -- | See 'New'.
 newBuffer :: Int -> IO Buffer
 newBuffer n =
-  Buffer
+  Buffer n
     <$> newIORef 0
     <*> newIORef 0
-    <*> V.new (n + 1)
+    <*> V.new n
 
 -- | See 'Put'.
 putBuffer :: Int -> Buffer -> IO ()
-putBuffer x Buffer{top, arr} = do
-  i <- readIORef top
-  V.write arr i x
-  writeIORef top $! (i + 1) `mod` V.length arr
+putBuffer x Buffer{size, inp, buf} = do
+  i <- readIORef inp
+  V.write buf i x
+  writeIORef inp $! (i + 1) `mod` size
 
 -- | See 'Get'.
 getBuffer :: Buffer -> IO Int
-getBuffer Buffer{bot, arr} = do
-  j <- readIORef bot
-  y <- V.read arr j
-  writeIORef bot $! (j + 1) `mod` V.length arr
+getBuffer Buffer{size, outp, buf} = do
+  j <- readIORef outp
+  y <- V.read buf j
+  writeIORef outp $! (j + 1) `mod` size
   return y
 
 -- | See 'Len'.
 lenBuffer :: Buffer -> IO Int
-lenBuffer Buffer{top, bot, arr} = do
-  i <- readIORef top
-  j <- readIORef bot
-  return $ (i - j) `mod` V.length arr
+lenBuffer Buffer{inp, outp, size} = do
+  i <- readIORef inp
+  j <- readIORef outp
+  return $ (i - j) `mod` size

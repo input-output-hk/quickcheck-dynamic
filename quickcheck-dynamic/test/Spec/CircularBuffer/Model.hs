@@ -1,3 +1,4 @@
+{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
@@ -17,7 +18,7 @@ import Test.QuickCheck.DynamicLogic (DL, DynLogicModel (..), action, anyActions_
 import Test.QuickCheck.Extras (runPropertyStateT)
 import Test.QuickCheck.Monadic (monadicIO)
 import Test.QuickCheck.Monadic qualified as QC
-import Test.QuickCheck.StateModel (Actions, Any (..), HasVariables (..), RunModel (..), StateModel (..), Var, runActions)
+import Test.QuickCheck.StateModel (Actions, Any (..), HasVariables (..), RunModel (..), StateModel (..), Var, counterexamplePost, runActions)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.QuickCheck (testProperty)
 
@@ -53,18 +54,21 @@ instance StateModel CircularBufferModel where
 
   initialState = NoBuffer
 
-  nextState NoBuffer (New size) var =
-    CircularBufferModel{size, buffer = mempty}
-  nextState buf@CircularBufferModel{size, buffer} Put{} var
-    | length buffer < size = buf{buffer = var : buffer}
-  nextState buf@CircularBufferModel{buffer} Get _
-    | length buffer > 0 = buf{buffer = init buffer}
+  precondition NoBuffer New{} = True
+  precondition CircularBufferModel{buffer} Get{} = length buffer > 0
+  precondition CircularBufferModel{} Put{} = True
+  precondition CircularBufferModel{} Len{} = True
+  precondition _ _ = False
+
+  nextState NoBuffer (New size) var = CircularBufferModel{size, buffer = mempty}
+  nextState buf@CircularBufferModel{size, buffer} Put{} var = buf{buffer = var : buffer}
+  nextState buf@CircularBufferModel{buffer} Get _ = buf{buffer = init buffer}
   nextState st _ _ = st
 
-  precondition NoBuffer New{} = True
-  precondition CircularBufferModel{size, buffer} Put{} = length buffer < size
-  precondition CircularBufferModel{buffer} Get{} = length buffer > 0
-  precondition _ _ = True
+  shrinkAction _ _ = \case
+    New n -> Some . New <$> [i | i <- shrink n, i > 0]
+    Put n -> Some . Put <$> shrink n
+    _ -> []
 
 deriving instance Show (Action CircularBufferModel a)
 deriving instance Eq (Action CircularBufferModel a)
@@ -87,7 +91,9 @@ instance RunModel CircularBufferModel (StateT (Maybe Buffer) IO) where
 
   postcondition (CircularBufferModel{buffer}, after) Get lookup res =
     let v = lookup (last buffer)
-     in pure $ v == res
+     in do
+          counterexamplePost ("Expected: " <> show v <> ", got: " <> show res)
+          pure $ v == res
   postcondition _ _ _ _ = pure True
 
 prop_CircularBuffer :: Actions CircularBufferModel -> Property
@@ -99,28 +105,9 @@ prop_CircularBuffer s =
 propDL :: DL CircularBufferModel () -> Property
 propDL d = forAllDL d prop_CircularBuffer
 
--- probably not interesting = we are asserting something on the model
-prop_NeverGoesOverSize :: DL CircularBufferModel ()
-prop_NeverGoesOverSize = do
-  anyActions_
-  assertModel "Too many elements" $ \case
-    NoBuffer -> True
-    CircularBufferModel{size, buffer} -> length buffer <= size
-
-prop_GetReturnsFirstPut :: DL CircularBufferModel ()
-prop_GetReturnsFirstPut = do
-  anyActions_
-  getModelStateDL >>= \case
-    CircularBufferModel{buffer} | not (null buffer) -> do
-      let toGet = last buffer
-      res <- action Get
-      assert ("wrong element: " <> show toGet <> ", res: " <> show res) $ res == toGet
-    _ -> pure ()
-
 tests :: TestTree
 tests =
   testGroup
     "Circular Buffer"
-    [ testProperty "never has more than 'size' elements" $ propDL prop_NeverGoesOverSize
-    , testProperty "Get first Put" $ propDL prop_GetReturnsFirstPut
+    [ testProperty "implementation respects its model" prop_CircularBuffer
     ]
