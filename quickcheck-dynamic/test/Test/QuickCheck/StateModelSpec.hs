@@ -36,7 +36,7 @@ tests =
         "Action polarity" `isInfixOf` output @? "Output does not contain 'Action polarity'"
     , testCase "prints counterexample as sequence of steps when postcondition fails" $ do
         Failure{output} <- captureTerminal prop_failsOnPostcondition
-        "do action $ Foo'" `isInfixOf` output @? "Output does not contain \"do action $ Inc'\": " <> output
+        "do action $ Inc'" `isInfixOf` output @? "Output does not contain \"do action $ Inc'\": " <> output
     ]
 
 captureTerminal :: Testable p => p -> IO Result
