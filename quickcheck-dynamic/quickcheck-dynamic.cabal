@@ -94,6 +94,8 @@ test-suite quickcheck-dynamic-test
     Spec.DynamicLogic.Registry
     Spec.DynamicLogic.RegistryModel
     Test.QuickCheck.DynamicLogic.QuantifySpec
+    Test.QuickCheck.StateModelSpec
+    Test.QuickCheck.Counters
 
   ghc-options:    -rtsopts
   build-depends:
@@ -104,4 +106,5 @@ test-suite quickcheck-dynamic-test
     , quickcheck-dynamic
     , stm
     , tasty
+    , tasty-hunit
     , tasty-quickcheck
