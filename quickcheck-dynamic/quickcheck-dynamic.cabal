@@ -93,9 +93,9 @@ test-suite quickcheck-dynamic-test
     Spec.DynamicLogic.CounterModel
     Spec.DynamicLogic.Registry
     Spec.DynamicLogic.RegistryModel
+    Test.QuickCheck.Counters
     Test.QuickCheck.DynamicLogic.QuantifySpec
     Test.QuickCheck.StateModelSpec
-    Test.QuickCheck.Counters
 
   ghc-options:    -rtsopts
   build-depends:
