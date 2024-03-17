@@ -35,8 +35,6 @@ instance RunModel Counter (ReaderT (IORef Int) IO) where
     ref <- ask
     lift $ atomicModifyIORef' ref (\count -> (succ count, count))
 
-  postcondition _ _ _ _ = pure True
-
 newtype FailingCounter = FailingCounter {failingCount :: Int}
   deriving (Eq, Show, Generic)
 
