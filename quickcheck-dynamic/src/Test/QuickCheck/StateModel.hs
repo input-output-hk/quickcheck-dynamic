@@ -529,20 +529,24 @@ runSteps
 runSteps s env [] = return (s, reverse env)
 runSteps s env ((v := act) : as) = do
   pre $ computePrecondition s act
-  ret <- run $ performResultToEither <$> perform (underlyingState s) (polarAction act) (lookUpVar env)
-  let name = show (polarity act) ++ actionName (polarAction act)
+  ret <- run $ performResultToEither <$> perform (underlyingState s) action (lookUpVar env)
+  let name = show polar ++ actionName action
   monitor $ tabulate "Actions" [name]
-  monitor $ tabulate "Action polarity" [show $ polarity act]
-  case (act, ret) of
-    (ActionWithPolarity action PosPolarity, Left err) ->
+  monitor $ tabulate "Action polarity" [show polar]
+  case (polar, ret) of
+    (PosPolarity, Left err) ->
       positiveActionFailed action err
-    (ActionWithPolarity action PosPolarity, Right val) -> do
+    (PosPolarity, Right val) -> do
       (s', env') <- positiveActionSucceeded action ret val
       runSteps s' env' as
-    (ActionWithPolarity action NegPolarity, _) -> do
+    (NegPolarity, _) -> do
       (s', env') <- negativeActionResult action ret
       runSteps s' env' as
   where
+    polar = polarity act
+
+    action = polarAction act
+
     positiveActionFailed action err = do
       monitor $
         monitoringFailure @state @m
@@ -552,25 +556,24 @@ runSteps s env ((v := act) : as) = do
           err
       stop False
 
-    positiveActionSucceeded action ret val =
-      computeActionResult action ret $ \stateTransition ->
+    positiveActionSucceeded action ret val = do
+      (s', env', stateTransition) <- computeNewState action ret
+      evaluatePostCondition $
         postcondition
           stateTransition
           action
           (lookUpVar env)
           val
+      pure (s', env')
 
-    negativeActionResult action ret =
-      computeActionResult action ret $ \stateTransition ->
+    negativeActionResult action ret = do
+      (s', env', stateTransition) <- computeNewState action ret
+      evaluatePostCondition $
         postconditionOnFailure
           stateTransition
           action
           (lookUpVar env)
           ret
-
-    computeActionResult action ret post = do
-      (s', env', stateTransition) <- computeNewState action ret
-      evaluatePostCondition $ post stateTransition
       pure (s', env')
 
     computeNewState action ret = do
