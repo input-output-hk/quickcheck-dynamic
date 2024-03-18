@@ -6,8 +6,8 @@ module Test.QuickCheck.StateModelSpec where
 import Control.Monad.Reader (lift)
 import Data.IORef (newIORef)
 import Data.List (isInfixOf)
+import Spec.DynamicLogic.Counters (Counter (..), FailingCounter, SimpleCounter (..))
 import Test.QuickCheck (Property, Result (..), Testable, chatty, choose, counterexample, noShrinking, property, stdArgs)
-import Test.QuickCheck.Counters (Counter (..), FailingCounter)
 import Test.QuickCheck.Extras (runPropertyReaderT)
 import Test.QuickCheck.Monadic (assert, monadicIO, monitor, pick)
 import Test.QuickCheck.StateModel (
@@ -28,7 +28,8 @@ tests :: TestTree
 tests =
   testGroup
     "Running actions"
-    [ testProperty "returns final state updated from actions" prop_returnsFinalState
+    [ testProperty "simple counter" $ prop_counter
+    , testProperty "returns final state updated from actions" prop_returnsFinalState
     , testProperty "environment variables indices are 1-based " prop_variablesIndicesAre1Based
     , testCase "prints distribution of actions and polarity" $ do
         Success{output} <- captureTerminal prop_returnsFinalState
@@ -44,14 +45,20 @@ captureTerminal p =
   withState stdArgs{chatty = False} $ \st ->
     test st (property p)
 
-prop_returnsFinalState :: Actions Counter -> Property
+prop_counter :: Actions Counter -> Property
+prop_counter as = monadicIO $ do
+  ref <- lift $ newIORef (0 :: Int)
+  runPropertyReaderT (runActions as) ref
+  assert True
+
+prop_returnsFinalState :: Actions SimpleCounter -> Property
 prop_returnsFinalState actions@(Actions as) =
   monadicIO $ do
     ref <- lift $ newIORef (0 :: Int)
     (s, _) <- runPropertyReaderT (runActions actions) ref
     assert $ count (underlyingState s) == length as
 
-prop_variablesIndicesAre1Based :: Actions Counter -> Property
+prop_variablesIndicesAre1Based :: Actions SimpleCounter -> Property
 prop_variablesIndicesAre1Based actions@(Actions as) =
   noShrinking $ monadicIO $ do
     ref <- lift $ newIORef (0 :: Int)

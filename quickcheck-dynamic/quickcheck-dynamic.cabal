@@ -90,10 +90,9 @@ test-suite quickcheck-dynamic-test
   main-is:        Spec.hs
   hs-source-dirs: test
   other-modules:
-    Spec.DynamicLogic.CounterModel
+    Spec.DynamicLogic.Counters
     Spec.DynamicLogic.Registry
     Spec.DynamicLogic.RegistryModel
-    Test.QuickCheck.Counters
     Test.QuickCheck.DynamicLogic.QuantifySpec
     Test.QuickCheck.StateModelSpec
 
