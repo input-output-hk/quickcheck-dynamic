@@ -2,7 +2,7 @@
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE UndecidableInstances #-}
 
--- | Simple (stateful) Model-Based Testing library for use with Haskell QuickCheck.
+-- | Model-Based Testing library for use with Haskell QuickCheck.
 --
 -- This module provides the basic machinery to define a `StateModel` from which /traces/ can
 -- be generated and executed against some /actual/ implementation code to define monadic `Property`
