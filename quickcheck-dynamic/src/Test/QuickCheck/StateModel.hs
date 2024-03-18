@@ -2,7 +2,7 @@
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE UndecidableInstances #-}
 
--- | Simple (stateful) Model-Based Testing library for use with Haskell QuickCheck.
+-- | Model-Based Testing library for use with Haskell QuickCheck.
 --
 -- This module provides the basic machinery to define a `StateModel` from which /traces/ can
 -- be generated and executed against some /actual/ implementation code to define monadic `Property`
@@ -32,6 +32,7 @@ module Test.QuickCheck.StateModel (
   runActions,
   lookUpVar,
   lookUpVarMaybe,
+  viewAtType,
   initialAnnotatedState,
   computeNextState,
   computePrecondition,
@@ -192,6 +193,13 @@ newtype PostconditionM m a = PostconditionM {runPost :: WriterT (Endo Property, 
 instance MonadTrans PostconditionM where
   lift = PostconditionM . lift
 
+evaluatePostCondition :: Monad m => PostconditionM m Bool -> PropertyM m ()
+evaluatePostCondition post = do
+  (b, (Endo mon, Endo onFail)) <- run . runWriterT . runPost $ post
+  monitor mon
+  unless b $ monitor onFail
+  assert b
+
 -- | Apply the property transformation to the property after evaluating
 -- the postcondition. Useful for collecting statistics while avoiding
 -- duplication between `monitoring` and `postcondition`.
@@ -238,23 +246,6 @@ class (forall a. Show (Action state a), Monad m) => RunModel state m where
   -- | Allows the user to attach additional information to the `Property` if a positive action fails.
   monitoringFailure :: state -> Action state a -> LookUp m -> Error state -> Property -> Property
   monitoringFailure _ _ _ _ prop = prop
-
-computePostcondition
-  :: forall m state a
-   . RunModel state m
-  => (state, state)
-  -> ActionWithPolarity state a
-  -> LookUp m
-  -> Either (Error state) (Realized m a)
-  -> PostconditionM m Bool
-computePostcondition ss (ActionWithPolarity a p) l r
-  | p == PosPolarity = case r of
-      Right ra -> postcondition ss a l ra
-      -- NOTE: this is actually redundant as this handled
-      -- at the call site for this function, but this is
-      -- good hygiene?
-      Left _ -> pure False
-  | otherwise = postconditionOnFailure ss a l r
 
 type LookUp m = forall a. Typeable a => Var a -> Realized m a
 
@@ -515,47 +506,82 @@ runActions
      )
   => Actions state
   -> PropertyM m (Annotated state, Env m)
-runActions (Actions_ rejected (Smart _ actions)) = loop initialAnnotatedState [] actions
+runActions (Actions_ rejected (Smart _ actions)) = do
+  (finalState, env) <- runSteps initialAnnotatedState [] actions
+  unless (null rejected) $
+    monitor $
+      tabulate "Actions rejected by precondition" rejected
+  return (finalState, env)
+
+-- | Core function to execute a sequence of `Step` given some initial `Env`ironment
+-- and `Annotated` state.
+runSteps
+  :: forall state m e
+   . ( StateModel state
+     , RunModel state m
+     , e ~ Error state
+     , forall a. IsPerformResult e a
+     )
+  => Annotated state
+  -> Env m
+  -> [Step state]
+  -> PropertyM m (Annotated state, Env m)
+runSteps s env [] = return (s, reverse env)
+runSteps s env ((v := act) : as) = do
+  pre $ computePrecondition s act
+  ret <- run $ performResultToEither <$> perform (underlyingState s) action (lookUpVar env)
+  let name = show polar ++ actionName action
+  monitor $ tabulate "Actions" [name]
+  monitor $ tabulate "Action polarity" [show polar]
+  case (polar, ret) of
+    (PosPolarity, Left err) ->
+      positiveActionFailed err
+    (PosPolarity, Right val) -> do
+      (s', env') <- positiveActionSucceeded ret val
+      runSteps s' env' as
+    (NegPolarity, _) -> do
+      (s', env') <- negativeActionResult ret
+      runSteps s' env' as
   where
-    loop :: Annotated state -> Env m -> [Step state] -> PropertyM m (Annotated state, Env m)
-    loop _s env [] = do
-      unless (null rejected) $
-        monitor $
-          tabulate "Actions rejected by precondition" rejected
-      return (_s, reverse env)
-    loop s env ((v := act) : as) = do
-      pre $ computePrecondition s act
-      ret <- run $ performResultToEither <$> perform (underlyingState s) (polarAction act) (lookUpVar env)
-      let name = show (polarity act) ++ actionName (polarAction act)
-      monitor $ tabulate "Actions" [name]
-      monitor $ tabulate "Action polarity" [show $ polarity act]
-      if
-        | polarity act == PosPolarity
-        , Left err <- ret -> do
-            monitor $
-              monitoringFailure @state @m
-                (underlyingState s)
-                (polarAction act)
-                (lookUpVar env)
-                err
-            stop False
-        | otherwise -> do
-            let var = unsafeCoerceVar v
-                s' = computeNextState s act var
-                env'
-                  | Right val <- ret = (var :== val) : env
-                  | otherwise = env
-            monitor $ monitoring @state @m (underlyingState s, underlyingState s') (polarAction act) (lookUpVar env') ret
-            (b, (Endo mon, Endo onFail)) <-
-              run
-                . runWriterT
-                . runPost
-                $ computePostcondition @m
-                  (underlyingState s, underlyingState s')
-                  act
-                  (lookUpVar env)
-                  ret
-            monitor mon
-            unless b $ monitor onFail
-            assert b
-            loop s' env' as
+    polar = polarity act
+
+    action = polarAction act
+
+    positiveActionFailed err = do
+      monitor $
+        monitoringFailure @state @m
+          (underlyingState s)
+          action
+          (lookUpVar env)
+          err
+      stop False
+
+    positiveActionSucceeded ret val = do
+      (s', env', stateTransition) <- computeNewState ret
+      evaluatePostCondition $
+        postcondition
+          stateTransition
+          action
+          (lookUpVar env)
+          val
+      pure (s', env')
+
+    negativeActionResult ret = do
+      (s', env', stateTransition) <- computeNewState ret
+      evaluatePostCondition $
+        postconditionOnFailure
+          stateTransition
+          action
+          (lookUpVar env)
+          ret
+      pure (s', env')
+
+    computeNewState ret = do
+      let var = unsafeCoerceVar v
+          s' = computeNextState s act var
+          env'
+            | Right val <- ret = (var :== val) : env
+            | otherwise = env
+          stateTransition = (underlyingState s, underlyingState s')
+      monitor $ monitoring @state @m stateTransition action (lookUpVar env') ret
+      pure (s', env', stateTransition)
