@@ -535,19 +535,19 @@ runSteps s env ((v := act) : as) = do
   monitor $ tabulate "Action polarity" [show polar]
   case (polar, ret) of
     (PosPolarity, Left err) ->
-      positiveActionFailed action err
+      positiveActionFailed err
     (PosPolarity, Right val) -> do
-      (s', env') <- positiveActionSucceeded action ret val
+      (s', env') <- positiveActionSucceeded ret val
       runSteps s' env' as
     (NegPolarity, _) -> do
-      (s', env') <- negativeActionResult action ret
+      (s', env') <- negativeActionResult ret
       runSteps s' env' as
   where
     polar = polarity act
 
     action = polarAction act
 
-    positiveActionFailed action err = do
+    positiveActionFailed err = do
       monitor $
         monitoringFailure @state @m
           (underlyingState s)
@@ -556,8 +556,8 @@ runSteps s env ((v := act) : as) = do
           err
       stop False
 
-    positiveActionSucceeded action ret val = do
-      (s', env', stateTransition) <- computeNewState action ret
+    positiveActionSucceeded ret val = do
+      (s', env', stateTransition) <- computeNewState ret
       evaluatePostCondition $
         postcondition
           stateTransition
@@ -566,8 +566,8 @@ runSteps s env ((v := act) : as) = do
           val
       pure (s', env')
 
-    negativeActionResult action ret = do
-      (s', env', stateTransition) <- computeNewState action ret
+    negativeActionResult ret = do
+      (s', env', stateTransition) <- computeNewState ret
       evaluatePostCondition $
         postconditionOnFailure
           stateTransition
@@ -576,7 +576,7 @@ runSteps s env ((v := act) : as) = do
           ret
       pure (s', env')
 
-    computeNewState action ret = do
+    computeNewState ret = do
       let var = unsafeCoerceVar v
           s' = computeNextState s act var
           env'
