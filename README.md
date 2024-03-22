@@ -23,9 +23,10 @@ The following talks provide concrete examples on how this approach is used to te
 * John Hughes high level talk on how to test Plutus smart contracts using this library: https://youtu.be/V9_14jjJiuQ
 * 55 minutes in to this lecture an example of using the state machine formalism: https://www.youtube.com/watch?v=zW3D2iM5uVg&t=3300
 
-The following blog posts provide some more in-depth educational material on quickcheck-dynamic:
+The following blog posts and talks provide some more in-depth educational material on quickcheck-dynamic:
 * Edsko de Vries wrote a [nice post](https://well-typed.com/blog/2022/09/lockstep-with-quickcheck-dynamic/) to compare `quickcheck-dynamic` with [quickcheck-state-machine](https://hackage.haskell.org/package/quickcheck-state-machine), another library to write model-based tests on top of QuickCheck. This blog post introduces [quickcheck-lockstep](https://github.com/well-typed/quickcheck-lockstep) which provides _lockstep-style_ testing on top of quickcheck-dynamic,
 * IOG published an [introductory post](https://engineering.iog.io/2022-09-28-introduce-q-d) on `quickcheck-dynamic`, detailing some rationale and background for this work, and suggesting a step-by-step approach to use it based on some real world experience.
+* A [presentation](https://abailly.github.io/slides/model-based-testing-with-quickcheck.html#/title-slide) from [BOBKonf 2024](https://bobkonf.de/2024/en/program.html) which provides a good overview of why one would want to use such a library, how it's been applied in some concrete projects, and some basic understanding of the mechanics.
 
 ## Building
 
@@ -49,7 +50,7 @@ This package uses [Cabal](https://www.haskell.org/cabal/)-based build. To build 
 
 This repository uses nix to provide a development and build environment.
 
-For instructions on how to install and configure nix (including how to enable access to our binary caches), refer to [this document](https://github.com/input-output-hk/iogx/blob/main/doc/nix-setup-guide.md). 
+For instructions on how to install and configure nix (including how to enable access to our binary caches), refer to [this document](https://github.com/input-output-hk/iogx/blob/main/doc/nix-setup-guide.md).
 
 If you already have nix installed and configured, you may enter the development shell by running `nix develop`.
 
