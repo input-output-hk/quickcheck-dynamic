@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 As a minor extension, we also keep a semantic version for the `UNRELEASED`
 changes.
 
+## UNRELEASED
+
+## 3.4.1 - 2024-03-22
+
+* [#70](https://github.com/input-output-hk/quickcheck-dynamic/pull/70) Expose `IsPerformResult` typeclass
+
 ## 3.4.0 - 2024-03-01
 
 * Added some lightweight negative-shrinking based on a simple dependency analysis.
