@@ -2,6 +2,7 @@
 
 module Main (main) where
 
+import Issue31 qualified
 import Spec.DynamicLogic.RegistryModel qualified
 import Test.QuickCheck.DynamicLogic.QuantifySpec qualified
 import Test.QuickCheck.StateModelSpec qualified
@@ -17,4 +18,5 @@ tests =
     [ Spec.DynamicLogic.RegistryModel.tests
     , Test.QuickCheck.DynamicLogic.QuantifySpec.tests
     , Test.QuickCheck.StateModelSpec.tests
+    , Issue31.tests
     ]

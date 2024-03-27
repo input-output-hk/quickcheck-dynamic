@@ -95,6 +95,7 @@ test-suite quickcheck-dynamic-test
     Spec.DynamicLogic.RegistryModel
     Test.QuickCheck.DynamicLogic.QuantifySpec
     Test.QuickCheck.StateModelSpec
+    Issue31
 
   ghc-options:    -rtsopts
   build-depends:
