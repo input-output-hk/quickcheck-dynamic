@@ -43,6 +43,7 @@ data DynLogic s
     ForAll (Quantification a) (a -> DynLogic s)
   | -- | Apply a QuickCheck property modifier (like `tabulate` or `collect`)
     Monitor (Property -> Property) (DynLogic s)
+  | Decide (DynPred s)
 
 data ChoiceType = Angelic | Demonic
   deriving (Eq, Show)
@@ -50,6 +51,9 @@ data ChoiceType = Angelic | Demonic
 type DynPred s = Annotated s -> DynLogic s
 
 -- * Building formulae
+
+decide :: (Annotated s -> DynFormula s) -> DynFormula s
+decide p = DynFormula $ \n -> Decide $ \s -> unDynFormula (p s) n
 
 -- | Ignore this formula, i.e. backtrack and try something else. @forAllScripts ignore (const True)@
 --   will discard all test cases (equivalent to @False ==> True@).
@@ -457,6 +461,7 @@ stopping (Stopping d) = d
 stopping (Weight w d) = Weight w (stopping d)
 stopping (ForAll _ _) = EmptySpec -- ???
 stopping (Monitor f d) = Monitor f (stopping d)
+stopping (Decide p) = Decide $ \s -> stopping (p s)
 
 noStopping :: DynLogic s -> DynLogic s
 noStopping EmptySpec = EmptySpec
@@ -469,6 +474,7 @@ noStopping (Stopping _) = EmptySpec
 noStopping (Weight w d) = Weight w (noStopping d)
 noStopping (ForAll q f) = ForAll q f
 noStopping (Monitor f d) = Monitor f (noStopping d)
+noStopping (Decide p) = Decide $ \s -> noStopping (p s)
 
 noAny :: DynLogic s -> DynLogic s
 noAny EmptySpec = EmptySpec
@@ -481,6 +487,7 @@ noAny (Stopping d) = Stopping (noAny d)
 noAny (Weight w d) = Weight w (noAny d)
 noAny (ForAll q f) = ForAll q f
 noAny (Monitor f d) = Monitor f (noAny d)
+noAny (Decide p) = Decide $ \s -> noAny (p s)
 
 nextSteps :: DynLogic s -> Gen [(Double, Witnesses (DynLogic s))]
 nextSteps = nextSteps' generateQ
@@ -491,6 +498,7 @@ nextSteps' _ Stop = pure [(1, Do $ Stop)]
 nextSteps' _ (After act k) = pure [(1, Do $ After act k)]
 nextSteps' _ (Error m k) = pure [(1, Do $ Error m k)]
 nextSteps' _ (AfterAny k) = pure [(1, Do $ AfterAny k)]
+nextSteps' _ (Decide p) = pure [(1, Do $ Decide p)]
 nextSteps' gen (Alt _ d d') = (++) <$> nextSteps' gen d <*> nextSteps' gen d'
 nextSteps' gen (Stopping d) = nextSteps' gen d
 nextSteps' gen (Weight w d) = do
@@ -538,6 +546,7 @@ chooseNextStep s n d = do
                         Stepping
                           (Do $ mkVar n := a)
                           (k (computeNextState s a (mkVar n)))
+                Decide p -> return $ Stepping (Do undefined) (p s)
                 EmptySpec -> error "chooseNextStep: EmptySpec"
                 ForAll{} -> error "chooseNextStep: ForAll"
                 Error{} -> error "chooseNextStep: Error"
@@ -793,6 +802,7 @@ badActionsGiven (Monitor _ d) s w = badActionsGiven d s w
 badActionsGiven d s (Do _) = Do <$> badActions d s
 badActionsGiven Error{} _ _ = []
 badActionsGiven After{} _ _ = []
+badActionsGiven (Decide p) _ _ = []
 
 badActions :: StateModel s => DynLogic s -> Annotated s -> [FailingAction s]
 badActions EmptySpec _ = []
@@ -807,6 +817,7 @@ badActions (Stopping d) s = badActions d s
 badActions (Weight w d) s = if w < never then [] else badActions d s
 badActions (ForAll _ _) _ = []
 badActions (Monitor _ d) s = badActions d s
+badActions (Decide p) s = badActions (p s) s
 
 applyMonitoring :: DynLogicModel s => DynLogic s -> DynLogicTest s -> Property -> Property
 applyMonitoring d (DLScript s) p =

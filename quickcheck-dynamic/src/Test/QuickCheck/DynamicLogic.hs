@@ -8,6 +8,7 @@
 -- properties one wants to express.
 module Test.QuickCheck.DynamicLogic (
   DL,
+  runDL,
   action,
   failingAction,
   anyAction,
@@ -91,7 +92,7 @@ getSize :: DL s Int
 getSize = DL $ \s k -> DL.withSize $ \n -> k n s
 
 getModelStateDL :: DL s s
-getModelStateDL = DL $ \s k -> k (underlyingState s) s
+getModelStateDL = DL $ \s k -> DL.decide (k $ underlyingState s)
 
 getVarContextDL :: DL s VarContext
 getVarContextDL = DL $ \s k -> k (vars s) s

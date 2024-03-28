@@ -4,8 +4,10 @@ module Issue31 where
 
 import Control.Monad.Identity
 
-import Test.QuickCheck
+import Test.QuickCheck (Property, verboseCheck)
+import Test.QuickCheck qualified as QC
 import Test.QuickCheck.DynamicLogic
+import Test.QuickCheck.DynamicLogic.Internal
 import Test.QuickCheck.Monadic
 import Test.QuickCheck.StateModel
 import Test.Tasty (TestTree, testGroup)
@@ -46,13 +48,27 @@ prop_Counter :: Actions Counter -> Property
 prop_Counter acts =
   monadic runIdentity $ (True <$) $ runActions acts
 
-badProp :: Property
-badProp = flip forAllDL prop_Counter $ do
+dl = do
   anyActions_
   i <- counter <$> getModelStateDL
   action $ Assert i
   return ()
 
+badProp :: Property
+badProp = flip forAllDL prop_Counter dl
+
 tests :: TestTree
 tests =
   testGroup "Shrink dependent actions" [testProperty "should shrink to a minimal counterexample" badProp]
+
+test = do
+  let dynformula = runDL initialAnnotatedState dl
+      dynlogic = unDynFormula dynformula 10
+  dlTest <- QC.generate $ generate chooseNextStep dynlogic 1 initialAnnotatedState 10
+  let shrunk = shrinkScript dynlogic (getScript dlTest)
+      pruned = pruneDLTest dynlogic <$> shrunk
+      tested = makeTestFromPruned dynlogic <$> pruned
+
+  print $ dlTest
+  print $ take 5 tested
+  verboseCheck $ forAllScripts dynformula prop_Counter
