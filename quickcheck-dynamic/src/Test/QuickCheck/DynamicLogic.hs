@@ -30,6 +30,7 @@ module Test.QuickCheck.DynamicLogic (
   forAllUniqueDL,
   DL.DynLogicModel (..),
   module Test.QuickCheck.DynamicLogic.Quantify,
+  onState,
 ) where
 
 import Control.Applicative
@@ -92,7 +93,13 @@ getSize :: DL s Int
 getSize = DL $ \s k -> DL.withSize $ \n -> k n s
 
 getModelStateDL :: DL s s
-getModelStateDL = DL $ \s k -> DL.decide (k $ underlyingState s)
+getModelStateDL = DL $ \s k -> k (underlyingState s) s
+
+onState
+  :: (Typeable a, Eq (Action s a), Show (Action s a))
+  => (s -> Action s a)
+  -> DL s s
+onState act = DL $ \s k -> DL.decide act (k $ underlyingState s)
 
 getVarContextDL :: DL s VarContext
 getVarContextDL = DL $ \s k -> k (vars s) s

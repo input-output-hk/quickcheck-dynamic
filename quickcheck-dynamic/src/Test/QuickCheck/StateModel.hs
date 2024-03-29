@@ -51,6 +51,7 @@ import Data.List
 import Data.Monoid (Endo (..))
 import Data.Set qualified as Set
 import Data.Void
+import Debug.Trace (trace)
 import GHC.Generics
 import Test.QuickCheck as QC
 import Test.QuickCheck.DynamicLogic.SmartShrinking
@@ -297,8 +298,10 @@ instance HasVariables (Action state a) => HasVariables (ActionWithPolarity state
   getAllVariables = getAllVariables . polarAction
 
 deriving instance Eq (Action state a) => Eq (ActionWithPolarity state a)
+deriving instance Show (Action state a) => Show (ActionWithPolarity state a)
 
 data Step state where
+  -- | Bind a symbolic variable to the result of an action.
   (:=)
     :: (Typeable a, Eq (Action state a), Show (Action state a))
     => Var a
@@ -472,7 +475,7 @@ computeShrinkAction
   -> ActionWithPolarity state a
   -> [Any (ActionWithPolarity state)]
 computeShrinkAction s (ActionWithPolarity a _) =
-  [Some (actionWithPolarity s a') | Some a' <- shrinkAction (vars s) (underlyingState s) a]
+  trace ("shrinking " <> show a) $ [Some (actionWithPolarity s a') | Some a' <- shrinkAction (vars s) (underlyingState s) a]
 
 prune :: forall state. StateModel state => [Step state] -> [Step state]
 prune = loop initialAnnotatedState

@@ -4,6 +4,7 @@ module Issue31 where
 
 import Control.Monad.Identity
 
+import Debug.Trace (trace)
 import Test.QuickCheck (Property, verboseCheck)
 import Test.QuickCheck qualified as QC
 import Test.QuickCheck.DynamicLogic
@@ -27,6 +28,9 @@ instance StateModel Counter where
   nextState (Counter i) Incr _ = Counter (i + 1)
   nextState s Assert{} _ = s
 
+  shrinkAction _ _ Incr = []
+  shrinkAction _ _ (Assert i) = trace ("shrinking assert " <> show i) $ [Some (Assert i') | i' <- QC.shrink i]
+
 deriving instance Eq (Action Counter a)
 deriving instance Show (Action Counter a)
 
@@ -38,7 +42,7 @@ instance RunModel Counter Identity where
   postcondition _ (Assert i) _ _ = pure (i < 2)
 
 instance DynLogicModel Counter where
-  restricted Assert{} = True
+  restricted Assert{} = trace "restricting assert" $ True
   restricted _ = False
 
 instance HasVariables (Action Counter a) where
@@ -50,8 +54,7 @@ prop_Counter acts =
 
 dl = do
   anyActions_
-  i <- counter <$> getModelStateDL
-  action $ Assert i
+  onState (Assert . counter)
   return ()
 
 badProp :: Property

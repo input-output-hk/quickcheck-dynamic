@@ -4,11 +4,14 @@ import Control.Applicative
 import Control.Arrow (second)
 import Control.Monad
 import Data.Typeable
+import Debug.Trace (trace)
 import Test.QuickCheck hiding (generate)
 import Test.QuickCheck.DynamicLogic.CanGenerate
 import Test.QuickCheck.DynamicLogic.Quantify
 import Test.QuickCheck.DynamicLogic.SmartShrinking
 import Test.QuickCheck.DynamicLogic.Utils qualified as QC
+import Test.QuickCheck.Gen (Gen (..))
+import Test.QuickCheck.Random (mkQCGen)
 import Test.QuickCheck.StateModel
 
 -- | A `DynFormula` may depend on the QuickCheck size parameter
@@ -43,7 +46,29 @@ data DynLogic s
     ForAll (Quantification a) (a -> DynLogic s)
   | -- | Apply a QuickCheck property modifier (like `tabulate` or `collect`)
     Monitor (Property -> Property) (DynLogic s)
-  | Decide (DynPred s)
+  | forall a.
+    (Eq (Action s a), Show (Action s a), Typeable a) =>
+    Decide (s -> ActionWithPolarity s a) (DynPred s)
+
+showDL :: StateModel s => DynLogic s -> String
+showDL = showWith initialAnnotatedState ""
+  where
+    showWith :: Annotated s -> String -> DynLogic s -> String
+    showWith _ prefix EmptySpec = "\n" <> prefix <> "False"
+    showWith _ prefix Stop = "\n" <> prefix <> "True"
+    showWith s prefix (AfterAny f) = "\n" <> prefix <> "AfterAny " <> showWith s prefix (f s)
+    showWith s prefix (Alt Angelic d d') = "\n" <> prefix <> showWith s prefix d <> " ||| " <> showWith s prefix d'
+    showWith s prefix (Alt Demonic d d') = "\n" <> prefix <> showWith s prefix d <> " &&& " <> showWith s prefix d'
+    showWith s prefix (Stopping d) = "\n" <> prefix <> "Stopping " <> showWith s prefix d
+    showWith s prefix (After a k) = "\n" <> prefix <> "After " <> show a <> " $ \\x -> " <> showWith s ("  " <> prefix) (k (mkVar 0) s)
+    showWith s prefix (Error m k) = "\n" <> prefix <> "Error " <> show m <> " $ \\x -> " <> showWith s ("  " <> prefix) (k s)
+    showWith s prefix (Weight w d) = "\n" <> prefix <> "Weight " <> show w <> " $ " <> showWith s prefix d
+    showWith s prefix (ForAll q f) = "\n" <> prefix <> "ForAll " <> show (typeOf q) <> " $ \\x -> " <> showWith s ("  " <> prefix) (f a)
+      where
+        MkGen gen = generateQ q
+        a = gen (mkQCGen 12) 10
+    showWith s prefix (Monitor _ d) = "\n" <> prefix <> "Monitor _ $ " <> showWith s prefix d
+    showWith s prefix (Decide _ p) = "\n" <> prefix <> "Decide  $ \\x -> " <> showWith s ("  " <> prefix) (p s)
 
 data ChoiceType = Angelic | Demonic
   deriving (Eq, Show)
@@ -52,8 +77,14 @@ type DynPred s = Annotated s -> DynLogic s
 
 -- * Building formulae
 
-decide :: (Annotated s -> DynFormula s) -> DynFormula s
-decide p = DynFormula $ \n -> Decide $ \s -> unDynFormula (p s) n
+decide
+  :: (Typeable a, Eq (Action s a), Show (Action s a))
+  => (s -> Action s a)
+  -> (Annotated s -> DynFormula s)
+  -> DynFormula s
+decide act p = DynFormula $ \n -> Decide actf $ \s -> unDynFormula (p s) n
+  where
+    actf s' = ActionWithPolarity (act s') PosPolarity
 
 -- | Ignore this formula, i.e. backtrack and try something else. @forAllScripts ignore (const True)@
 --   will discard all test cases (equivalent to @False ==> True@).
@@ -461,7 +492,7 @@ stopping (Stopping d) = d
 stopping (Weight w d) = Weight w (stopping d)
 stopping (ForAll _ _) = EmptySpec -- ???
 stopping (Monitor f d) = Monitor f (stopping d)
-stopping (Decide p) = Decide $ \s -> stopping (p s)
+stopping (Decide a p) = Decide a $ \s -> stopping (p s)
 
 noStopping :: DynLogic s -> DynLogic s
 noStopping EmptySpec = EmptySpec
@@ -474,7 +505,7 @@ noStopping (Stopping _) = EmptySpec
 noStopping (Weight w d) = Weight w (noStopping d)
 noStopping (ForAll q f) = ForAll q f
 noStopping (Monitor f d) = Monitor f (noStopping d)
-noStopping (Decide p) = Decide $ \s -> noStopping (p s)
+noStopping (Decide a p) = Decide a $ \s -> noStopping (p s)
 
 noAny :: DynLogic s -> DynLogic s
 noAny EmptySpec = EmptySpec
@@ -487,7 +518,7 @@ noAny (Stopping d) = Stopping (noAny d)
 noAny (Weight w d) = Weight w (noAny d)
 noAny (ForAll q f) = ForAll q f
 noAny (Monitor f d) = Monitor f (noAny d)
-noAny (Decide p) = Decide $ \s -> noAny (p s)
+noAny (Decide a p) = Decide a $ \s -> noAny (p s)
 
 nextSteps :: DynLogic s -> Gen [(Double, Witnesses (DynLogic s))]
 nextSteps = nextSteps' generateQ
@@ -498,7 +529,7 @@ nextSteps' _ Stop = pure [(1, Do $ Stop)]
 nextSteps' _ (After act k) = pure [(1, Do $ After act k)]
 nextSteps' _ (Error m k) = pure [(1, Do $ Error m k)]
 nextSteps' _ (AfterAny k) = pure [(1, Do $ AfterAny k)]
-nextSteps' _ (Decide p) = pure [(1, Do $ Decide p)]
+nextSteps' _ (Decide a p) = pure [(1, Do $ Decide a p)]
 nextSteps' gen (Alt _ d d') = (++) <$> nextSteps' gen d <*> nextSteps' gen d'
 nextSteps' gen (Stopping d) = nextSteps' gen d
 nextSteps' gen (Weight w d) = do
@@ -546,7 +577,7 @@ chooseNextStep s n d = do
                         Stepping
                           (Do $ mkVar n := a)
                           (k (computeNextState s a (mkVar n)))
-                Decide p -> return $ Stepping (Do undefined) (p s)
+                Decide a p -> return $ Stepping (Do $ mkVar n := (a $ underlyingState s)) (p s)
                 EmptySpec -> error "chooseNextStep: EmptySpec"
                 ForAll{} -> error "chooseNextStep: ForAll"
                 Error{} -> error "chooseNextStep: Error"
@@ -639,6 +670,7 @@ shrinkWitness EmptySpec{} _ = []
 shrinkWitness Stop{} _ = []
 shrinkWitness Error{} _ = []
 shrinkWitness After{} _ = []
+shrinkWitness Decide{} _ = []
 shrinkWitness AfterAny{} _ = []
 
 -- The result of pruning a list of actions is a prefix of a list of actions that
@@ -666,6 +698,8 @@ stepDL (After a k) s (Do (var := act))
   | Some a == Some act = [k (unsafeCoerceVar var) (computeNextState s act (unsafeCoerceVar var))]
 stepDL (AfterAny k) s (Do (var := act))
   | not (restrictedPolar act) = [k (computeNextState s act var)]
+stepDL (Decide a k) s (Do (var := act)) =
+  trace ("step decide:  " <> show (polarAction (a $ underlyingState s)) <> " =?= " <> show (polarAction act)) $ [k s | Some (a (underlyingState s)) == Some act]
 stepDL (Alt _ d d') s step = stepDL d s step ++ stepDL d' s step
 stepDL (Stopping d) s step = stepDL d s step
 stepDL (Weight _ d) s step = stepDL d s step
@@ -754,6 +788,7 @@ stuck :: DynLogicModel s => DynLogic s -> Annotated s -> Bool
 stuck EmptySpec _ = True
 stuck Stop _ = False
 stuck (After _ _) _ = False
+stuck (Decide _ _) _ = False
 stuck (Error _ _) _ = False
 stuck (AfterAny _) s =
   not $
@@ -802,7 +837,7 @@ badActionsGiven (Monitor _ d) s w = badActionsGiven d s w
 badActionsGiven d s (Do _) = Do <$> badActions d s
 badActionsGiven Error{} _ _ = []
 badActionsGiven After{} _ _ = []
-badActionsGiven (Decide p) _ _ = []
+badActionsGiven (Decide _ p) _ _ = []
 
 badActions :: StateModel s => DynLogic s -> Annotated s -> [FailingAction s]
 badActions EmptySpec _ = []
@@ -817,7 +852,9 @@ badActions (Stopping d) s = badActions d s
 badActions (Weight w d) s = if w < never then [] else badActions d s
 badActions (ForAll _ _) _ = []
 badActions (Monitor _ d) s = badActions d s
-badActions (Decide p) s = badActions (p s) s
+badActions (Decide a p) s
+  | computePrecondition s (a $ underlyingState s) = []
+  | otherwise = [ActionFail $ a $ underlyingState s]
 
 applyMonitoring :: DynLogicModel s => DynLogic s -> DynLogicTest s -> Property -> Property
 applyMonitoring d (DLScript s) p =
