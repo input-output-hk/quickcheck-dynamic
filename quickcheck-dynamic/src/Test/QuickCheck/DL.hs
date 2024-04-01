@@ -1,7 +1,10 @@
+{-# LANGUAGE FunctionalDependencies #-}
+
 module Test.QuickCheck.DL where
 
 import Control.Applicative ((<|>))
 import Control.Monad (foldM)
+import Data.Kind (Type)
 import Test.QuickCheck (
   Arbitrary (..),
   Gen,
@@ -59,18 +62,19 @@ data Prog f p where
 step
   :: (f -> s -> Bool)
   -- ^ A function to evaluate atomic formulas
-  -> (p -> s -> Maybe s)
-  -- ^ State transition
+  -> (p -> s -> [s])
+  -- ^ State transition relation
   -> Int
   -- ^ Size limit (?)
   -> Prog f p
   -- ^ Program to interpret
   -> s
   -- ^ state
-  -> Maybe s
+  -> [s]
+step _ _ 0 _ _ = []
 step ϕ δ k prog s =
   case prog of
-    Empty -> Just s
+    Empty -> [s]
     Prog p -> δ p s
     Seq p q -> do
       s' <- step ϕ δ k p s
@@ -78,17 +82,20 @@ step ϕ δ k prog s =
     Alt p q -> do
       step ϕ δ k p s <|> step ϕ δ k q s
     Test f ->
-      if eval ϕ δ (k - 1) f s
-        then Just s
-        else Nothing
+      [s | satisfy ϕ δ (k - 1) f s]
     Star p ->
       foldM (flip $ step ϕ δ (k - 1)) s (replicate k p)
 
-eval
+-- | Satisfiability of a given formula in  `Prop f p` in a given state `s` against
+-- a Kripke structure.
+--
+-- The size limit `k` is needed to limit the length of `Star` expressions and
+-- the depth of expression analyzed.
+satisfy
   :: (f -> s -> Bool)
   -- ^ A function to evaluate atomic formulas
-  -> (p -> s -> Maybe s)
-  -- ^ Transition function for programs
+  -> (p -> s -> [s])
+  -- ^ Transition relation for programs
   -> Int
   -- ^ Size limit (?)
   -> Prop f p
@@ -96,17 +103,19 @@ eval
   -> s
   -- ^ Initial state
   -> Bool
-eval ϕ δ k prop s =
+satisfy ϕ δ k prop s =
   case prop of
     Prop f -> ϕ f s
     Zero -> False
     One -> True
     Imply f g ->
-      not (eval ϕ δ (k - 1) f s) || eval ϕ δ (k - 1) g s
+      not (satisfy ϕ δ (k - 1) f s) || satisfy ϕ δ (k - 1) g s
     Always p f ->
       case step ϕ δ k p s of
-        Nothing -> False
-        Just s' -> eval ϕ δ (k - 1) f s'
+        [] -> False
+        states -> all (satisfy ϕ δ (k - 1) f) states
+
+-- example from p.170
 
 data S = U | V | W
   deriving (Eq, Show)
@@ -122,15 +131,15 @@ type F = [S]
 phi :: F -> S -> Bool
 phi = flip elem
 
-delta :: P -> S -> S
+delta :: P -> S -> [S]
 delta A = \case
-  U -> V
-  W -> U
-  V -> W
+  U -> [V, W]
+  W -> [V]
+  V -> [W]
 
--- | Tells whether or not a finite trace from some initial state
--- satisfies the given formula.
-satisfy
+-- | Evaluates some `Prop`osition given some state `s` and a
+-- finite /computation sequence/ `[p]`.
+eval
   :: (Eq s, Show p, Show f)
   => (f -> s -> Bool)
   -- ^ A function to evaluate atomic formulas
@@ -143,22 +152,22 @@ satisfy
   -> [p]
   -- ^ The trace to check satisfaction of proposition against
   -> Prop f p
-satisfy ϕ δ s prop trace =
+eval ϕ δ s prop trace =
   case prop of
     Prop f ->
       if ϕ f s then One else Zero
     Zero -> Zero
     One -> One
     Imply f g ->
-      let f' = satisfy ϕ δ s f trace
-          g' = satisfy ϕ δ s g trace
+      let f' = eval ϕ δ s f trace
+          g' = eval ϕ δ s g trace
        in case (f', g') of
             (Zero, _) -> One
             (One, One) -> One
             (_, _) -> Zero
     Always p f ->
       case match ϕ δ s trace p of
-        Right (s', trace') -> satisfy ϕ δ s' f trace'
+        Right (s', trace') -> eval ϕ δ s' f trace'
         Left{} -> Zero
 
 match
@@ -193,7 +202,7 @@ match ϕ δ s trace@(a : as) = \case
       Right (s', trace') -> match ϕ δ s' trace' (Star p')
       Left{} -> Right (s, trace)
   Test f ->
-    case satisfy ϕ δ s f trace of
+    case eval ϕ δ s f trace of
       One -> Right (s, trace)
       _other -> Left ("test failed", trace)
 
@@ -212,4 +221,4 @@ isSatisfiable
   -> Test.QuickCheck.Property
 isSatisfiable ϕ δ i gen f =
   Test.QuickCheck.forAllShrink gen Test.QuickCheck.shrink $ \trace ->
-    satisfy ϕ δ i f trace Test.QuickCheck.=== One
+    eval ϕ δ i f trace Test.QuickCheck.=== One
