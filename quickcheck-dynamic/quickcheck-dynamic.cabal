@@ -67,6 +67,7 @@ library
   import:          lang
   hs-source-dirs:  src
   exposed-modules:
+    Test.QuickCheck.DL
     Test.QuickCheck.DynamicLogic
     Test.QuickCheck.DynamicLogic.CanGenerate
     Test.QuickCheck.DynamicLogic.Internal
