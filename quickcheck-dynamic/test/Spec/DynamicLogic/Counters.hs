@@ -34,6 +34,10 @@ instance RunModel SimpleCounter (ReaderT (IORef Int) IO) where
     ref <- ask
     lift $ atomicModifyIORef' ref (\count -> (succ count, count))
 
+  perform' IncSimple _ = do
+    ref <- ask
+    lift $ atomicModifyIORef' ref (\count -> (succ count, count))
+
 -- A very simple model with a single action whose postcondition fails in a
 -- predictable way. This model is useful for testing the runtime.
 newtype FailingCounter = FailingCounter {failingCount :: Int}
@@ -56,6 +60,10 @@ instance StateModel FailingCounter where
 
 instance RunModel FailingCounter (ReaderT (IORef Int) IO) where
   perform _ Inc' _ = do
+    ref <- ask
+    lift $ atomicModifyIORef' ref (\count -> (succ count, count))
+
+  perform' Inc' _ = do
     ref <- ask
     lift $ atomicModifyIORef' ref (\count -> (succ count, count))
 
@@ -84,14 +92,21 @@ instance StateModel Counter where
 
 instance RunModel Counter (ReaderT (IORef Int) IO) where
   perform _ Inc _ = do
-    ref <- ask
-    lift $ modifyIORef ref succ
+     ref <- ask
+     lift $ modifyIORef ref succ
   perform _ Reset _ = do
+     ref <- ask
+     lift $ do
+       n <- readIORef ref
+       writeIORef ref 0
+       pure n
+
+  perform' Inc _ = do
     ref <- ask
-    lift $ do
-      n <- readIORef ref
-      writeIORef ref 0
-      pure n
+    lift $ atomicModifyIORef' ref ((,()) . succ)
+  perform' Reset _ = do
+    ref <- ask
+    lift $ atomicModifyIORef' ref (\n -> (0, n))
 
   postcondition (Counter n, _) Reset _ res = pure $ n == res
   postcondition _ _ _ _ = pure True

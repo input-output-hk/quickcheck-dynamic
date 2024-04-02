@@ -128,6 +128,24 @@ instance RunModel RegState RegM where
     lift $ threadDelay 100
     pure $ Right ()
 
+  perform' Spawn _ = do
+    tid <- lift $ forkIO (threadDelay 10000000)
+    pure $ Right tid
+  perform' (Register name tid) env = do
+    reg <- ask
+    lift $ try $ register reg name (env tid)
+  perform' (Unregister name) _ = do
+    reg <- ask
+    lift $ try $ unregister reg name
+  perform' (WhereIs name) _ = do
+    reg <- ask
+    res <- lift $ whereis reg name
+    pure $ Right res
+  perform' (KillThread tid) env = do
+    lift $ killThread (env tid)
+    lift $ threadDelay 100
+    pure $ Right ()
+
   postcondition (s, _) (WhereIs name) env mtid = do
     pure $ (env <$> Map.lookup name (regs s)) == mtid
   postcondition _ _ _ _ = pure True
