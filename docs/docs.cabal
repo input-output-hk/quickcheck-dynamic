@@ -1,0 +1,86 @@
+cabal-version:      2.2
+name:               docs
+version:            3.4.0
+license:            Apache-2.0
+license-files:
+  LICENSE
+  NOTICE
+
+maintainer:         arnaud.bailly@iohk.io
+author:             Ulf Norell
+category:           Testing
+synopsis:           Documentation for quickcheck-dynamic
+homepage:
+  https://input-output-hk.github.com/quickcheck-dynamic
+
+bug-reports:
+  https://github.com/input-output-hk/quickcheck-dynamic/issues
+
+build-type:         Simple
+
+source-repository head
+  type:     git
+  location: https://github.com/input-output-hk/quickcheck-dynamic
+
+common lang
+  default-language:   Haskell2010
+  default-extensions:
+    ConstraintKinds
+    DataKinds
+    DefaultSignatures
+    DeriveDataTypeable
+    DeriveFoldable
+    DeriveFunctor
+    DeriveGeneric
+    DeriveTraversable
+    DerivingVia
+    FlexibleContexts
+    FlexibleInstances
+    GADTs
+    GeneralizedNewtypeDeriving
+    ImportQualifiedPost
+    LambdaCase
+    MultiParamTypeClasses
+    MultiWayIf
+    PatternSynonyms
+    QuantifiedConstraints
+    RankNTypes
+    ScopedTypeVariables
+    StandaloneDeriving
+    TupleSections
+    TypeApplications
+    TypeFamilies
+    TypeOperators
+    ViewPatterns
+
+  ghc-options:
+    -Wall -Wnoncanonical-monad-instances -Wunused-packages
+    -Wincomplete-uni-patterns -Wincomplete-record-updates
+    -Wredundant-constraints -Widentities -Wno-unused-do-bind
+
+library
+  import:          lang
+  hs-source-dirs:  .
+  exposed-modules:
+      DL
+    , CircularBuffer.Model
+    , CircularBuffer.Buffer
+  build-depends:
+    , base        >=4.7 && <5
+    , containers
+    , mtl
+    , QuickCheck
+    , quickcheck-dynamic
+    , random
+    , vector
+
+executable docs
+  import:  lang
+  hs-source-dirs: app
+  main-is: Main.hs
+  build-depends:
+    , base        >=4.7 && <5
+    , containers
+    , docs
+    , mtl
+    , QuickCheck
