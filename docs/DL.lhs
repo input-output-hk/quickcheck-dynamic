@@ -1,12 +1,10 @@
----
-title: Dynamic Logic
----
 
 > {-# LANGUAGE FunctionalDependencies #-}
 > {-# LANGUAGE InstanceSigs #-}
 
 > module DL where
 
+> import Debug.Trace as Debug
 > import Control.Applicative ((<|>))
 > import Control.Monad (foldM)
 > import Data.Kind (Type)
@@ -131,66 +129,120 @@ relation if `m = [w]` or anything else.
 
 === Satisfiability
 
-> -- | Satisfiability of a given formula in  `Prop f p` in a given state `s` against
-> -- a Kripke structure.
-> --
-> -- The size limit `k` is needed to limit the length of `Star` expressions and
-> -- the depth of expression analyzed.
+Given some Kripke structure $K$, a formula `f` is _satisfied_ in a
+state `s` denoted as $K, s\models f$ if the formula is true in the
+state `s`, which is defined inductively over the structure of `f`.
+
+Note that we need to limit the size of the formula to avoid infinite recursion.
+
 > satisfy
+
+Note that `satisfy` is defined here with atomic programs defining  _relations_  over `s` and not functions, eg. a given program `p` can have multiple possible state outcomes.
+
 >   :: Kripke [] s
+
+The size parameter bounds the depth at which state is explored and the formula is evaluated.
+
 >   => Int
->   -- ^ Size limit (?)
+
+The formula to evaluate, `f` is a proposition dependent on the atomic propositions and programs in $K$.
+
 >   -> Prop (Formula s) (Program s)
->   -- ^ The proposition to evaluate
+
+The state in which to evaluate the formula.
+
 >   -> s
->   -- ^ Initial state
 >   -> Bool
 > satisfy k prop s =
 >   case prop of
+
+Atomic propositions are evaluated by the characteristic function $\phi$.
+
 >     Prop f -> ϕ f s
+
+False, true, and implications are evaluated as expected for propositional logic operators.
+
 >     Zero -> False
 >     One -> True
 >     Imply f g ->
 >       not (satisfy (k - 1) f s) || satisfy (k - 1) g s
+
+The _always_ operator is evaluated by checking that the proposition
+holds in _all_ the states reachable from the current state by
+executing the program `p`.
+
 >     Always p f ->
 >       case step k p s of
 >         [] -> False
 >         states -> all (satisfy (k - 1) f) states
 
+The `step` function computes the set of states reachable from the current state by executing the program `p`.
+
 > step
 >   :: Kripke [] s
 >   => Int
->   -- ^ Size limit (?)
 >   -> Prog (Formula s) (Program s)
->   -- ^ Program to interpret
 >   -> s
->   -- ^ state
 >   -> [s]
+
+If the size limit is reached, the computation is considered "stuck" and yields no reachable state.
+
 > step 0 _ _ = []
+
+In other cases, reachable states are defined inductively over the structure of the program.
+
 > step k prog s =
 >   case prog of
+
+If program should stop, simply return the current state.
+
 >     Empty -> [s]
+
+Atomic programs yield the result of the transition relation $\delta$.
+
 >     Prog p -> δ p s
+
+Sequencing of programs is done by executing the first program and then the second program on the resulting state(s).
+
 >     Seq p q -> do
 >       s' <- step k p s
 >       step k q s'
+
+Non-deterministic choice is done by executing either the first or the second program, with a bias towards the first program.
+
 >     Alt p q -> do
 >       step k p s <|> step k q s
+
+Test programs are executed by checking if the proposition holds in the current state and returning the current state if it does.
+
 >     Test f ->
 >       [s | satisfy (k - 1) f s]
+
+Finally, repetition of a program is done by iterating over the nested program `k` times.
+
 >     Star p ->
 >       foldM (flip $ step (k - 1)) s (replicate k p)
 
+=== A "concrete" Example
 
-> -- example from p.170
+The following is a concrete example of some simple data types and
+Kripke structure to evaluate the satisfaction of a formula, drawn from p.170 of the book.
+
+The system's state is simply an enumeration of 3 different states.
 
 > data S = U | V | W
 >   deriving (Eq, Show)
 
+There's a single atomic program, `A`.
+
 > data P = A
 >   deriving (Eq, Show)
 
+The atomic propositions are simply a list of states and a proposition
+is true iff reached state is included in the list.
+
 > type F = [S]
+
 
 > instance Kripke [] S where
 >   type Formula S = F
@@ -199,97 +251,216 @@ relation if `m = [w]` or anything else.
 >   ϕ :: F -> S -> Bool
 >   ϕ = flip elem
 
+The transition relation is the only interesting part of the Kripke structure.
+
 >   δ :: P -> S -> [S]
 >   δ A = \case
 >     U -> [V, W]
 >     W -> [V]
 >     V -> [W]
 
-> instance Test.QuickCheck.Arbitrary P where
->   arbitrary = pure A
+Now, let's define a simple formula to check if the state `V` is reachable from the state `U` after executing the program `A`.
 
-> -- | Evaluates some `Prop`osition given some state `s` and a
-> -- finite /computation sequence/ `[p]`.
+> formula :: Prop F P
+> formula = Always (Star (Prog A)) (Prop [V,W])
+
+We can now check if the formula is satisfied in the state `U` of the Kripke structure defined above within GHCi:
+
+```
+$ satisfy 10 formula U
+True
+```
+
+= Property-Based Testing
+
+Another way to look at the semantics of Dynamic Logic is to consider it in the context of traces, that is finite sequences of programs. Here formula's meaning is the set of traces that satisfy the formula.
+This is particularly useful in the context of property-based testing: Given some Kripke structure and generators, we can generate traces and check if all traces satisfy a given formula.
+
+== Checking satisfiability
+
+The basic property we want to check is the satisfiability of some
+formula against arbitrary valid traces part of the Kripke
+structure. In other words, we want to explore the states of the Kripke
+structure that are reachable throughsome sequence of execution of
+programs, and check if the formula holds for all of them.
+
+> isSatisfiable
+>   :: ( Eq s, Show s
+>      , Eq (Formula s), Show (Formula s)
+>      , Eq (Program s), Show (Program s)
+>      , Test.QuickCheck.Arbitrary (Program s)
+>      , Kripke Maybe s)
+
+Given some initial state,
+
+>    => s
+
+A generator for traces,
+
+>    -> (s -> Test.QuickCheck.Gen [Program s])
+
+and a formula to check,
+
+>    -> Prop (Formula s) (Program s)
+>    -> Test.QuickCheck.Property
+> isSatisfiable i gen f =
+>   Test.QuickCheck.forAllShrink (gen i) Test.QuickCheck.shrink $ \trace ->
+
+It should hold that the formula evaluates to `True` given the trace and the initial state.
+
+>     eval i f trace Test.QuickCheck.=== One
+
+To do so, we need to `eval`uate a formula in a given state against some trace, yielding a simpler formula until we reach atomic propositions or ground truths.
+
 > eval
->   :: (Eq s, Show p, Show f)
->   => (f -> s -> Bool)
->   -- ^ A function to evaluate atomic formulas
->   -> (p -> s -> Maybe s)
->   -- ^ Partial transition function for programs
->   -> s
->   -- ^ Initial state
->   -> Prop f p
->   -- ^ The proposition to evaluate
->   -> [p]
->   -- ^ The trace to check satisfaction of proposition against
->   -> Prop f p
-> eval ϕ δ s prop trace =
+>   :: (Kripke Maybe s, Eq s, Show s, Show (Program s), Show (Formula s))
+>    => s
+>    -> Prop (Formula s) (Program s)
+>    -> [Program s]
+>    -> Prop (Formula s) (Program s)
+> eval s prop trace =
+
+Evaluation proceeds recursively over the structure of the formula and the trace.
+
 >   case prop of
+
+Atomic propositions should hold in the current state
+
 >     Prop f ->
 >       if ϕ f s then One else Zero
 >     Zero -> Zero
 >     One -> One
+
+Implications follow the usual rules of logic
+
 >     Imply f g ->
->       let f' = eval ϕ δ s f trace
->           g' = eval ϕ δ s g trace
+>       let f' = eval s f trace
+>           g' = eval s g trace
 >        in case (f', g') of
 >             (Zero, _) -> One
 >             (One, One) -> One
 >             (_, _) -> Zero
+
+The _always_ operator requires advancing the state by executing the
+program `p` and evaluating the formula `f` in the resulting state,
+agains the resulting trace.
+
 >     Always p f ->
->       case match ϕ δ s trace p of
->         Right (s', trace') -> eval ϕ δ s' f trace'
+>       case match s trace p of
+>         Right (s', trace') -> eval s' f trace'
 >         Left{} -> Zero
 
+The match function advances the state by executing the program `p`:
+
 > match
->   :: (Show p, Eq s, Show f)
->   => (f -> s -> Bool)
->   -> (p -> s -> Maybe s)
->   -> s
->   -> [p]
->   -> Prog f p
->   -> Either (String, [p]) (s, [p])
-> match _ _ s [] = \case
+>   :: (Kripke Maybe s, Eq s, Show s, Show (Program s), Show (Formula s))
+>    => s
+>    -> [Program s]
+>    -> Prog (Formula s) (Program s)
+
+Note match can fail if the program is not executable in the current
+state, in which case it returns some error message and the remaining
+trace.
+
+>    -> Either (String, [Program s]) (s, [Program s])
+
+The base case is when the trace is empty, in which case the program
+should terminate which is only possible if the program is empty, or it
+can be repeated indefinitely which includes the case where it's not
+repeated at all.
+
+> match s [] = \case
 >   Empty -> Right (s, [])
 >   Star{} -> Right (s, [])
 >   other -> Left ("empty trace with program " <> show other, [])
-> match ϕ δ s trace@(a : as) = \case
+
+If the trace is not empty, we need to inductively walk through the trace and the program structure:
+
+> match s trace@(a : as) = \case
 >   Empty -> Left ("program should terminate", trace)
+
+For atomic programs, we could check equality of the atomic programs and advance the state if they matched, but we choose instead to check equality of _observational behaviors_ of the programs, eg. whether or not the two programs yield the same state:
+
 >   Prog b ->
 >     case (δ a s, δ b s) of
 >       (Just t, Just t')
 >         | t == t' -> Right (t', as)
 >       _other ->
 >         Left ("unmatched atomic program, expected" <> show b <> ", found " <> show a, trace)
+
+Sequential execution is straightforward, simply feeding the new state and trace to the next program
+
 >   Seq p q -> do
->     (s', trace') <- match ϕ δ s trace p
->     match ϕ δ s' trace' q
+>     (s', trace') <- match s trace p
+>     match s' trace' q
+
+Non-deterministic choice is also straightforward, trying to match the
+first program and if it fails, trying the second program.  Note that
+we cannot here use the `Alternative` operator `(<|>)` as `Either e`
+is, somewhat surprisingly in the case of an "error" monad, not an
+instance of `Alternative`.
+
 >   Alt p q ->
->     case match ϕ δ s trace p of
+>     case match s trace p of
 >       Right v -> Right v
->       Left{} -> match ϕ δ s trace q
+>       Left{} -> match s trace q
+
+Repetition is also quite simple and terminates because the base case (`Prog p`) consumes the head of the trace.
+
 >   Star p' ->
->     case match ϕ δ s trace p' of
->       Right (s', trace') -> match ϕ δ s' trace' (Star p')
+>     case match s trace p' of
+>       Right (s', trace') -> match s' trace' (Star p')
 >       Left{} -> Right (s, trace)
+
+Finally, we can `Test` a formula whose result depends on call to `eval` with current state and trace.
+
 >   Test f ->
->     case eval ϕ δ s f trace of
+>     case eval s f trace of
 >       One -> Right (s, trace)
 >       _other -> Left ("test failed", trace)
 
-> isSatisfiable
->   :: (Show p, Eq s, Show f, Eq f, Eq p, Test.QuickCheck.Arbitrary p)
->   => (f -> s -> Bool)
->   -- ^ The atomic propositions truth value
->   -> (p -> s -> Maybe s)
->   -- ^ Transition relation
->   -> s
->   -- ^ Initial state
->   -> Test.QuickCheck.Gen [p]
->   -- ^ A generator of traces from `s`
->   -> Prop f p
->   -- ^ A formula to check
->   -> Test.QuickCheck.Property
-> isSatisfiable ϕ δ i gen f =
->   Test.QuickCheck.forAllShrink gen Test.QuickCheck.shrink $ \trace ->
->     eval ϕ δ i f trace Test.QuickCheck.=== One
+=== Example
+
+The generator for our simple model is quite simple as there's a single action.
+
+> instance Test.QuickCheck.Arbitrary P where
+>   arbitrary = pure A
+
+However we need a different Kripke structure because we want it to work in the `Maybe` monad, so let's wrap `S` and create the structure:
+
+> newtype S' = S' { unS :: S }
+>   deriving (Eq, Show)
+
+> instance Kripke Maybe S' where
+>   type Formula S' = F
+>   type Program S' = P
+
+>   ϕ f = ϕ f . unS
+
+>   δ A = \case
+>     S' U -> Just $ S' W
+>     S' V -> Just $ S' W
+>     S' W -> Just $ S' V
+
+Then we can run QuickCheck over our example formula:
+
+```
+$ quickCheck $ isSatisfiable (S' U)  (const arbitrary) formula
+*** Failed! Falsified (after 1 test):
+[]
+Zero /= One
+```
+
+Of course, the formula is wrong on an empty sequence of actions as we are in state `U`, but if we start from state `V` we can verify the property holds:
+
+```
+quickCheck $ isSatisfiable (S' V)  (const arbitrary) formula
++++ OK, passed 100 tests.
+```
+
+== Generating valid traces
+
+In practice, what we are interested in with Dynamic Logic formulas is
+rather the converse of what we have done so far: Inferring the subset of Kripke
+structure that's a model for a given formula, for a given "universe of
+discourse" consisting of the atomic propositions and programs.
