@@ -92,14 +92,14 @@ instance StateModel Counter where
 
 instance RunModel Counter (ReaderT (IORef Int) IO) where
   perform _ Inc _ = do
-     ref <- ask
-     lift $ modifyIORef ref succ
+    ref <- ask
+    lift $ modifyIORef ref succ
   perform _ Reset _ = do
-     ref <- ask
-     lift $ do
-       n <- readIORef ref
-       writeIORef ref 0
-       pure n
+    ref <- ask
+    lift $ do
+      n <- readIORef ref
+      writeIORef ref 0
+      pure n
 
   perform' Inc _ = do
     ref <- ask

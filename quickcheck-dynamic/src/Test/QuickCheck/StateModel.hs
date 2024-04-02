@@ -388,7 +388,6 @@ instance StateModel state => Show (Actions state) where
     let as' = WithUsedVars (usedVariables (Actions as)) <$> as
      in intercalate "\n" $ zipWith (++) ("do " : repeat "   ") (map show as' ++ ["pure ()"])
 
-
 usedVariables :: forall state. StateModel state => Actions state -> VarContext
 usedVariables (Actions as) = go initialAnnotatedState as
   where
@@ -628,14 +627,19 @@ data ParActions state = ParActions (Actions state) [Actions state]
 
 instance StateModel state => Show (ParActions state) where
   show (ParActions as ass) =
-    unlines $ [ "Sequential prefix"
-              , unlines $ map ('\t':) $ lines $ show as
-              , "Parallel suffixes"
-              ]
-           ++ (concatMap (\(idx, acts) -> [ [idx] <> ":"
-                                          , unlines $ map ('\t':) $ lines $ show acts
-                                          ])
-                         (zip ['a'..] ass))
+    unlines $
+      [ "Sequential prefix"
+      , unlines $ map ('\t' :) $ lines $ show as
+      , "Parallel suffixes"
+      ]
+        ++ ( concatMap
+              ( \(idx, acts) ->
+                  [ [idx] <> ":"
+                  , unlines $ map ('\t' :) $ lines $ show acts
+                  ]
+              )
+              (zip ['a' ..] ass)
+           )
 
 -- | Existential on @a@
 data Performed m state where
@@ -663,65 +667,70 @@ runParallelActions (ParActions (Actions_ _ (Smart _ seqPrefix)) suffixes) = do
 
   hasOneSucceded <-
     if null possibleLinearizations
-    then pure True
-    else
-     fmap or
-     . mapM (\(anEnv, anInterleaving) ->
-               snd <$> foldM (foldModel anEnv) (initialAnnotatedState, True) anInterleaving)
-     $ possibleLinearizations
+      then pure True
+      else
+        fmap or
+          . mapM
+            ( \(anEnv, anInterleaving) ->
+                snd <$> foldM (foldModel anEnv) (initialAnnotatedState, True) anInterleaving
+            )
+          $ possibleLinearizations
   assert hasOneSucceded
- where
-   foldModel :: Env m
-             -> (Annotated state, Bool)
-             -> Performed m state
-             -> PropertyM m (Annotated state, Bool)
-   foldModel _   (s, False) _ = pure (s, False)
-   foldModel env (s, _) (Performed var act ret) =
-     case (polar, ret) of
-       (PosPolarity, Left err) ->
-         (s,) <$> positiveActionFailed err
-       (PosPolarity, Right val) -> do
-         positiveActionSucceeded val
-       (NegPolarity, _) -> do
-         negativeActionResult
-    where
-      action = polarAction act
-      polar = polarity act
+  where
+    foldModel
+      :: Env m
+      -> (Annotated state, Bool)
+      -> Performed m state
+      -> PropertyM m (Annotated state, Bool)
+    foldModel _ (s, False) _ = pure (s, False)
+    foldModel env (s, _) (Performed var act ret) =
+      case (polar, ret) of
+        (PosPolarity, Left err) ->
+          (s,) <$> positiveActionFailed err
+        (PosPolarity, Right val) -> do
+          positiveActionSucceeded val
+        (NegPolarity, _) -> do
+          negativeActionResult
+      where
+        action = polarAction act
+        polar = polarity act
 
-      positiveActionFailed err = do
-        monitor $
-          monitoringFailure @state @m
-            (underlyingState s)
-            action
-            (lookUpVar env)
-            err
-        pure False
+        positiveActionFailed err = do
+          monitor $
+            monitoringFailure @state @m
+              (underlyingState s)
+              action
+              (lookUpVar env)
+              err
+          pure False
 
-      positiveActionSucceeded val = do
-        (s', stateTransition) <- computeNewState
-        b <- evaluatePostCondition' $
-          postcondition
-            stateTransition
-            action
-            (lookUpVar env)
-            val
-        pure (s', b)
+        positiveActionSucceeded val = do
+          (s', stateTransition) <- computeNewState
+          b <-
+            evaluatePostCondition' $
+              postcondition
+                stateTransition
+                action
+                (lookUpVar env)
+                val
+          pure (s', b)
 
-      negativeActionResult = do
-        (s', stateTransition) <- computeNewState
-        b <- evaluatePostCondition' $
-          postconditionOnFailure
-            stateTransition
-            action
-            (lookUpVar env)
-            ret
-        pure (s', b)
+        negativeActionResult = do
+          (s', stateTransition) <- computeNewState
+          b <-
+            evaluatePostCondition' $
+              postconditionOnFailure
+                stateTransition
+                action
+                (lookUpVar env)
+                ret
+          pure (s', b)
 
-      computeNewState = do
-        let s' = computeNextState s act var
-            stateTransition = (underlyingState s, underlyingState s')
-        monitor $ monitoring @state @m stateTransition action (lookUpVar env) ret
-        pure (s', stateTransition)
+        computeNewState = do
+          let s' = computeNextState s act var
+              stateTransition = (underlyingState s, underlyingState s')
+          monitor $ monitoring @state @m stateTransition action (lookUpVar env) ret
+          pure (s', stateTransition)
 
 runParallelSteps
   :: forall state m e
@@ -738,20 +747,21 @@ runParallelSteps env rets [] = return (reverse env, reverse rets)
 runParallelSteps env rets ((v := act) : as) = do
   let action = polarAction act
   (ret, env') <- runStep action
-  runParallelSteps env' (Performed v act ret:rets) as
+  runParallelSteps env' (Performed v act ret : rets) as
   where
-    runStep ::
-         forall a. Typeable a
+    runStep
+      :: forall a
+       . Typeable a
       => Action state a
       -> m (Either (Error state) (Realized m a), Env m)
     runStep action = do
-        ret :: Either (Error state) (Realized m a) <- performResultToEither <$> perform' action (lookUpVar env)
-        let var :: Var a
-            var = unsafeCoerceVar v
-            env'
-              | Right (val :: Realized m a) <- ret = (var :== val) : env
-              | otherwise = env
-        pure (ret, env')
+      ret :: Either (Error state) (Realized m a) <- performResultToEither <$> perform' action (lookUpVar env)
+      let var :: Var a
+          var = unsafeCoerceVar v
+          env'
+            | Right (val :: Realized m a) <- ret = (var :== val) : env
+            | otherwise = env
+      pure (ret, env')
 
 instance forall state. StateModel state => Arbitrary (ParActions state) where
   arbitrary = do
@@ -768,34 +778,39 @@ instance forall state. StateModel state => Arbitrary (ParActions state) where
               ( nextState st (polarAction act) v
               , b && precondition st (polarAction act)
               )
-        if and
-          $ map (\anInterleaving -> snd $ foldl' f (initialState, True) anInterleaving) (interleaves [suff1, suff2])
-        then pure (ParActions (Actions_ rej (Smart 0 prefix))
-          [(Actions_ rej (Smart 0 suff1)), (Actions_ rej (Smart 0 suff2))])
-        else foo rej allActions
+        if and $
+          map (\anInterleaving -> snd $ foldl' f (initialState, True) anInterleaving) (interleaves [suff1, suff2])
+          then
+            pure
+              ( ParActions
+                  (Actions_ rej (Smart 0 prefix))
+                  [(Actions_ rej (Smart 0 suff1)), (Actions_ rej (Smart 0 suff2))]
+              )
+          else foo rej allActions
 
 -- | Generate all possible interleavings.
 --
 -- Note that the environment should be able to handle duplicates so we just
 -- concat all environments together.
-interleavings ::
-      (Env m, [Performed m state])
+interleavings
+  :: (Env m, [Performed m state])
   -> [(Env m, [Performed m state])]
   -> [(Env m, [Performed m state])]
 interleavings (_, seqPrefix) parallelSuffixes =
-  let env = concat [ e | (e, _) <- parallelSuffixes ]
-  in map ((env,) . (seqPrefix ++)) $ interleaves $ map snd parallelSuffixes
+  let env = concat [e | (e, _) <- parallelSuffixes]
+   in map ((env,) . (seqPrefix ++)) $ interleaves $ map snd parallelSuffixes
 
 -- | All interleavings of a list of lists (preserving the relative order)
 interleaves :: [[a]] -> [[a]]
-interleaves []     = []
-interleaves [as]   = [as]
-interleaves (a:as) = foldl' (\b x -> concatMap (interleave x) b) [a] as
+interleaves [] = []
+interleaves [as] = [as]
+interleaves (a : as) = foldl' (\b x -> concatMap (interleave x) b) [a] as
 
 -- | All interleavings of two lists (preserving the relative order)
 interleave :: [a] -> [a] -> [[a]]
-interleave []        []        = []
-interleave as        []        = [as]
-interleave []        bs        = [bs]
-interleave a@(ah:as) b@(bh:bs) = [ ah:arest | arest <- interleave as b ]
-                              ++ [ bh:brest | brest <- interleave a bs ]
+interleave [] [] = []
+interleave as [] = [as]
+interleave [] bs = [bs]
+interleave a@(ah : as) b@(bh : bs) =
+  [ah : arest | arest <- interleave as b]
+    ++ [bh : brest | brest <- interleave a bs]

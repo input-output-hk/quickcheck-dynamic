@@ -13,10 +13,10 @@ import Test.QuickCheck.Monadic (assert, monadicIO, monitor, pick)
 import Test.QuickCheck.StateModel (
   Actions,
   ParActions,
-  runParallelActions,
   lookUpVarMaybe,
   mkVar,
   runActions,
+  runParallelActions,
   underlyingState,
   viewAtType,
   pattern Actions,
