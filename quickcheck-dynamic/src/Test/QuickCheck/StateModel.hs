@@ -1,5 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 -- | Model-Based Testing library for use with Haskell QuickCheck.
@@ -38,9 +39,12 @@ module Test.QuickCheck.StateModel (
   computePrecondition,
   computeArbitraryAction,
   computeShrinkAction,
+  runParallelActions,
+  ParActions (..),
 ) where
 
 import Control.Monad
+import Control.Monad.Class.MonadAsync
 import Control.Monad.Identity
 import Control.Monad.Reader
 import Control.Monad.State
@@ -193,12 +197,18 @@ newtype PostconditionM m a = PostconditionM {runPost :: WriterT (Endo Property, 
 instance MonadTrans PostconditionM where
   lift = PostconditionM . lift
 
+-- | Evaluate a postcondition in @PropertyM m@ and make the property fail if
+-- postcondition results in @False@
 evaluatePostCondition :: Monad m => PostconditionM m Bool -> PropertyM m ()
-evaluatePostCondition post = do
+evaluatePostCondition post = assert =<< evaluatePostCondition' post
+
+-- | Evaluate a postcondition in @PropertyM m@ and return the boolean result
+evaluatePostCondition' :: Monad m => PostconditionM m Bool -> PropertyM m Bool
+evaluatePostCondition' post = do
   (b, (Endo mon, Endo onFail)) <- run . runWriterT . runPost $ post
   monitor mon
   unless b $ monitor onFail
-  assert b
+  pure b
 
 -- | Apply the property transformation to the property after evaluating
 -- the postcondition. Useful for collecting statistics while avoiding
@@ -222,6 +232,8 @@ class (forall a. Show (Action state a), Monad m) => RunModel state m where
   -- The `Lookup` parameter provides an /environment/ to lookup `Var
   -- a` instances from previous steps.
   perform :: Typeable a => state -> Action state a -> LookUp m -> m (PerformResult (Error state) (Realized m a))
+
+  perform' :: Typeable a => Action state a -> LookUp m -> m (PerformResult (Error state) (Realized m a))
 
   -- | Postcondition on the `a` value produced at some step.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
@@ -310,6 +322,26 @@ infix 5 :=
 instance (forall a. HasVariables (Action state a)) => HasVariables (Step state) where
   getAllVariables (var := act) = Set.insert (Some var) $ getAllVariables (polarAction act)
 
+{-
+      do action $ Inc
+         action $ Inc
+         action $ Inc
+         action $ Inc
+         action $ Inc
+         action $ Reset
+         action $ Inc
+         action $ Inc
+         action $ Inc
+         action $ Inc
+         pure ()
+      do action $ Inc
+         pure ()
+      do action $ Inc
+         pure ()
+
+as = ParActions (Actions_ [] (Smart 0 [mkVar 0 := ActionWithPolarity Inc PosPolarity, mkVar 1 := ActionWithPolarity Inc PosPolarity, mkVar 2 := ActionWithPolarity Inc PosPolarity, mkVar 3 := ActionWithPolarity Inc PosPolarity, mkVar 4 := ActionWithPolarity Inc PosPolarity, mkVar 5 := ActionWithPolarity Reset PosPolarity, mkVar 6 := ActionWithPolarity Inc PosPolarity, mkVar 7 := ActionWithPolarity Inc PosPolarity, mkVar 8 := ActionWithPolarity Inc PosPolarity, mkVar 9 := ActionWithPolarity Inc PosPolarity])) [Actions_ [] (Smart 0 [mkVar 10 := ActionWithPolarity Inc PosPolarity]), Actions_ [] (Smart 0 [mkVar 11 := ActionWithPolarity Inc PosPolarity])]
+-}
+
 funName :: Polarity -> String
 funName PosPolarity = "action"
 funName _ = "failingAction"
@@ -355,6 +387,7 @@ instance StateModel state => Show (Actions state) where
   show (Actions as) =
     let as' = WithUsedVars (usedVariables (Actions as)) <$> as
      in intercalate "\n" $ zipWith (++) ("do " : repeat "   ") (map show as' ++ ["pure ()"])
+
 
 usedVariables :: forall state. StateModel state => Actions state -> VarContext
 usedVariables (Actions as) = go initialAnnotatedState as
@@ -585,3 +618,184 @@ runSteps s env ((v := act) : as) = do
           stateTransition = (underlyingState s, underlyingState s')
       monitor $ monitoring @state @m stateTransition action (lookUpVar env') ret
       pure (s', env', stateTransition)
+
+{-------------------------------------------------------------------------------
+  Parallel State Machines
+-------------------------------------------------------------------------------}
+
+-- | A sequential prefix and some number of parallel suffixes
+data ParActions state = ParActions (Actions state) [Actions state]
+
+instance StateModel state => Show (ParActions state) where
+  show (ParActions as ass) =
+    unlines $ [ "Sequential prefix"
+              , unlines $ map ('\t':) $ lines $ show as
+              , "Parallel suffixes"
+              ]
+           ++ (concatMap (\(idx, acts) -> [ [idx] <> ":"
+                                          , unlines $ map ('\t':) $ lines $ show acts
+                                          ])
+                         (zip ['a'..] ass))
+
+-- | Existential on @a@
+data Performed m state where
+  Performed
+    :: (Typeable a, Eq (Action state a), Show (Action state a))
+    => Var a
+    -> ActionWithPolarity state a
+    -> Either (Error state) (Realized m a)
+    -> Performed m state
+
+runParallelActions
+  :: forall state m e
+   . ( StateModel state
+     , RunModel state m
+     , e ~ Error state
+     , forall a. IsPerformResult e a
+     , MonadAsync m
+     )
+  => ParActions state
+  -> PropertyM m ()
+runParallelActions (ParActions (Actions_ _ (Smart _ seqPrefix)) suffixes) = do
+  (env, seqPerformed) <- run $ runParallelSteps [] [] seqPrefix
+  results <- run $ mapConcurrently (\(Actions_ _ (Smart _ actions)) -> runParallelSteps env [] actions) suffixes
+  let possibleLinearizations = interleavings (env, seqPerformed) results
+
+  hasOneSucceded <-
+    if null possibleLinearizations
+    then pure True
+    else
+     fmap or
+     . mapM (\(anEnv, anInterleaving) ->
+               snd <$> foldM (foldModel anEnv) (initialAnnotatedState, True) anInterleaving)
+     $ possibleLinearizations
+  assert hasOneSucceded
+ where
+   foldModel :: Env m
+             -> (Annotated state, Bool)
+             -> Performed m state
+             -> PropertyM m (Annotated state, Bool)
+   foldModel _   (s, False) _ = pure (s, False)
+   foldModel env (s, _) (Performed var act ret) =
+     case (polar, ret) of
+       (PosPolarity, Left err) ->
+         (s,) <$> positiveActionFailed err
+       (PosPolarity, Right val) -> do
+         positiveActionSucceeded val
+       (NegPolarity, _) -> do
+         negativeActionResult
+    where
+      action = polarAction act
+      polar = polarity act
+
+      positiveActionFailed err = do
+        monitor $
+          monitoringFailure @state @m
+            (underlyingState s)
+            action
+            (lookUpVar env)
+            err
+        pure False
+
+      positiveActionSucceeded val = do
+        (s', stateTransition) <- computeNewState
+        b <- evaluatePostCondition' $
+          postcondition
+            stateTransition
+            action
+            (lookUpVar env)
+            val
+        pure (s', b)
+
+      negativeActionResult = do
+        (s', stateTransition) <- computeNewState
+        b <- evaluatePostCondition' $
+          postconditionOnFailure
+            stateTransition
+            action
+            (lookUpVar env)
+            ret
+        pure (s', b)
+
+      computeNewState = do
+        let s' = computeNextState s act var
+            stateTransition = (underlyingState s, underlyingState s')
+        monitor $ monitoring @state @m stateTransition action (lookUpVar env) ret
+        pure (s', stateTransition)
+
+runParallelSteps
+  :: forall state m e
+   . ( StateModel state
+     , RunModel state m
+     , e ~ Error state
+     , forall a. IsPerformResult e a
+     )
+  => Env m
+  -> [Performed m state]
+  -> [Step state]
+  -> m (Env m, [Performed m state])
+runParallelSteps env rets [] = return (reverse env, reverse rets)
+runParallelSteps env rets ((v := act) : as) = do
+  let action = polarAction act
+  (ret, env') <- runStep action
+  runParallelSteps env' (Performed v act ret:rets) as
+  where
+    runStep ::
+         forall a. Typeable a
+      => Action state a
+      -> m (Either (Error state) (Realized m a), Env m)
+    runStep action = do
+        ret :: Either (Error state) (Realized m a) <- performResultToEither <$> perform' action (lookUpVar env)
+        let var :: Var a
+            var = unsafeCoerceVar v
+            env'
+              | Right (val :: Realized m a) <- ret = (var :== val) : env
+              | otherwise = env
+        pure (ret, env')
+
+instance forall state. StateModel state => Arbitrary (ParActions state) where
+  arbitrary = do
+    (Actions_ rej (Smart _ allActions)) <- arbitrary
+    foo rej allActions
+    where
+      foo rej allActions = do
+        seqLength <- chooseInt (0, length allActions - 1)
+        let (prefix, suffix) = splitAt seqLength allActions
+            (suff1, suff2) = splitAt (length suffix `div` 2) suffix
+            f :: (state, Bool) -> Step state -> (state, Bool)
+            f (st, False) _ = (st, False)
+            f (st, b) (v := act) =
+              ( nextState st (polarAction act) v
+              , b && precondition st (polarAction act)
+              )
+        if and
+          $ map (\anInterleaving -> snd $ foldl' f (initialState, True) anInterleaving) (interleaves [suff1, suff2])
+        then pure (ParActions (Actions_ rej (Smart 0 prefix))
+          [(Actions_ rej (Smart 0 suff1)), (Actions_ rej (Smart 0 suff2))])
+        else foo rej allActions
+
+-- | Generate all possible interleavings.
+--
+-- Note that the environment should be able to handle duplicates so we just
+-- concat all environments together.
+interleavings ::
+      (Env m, [Performed m state])
+  -> [(Env m, [Performed m state])]
+  -> [(Env m, [Performed m state])]
+interleavings (_, seqPrefix) parallelSuffixes =
+  let env = concat [ e | (e, _) <- parallelSuffixes ]
+  in map ((env,) . (seqPrefix ++)) $ interleaves $ map snd parallelSuffixes
+
+-- | All interleavings of a list of lists (preserving the relative order)
+interleaves :: [[a]] -> [[a]]
+interleaves []     = []
+interleaves [as]   = [as]
+interleaves (a:as) = foldl' (\b x -> concatMap (interleave x) b) [a] as
+
+-- | All interleavings of two lists (preserving the relative order)
+interleave :: [a] -> [a] -> [[a]]
+interleave []        []        = []
+interleave as        []        = [as]
+interleave []        bs        = [bs]
+interleave a@(ah:as) b@(bh:bs) = [ ah:arest | arest <- interleave as b ]
+                              ++ [ bh:brest | brest <- interleave a bs ]
