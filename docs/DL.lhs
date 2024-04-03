@@ -18,12 +18,23 @@
 >    )
 
 The goal of this document is to provide a gentle introduction to
-_Dynamic Logic_ which is a form of modal logic that is used within
-`quickcheck-dynamic` to give the user the ability to express and tests
-stateful properties about their code. The intention is to provide an
-intuition of how things work within the library on a simpler version
-of the logic.
+_Dynamic Logic_, a form of modal logic that is used within
+`quickcheck-dynamic`.  The intention is to provide an intuition of how
+things work within the library on a simpler version of the logic.
 
+Dynamic Logic DL -- for short -- formulas give users the ability to
+express and tests _liveness_ and _safety_ properties about their code
+_independently_ from the actual state-machine model and
+implementation. Put it differently, DL formulas allow a user to
+_restrict_ the state space of a model and provide an _Embedded Domain
+Specific Language_ to define composable expressions representing some
+fragment of a larger state.
+
+In `quickcheck-dynamic`,
+[`DynamicLogic`](https://github.com/input-output-hk/quickcheck-dynamic/blob/f7ae1a47c255520db1f817c919f1013ccede050d/quickcheck-dynamic/src/Test/QuickCheck/DynamicLogic.hs#L9)
+is exposed through a monadic interface which makes it simpler to write
+formulas, and, more importantly, provides variables and universal
+quantification over values.
 
 = Propositional Dynamic Logic
 
@@ -473,6 +484,11 @@ rather the converse of what we have done so far: Inferring the subset of Kripke
 structure that's a model for a given formula, for a given "universe of
 discourse" consisting of the atomic propositions and programs.
 
+**NOTE**: This implementation relies on `discard` from the QuickCheck
+  library to prune sequence of programs which is annoying. It would be
+  better to wrap generation in some result type and keep generating
+  upon failures, until some timeout or limit is reached.
+
 Our generator thus takes an initial state, a formula and output a list
 of `Program` that satisfy this formula. If there's no such list, for
 example because some proposition is not valid in some state, then the
@@ -504,6 +520,8 @@ accumulated trace, otherwise it yields it.
 False and True and logical implications are handled as expected,
 respectively discarding their trace, returning it or testing both
 formulas with the same state.
+
+**NOTE**: `Imply` implementation is wrong...
 
 >      Zero -> discard
 >      One -> pure acc
@@ -573,7 +591,7 @@ one step of the program and recursively calls itself with the result.
 
 We can actually verify our generator is consistent with the given formula, expressing that as a `Property`:
 
-> generateConsistentWithEval ::
+> isGenerateConsistentWithEval ::
 >         ( Eq s, Show s
 >         , Eq (Formula s), Show (Formula s)
 >         , Eq (Program s), Show (Program s)
@@ -582,7 +600,7 @@ We can actually verify our generator is consistent with the given formula, expre
 >         => s
 >         -> Prop (Formula s) (Program s)
 >         -> Property
-> generateConsistentWithEval i f =
+> isGenerateConsistentWithEval i f =
 >   forAllShrinkShow (generate i f) shrink show $ \ trace ->
 >      eval i f trace Test.QuickCheck.=== One
 
