@@ -1,20 +1,29 @@
 
+
 > {-# LANGUAGE FunctionalDependencies #-}
 > {-# LANGUAGE InstanceSigs #-}
+> {-# LANGUAGE ScopedTypeVariables #-}
 
 > module DL where
 
-> import Debug.Trace as Debug
 > import Control.Applicative ((<|>))
 > import Control.Monad (foldM)
 > import Data.Kind (Type)
 > import Test.QuickCheck (
->   Arbitrary (..),
->   Gen,
->   Property,
->   forAllShrink,
->   (===),
->  )
+>     Arbitrary (..),
+>     Gen,
+>     Property,
+>     forAllShrink,
+>     (===), discard, forAllShrinkShow,
+>    )
+
+The goal of this document is to provide a gentle introduction to
+_Dynamic Logic_ which is a form of modal logic that is used within
+`quickcheck-dynamic` to give the user the ability to express and tests
+stateful properties about their code. The intention is to provide an
+intuition of how things work within the library on a simpler version
+of the logic.
+
 
 = Propositional Dynamic Logic
 
@@ -178,8 +187,7 @@ executing the program `p`.
 
 The `step` function computes the set of states reachable from the current state by executing the program `p`.
 
-> step
->   :: Kripke [] s
+> step :: Kripke [] s
 >   => Int
 >   -> Prog (Formula s) (Program s)
 >   -> s
@@ -464,3 +472,123 @@ In practice, what we are interested in with Dynamic Logic formulas is
 rather the converse of what we have done so far: Inferring the subset of Kripke
 structure that's a model for a given formula, for a given "universe of
 discourse" consisting of the atomic propositions and programs.
+
+Our generator thus takes an initial state, a formula and output a list
+of `Program` that satisfy this formula. If there's no such list, for
+example because some proposition is not valid in some state, then the
+generated sequence is `discard`ed.
+
+> generate ::
+>      forall s.
+>      Kripke Maybe s
+>      => s
+>      -> Prop (Formula s) (Program s)
+>      -> Gen [Program s]
+> generate i = go i []
+>   where
+
+As expected, the generator proceeds recursively on the structure of
+the proposition, accumulating a trace as it walks through the syntax
+tree.
+
+>    go :: s -> [Program s] -> Prop (Formula s) (Program s) ->  Gen [Program s]
+>    go s acc = \case
+
+A formula that's not verified in the current state discards its
+accumulated trace, otherwise it yields it.
+
+>      Prop f -> if ϕ f s
+>                 then pure acc
+>                 else discard
+
+False and True and logical implications are handled as expected,
+respectively discarding their trace, returning it or testing both
+formulas with the same state.
+
+>      Zero -> discard
+>      One -> pure acc
+>      Imply f g -> do
+>        tr <- go s acc f
+>        go s (acc <> tr) g
+
+Modal necessity tries to make some progress from given program and
+checks the result formula in the new state.
+
+>      Always p f -> do
+>        (s', prog) <- progress s p
+>        go s' (acc <> prog) f
+
+Progress proceeds also structurally through a program's structure:
+
+>    progress :: s -> Prog (Formula s) (Program s) -> Gen (s, [Program s])
+>    progress s = \case
+
+Empty program succeeds yielding an empty trace and unchanged state.
+
+>      Empty -> pure (s, [])
+
+An atomic program updates state and trace iff $\delta$ is defined in
+the Kripke structure for the current state and program.
+
+>      Prog p ->
+>        case δ p s of
+>          Nothing -> discard
+>          Just s' -> pure (s', [p])
+
+Sequence of programs accumulate state change and trace for both executed programs.
+
+>      Seq p q -> do
+>        (s', p') <- progress s p
+>        (s'', q') <- progress s' q
+>        pure (s'', p' <> q')
+
+Choice is handled non-deterministically, flipping a coin and selecting
+one of the branches to make progress. This assumes that should one
+branch fail, the other one will ultimately be selected.
+
+>      Alt p q -> do
+>        b <- arbitrary
+>        if b
+>         then progress s p
+>         else progress s q
+
+A test leaves the state unchanged and depends on the result of evaluating the formula.
+
+>      Test f ->
+>        (s,) <$> go s [] f
+
+Finally, iterative execution also flips a coin: If it fails, an empty
+trace and unchanged state is returned, otherwise it progresses through
+one step of the program and recursively calls itself with the result.
+
+>      Star p -> do
+>        b <- arbitrary
+>        if b
+>          then do
+>            (s', p') <- progress s p
+>            (s'', p'') <- progress s' (Star p)
+>            pure (s'', p' <> p'')
+>          else
+>            pure (s, [])
+
+We can actually verify our generator is consistent with the given formula, expressing that as a `Property`:
+
+> generateConsistentWithEval ::
+>         ( Eq s, Show s
+>         , Eq (Formula s), Show (Formula s)
+>         , Eq (Program s), Show (Program s)
+>         , Test.QuickCheck.Arbitrary (Program s)
+>         , Kripke Maybe s)
+>         => s
+>         -> Prop (Formula s) (Program s)
+>         -> Property
+> generateConsistentWithEval i f =
+>   forAllShrinkShow (generate i f) shrink show $ \ trace ->
+>      eval i f trace Test.QuickCheck.=== One
+
+Running this property gives us:
+
+```
+$ Test.QuickCheck.quickCheck $ generateConsistentWithEval (S' U) formula
++++ OK, passed 100 tests; 78 discarded.
+```
