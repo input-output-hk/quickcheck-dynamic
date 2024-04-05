@@ -339,7 +339,7 @@ restrictedPolar (ActionWithPolarity a _) = restricted a
 
 -- | Simplest "execution" function for `DynFormula`.
 -- Turns a given a `DynFormula` paired with an interpreter function to produce some result from an
--- `Actions` sequence into a proper `Property` than can then be run by QuickCheck.
+-- `Actions` sequence into a proper `Property` that can be run by QuickCheck.
 forAllScripts
   :: (DynLogicModel s, Testable a)
   => DynFormula s
