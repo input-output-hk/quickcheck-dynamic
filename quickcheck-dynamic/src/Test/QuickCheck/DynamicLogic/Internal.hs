@@ -339,8 +339,7 @@ restrictedPolar (ActionWithPolarity a _) = restricted a
 
 -- | Simplest "execution" function for `DynFormula`.
 -- Turns a given a `DynFormula` paired with an interpreter function to produce some result from an
-
---- `Actions` sequence into a proper `Property` than can then be run by QuickCheck.
+-- `Actions` sequence into a proper `Property` that can be run by QuickCheck.
 forAllScripts
   :: (DynLogicModel s, Testable a)
   => DynFormula s
@@ -361,7 +360,7 @@ forAllUniqueScripts s f k =
         n = unsafeNextVarIndex $ vars s
      in case generate chooseUniqueNextStep d n s 500 of
           Nothing -> counterexample "Generating Non-unique script in forAllUniqueScripts" False
-          Just test -> validDLTest d test . applyMonitoring d test . property $ k (scriptFromDL test)
+          Just test -> validDLTest test . applyMonitoring d test . property $ k (scriptFromDL test)
 
 -- | Creates a `Property` from `DynFormula` with some specialised isomorphism for shrinking purpose.
 forAllMappedScripts
@@ -382,14 +381,29 @@ forAllMappedScripts to from f k =
 
 withDLScript :: (DynLogicModel s, Testable a) => DynLogic s -> (Actions s -> a) -> DynLogicTest s -> Property
 withDLScript d k test =
-  validDLTest d test . applyMonitoring d test . property $ k (scriptFromDL test)
+  validDLTest test . applyMonitoring d test . property $ k (scriptFromDL test)
 
 withDLScriptPrefix :: (DynLogicModel s, Testable a) => DynFormula s -> (Actions s -> a) -> DynLogicTest s -> Property
 withDLScriptPrefix f k test =
   QC.withSize $ \n ->
     let d = unDynFormula f n
         test' = unfailDLTest d test
-     in validDLTest d test' . applyMonitoring d test' . property $ k (scriptFromDL test')
+     in validDLTest test' . applyMonitoring d test' . property $ k (scriptFromDL test')
+
+-- | Validate generated test case.
+--
+-- Test case generation does not always produce a valid test case. In
+-- some cases, we did not find a suitable test case matching some
+-- `DynFormula` and we are `Stuck`, hence we want to discard the test
+-- case and start over ; in other cases we found a genuine issue with
+-- the formula leading to the impossibility of producing a valid test
+-- case.
+validDLTest :: StateModel s => DynLogicTest s -> Property -> Property
+validDLTest test prop =
+  case test of
+    DLScript{} -> counterexample (show test) prop
+    Stuck{} -> property Discard
+    _other -> counterexample (show test) False
 
 generateDLTest :: DynLogicModel s => DynLogic s -> Int -> Gen (DynLogicTest s)
 generateDLTest d size = generate chooseNextStep d 0 (initialStateFor d) size
@@ -762,11 +776,6 @@ stuck (Stopping d) s = stuck d s
 stuck (Weight w d) s = w < never || stuck d s
 stuck (ForAll _ _) _ = False
 stuck (Monitor _ d) s = stuck d s
-
-validDLTest :: StateModel s => DynLogic s -> DynLogicTest s -> Property -> Property
-validDLTest _ Stuck{} _ = False ==> False
-validDLTest _ test@DLScript{} p = counterexample (show test) p
-validDLTest _ test _ = counterexample (show test) False
 
 scriptFromDL :: DynLogicTest s -> Actions s
 scriptFromDL (DLScript s) = Actions $ sequenceSteps s
