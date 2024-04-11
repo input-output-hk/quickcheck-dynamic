@@ -145,7 +145,7 @@ instance RunModel RegState RegM where
       . tabulate "Registry size" [show $ Map.size (regs s')]
 
 data ShowDict a where
-  ShowDict :: Show (Realized RegM a) => ShowDict a
+  ShowDict :: Show a => ShowDict a
 
 showDictAction :: forall a. Action RegState a -> ShowDict a
 showDictAction Spawn{} = ShowDict

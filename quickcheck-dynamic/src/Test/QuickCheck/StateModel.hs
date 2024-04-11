@@ -23,7 +23,6 @@ module Test.QuickCheck.StateModel (
   EnvEntry (..),
   pattern (:=?),
   Env,
-  Realized,
   Generic,
   IsPerformResult,
   monitorPost,
@@ -41,12 +40,9 @@ module Test.QuickCheck.StateModel (
 ) where
 
 import Control.Monad
-import Control.Monad.Identity
 import Control.Monad.Reader
-import Control.Monad.State
 import Control.Monad.Writer (WriterT, runWriterT, tell)
 import Data.Data
-import Data.Kind
 import Data.List
 import Data.Monoid (Endo (..))
 import Data.Set qualified as Set
@@ -178,15 +174,6 @@ instance {-# OVERLAPPING #-} IsPerformResult Void a where
 instance {-# OVERLAPPABLE #-} (PerformResult e a ~ Either e a) => IsPerformResult e a where
   performResultToEither = id
 
--- TODO: maybe it makes sense to write
--- out a long list of these instances
-type family Realized (m :: Type -> Type) a :: Type
-type instance Realized IO a = a
-type instance Realized (StateT s m) a = Realized m a
-type instance Realized (ReaderT r m) a = Realized m a
-type instance Realized (WriterT w m) a = Realized m a
-type instance Realized Identity a = a
-
 newtype PostconditionM m a = PostconditionM {runPost :: WriterT (Endo Property, Endo Property) m a}
   deriving (Functor, Applicative, Monad)
 
@@ -221,57 +208,57 @@ class (forall a. Show (Action state a), Monad m) => RunModel state m where
   --
   -- The `Lookup` parameter provides an /environment/ to lookup `Var
   -- a` instances from previous steps.
-  perform :: Typeable a => state -> Action state a -> LookUp m -> m (PerformResult (Error state) (Realized m a))
+  perform :: Typeable a => state -> Action state a -> LookUp -> m (PerformResult (Error state) a)
 
   -- | Postcondition on the `a` value produced at some step.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
   -- to check the implementation produces expected values.
-  postcondition :: (state, state) -> Action state a -> LookUp m -> Realized m a -> PostconditionM m Bool
+  postcondition :: (state, state) -> Action state a -> LookUp -> a -> PostconditionM m Bool
   postcondition _ _ _ _ = pure True
 
   -- | Postcondition on the result of running a _negative_ `Action`.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
   -- to check the implementation produces e.g. the expected errors or to check that the SUT hasn't
   -- been updated during the execution of the negative action.
-  postconditionOnFailure :: (state, state) -> Action state a -> LookUp m -> Either (Error state) (Realized m a) -> PostconditionM m Bool
+  postconditionOnFailure :: (state, state) -> Action state a -> LookUp -> Either (Error state) a -> PostconditionM m Bool
   postconditionOnFailure _ _ _ _ = pure True
 
   -- | Allows the user to attach additional information to the `Property` at each step of the process.
   -- This function is given the full transition that's been executed, including the start and ending
   -- `state`, the `Action`, the current environment to `Lookup` and the value produced by `perform`
   -- while executing this step.
-  monitoring :: (state, state) -> Action state a -> LookUp m -> Either (Error state) (Realized m a) -> Property -> Property
+  monitoring :: (state, state) -> Action state a -> LookUp -> Either (Error state) a -> Property -> Property
   monitoring _ _ _ _ prop = prop
 
   -- | Allows the user to attach additional information to the `Property` if a positive action fails.
-  monitoringFailure :: state -> Action state a -> LookUp m -> Error state -> Property -> Property
+  monitoringFailure :: state -> Action state a -> LookUp -> Error state -> Property -> Property
   monitoringFailure _ _ _ _ prop = prop
 
-type LookUp m = forall a. Typeable a => Var a -> Realized m a
+type LookUp = forall a. Typeable a => Var a -> a
 
-type Env m = [EnvEntry m]
+type Env = [EnvEntry]
 
-data EnvEntry m where
-  (:==) :: Typeable a => Var a -> Realized m a -> EnvEntry m
+data EnvEntry  where
+  (:==) :: Typeable a => Var a -> a -> EnvEntry
 
 infix 5 :==
 
-pattern (:=?) :: forall a m. Typeable a => Var a -> Realized m a -> EnvEntry m
+pattern (:=?) :: forall a. Typeable a => Var a -> a -> EnvEntry
 pattern v :=? val <- (viewAtType -> Just (v, val))
 
-viewAtType :: forall a m. Typeable a => EnvEntry m -> Maybe (Var a, Realized m a)
+viewAtType :: forall a. Typeable a => EnvEntry -> Maybe (Var a, a)
 viewAtType ((v :: Var b) :== val)
   | Just Refl <- eqT @a @b = Just (v, val)
   | otherwise = Nothing
 
-lookUpVarMaybe :: forall a m. Typeable a => Env m -> Var a -> Maybe (Realized m a)
+lookUpVarMaybe :: forall a. Typeable a => Env -> Var a -> Maybe a
 lookUpVarMaybe [] _ = Nothing
 lookUpVarMaybe (((v' :: Var b) :== a) : env) v =
   case eqT @a @b of
     Just Refl | v == v' -> Just a
     _ -> lookUpVarMaybe env v
 
-lookUpVar :: Typeable a => Env m -> Var a -> Realized m a
+lookUpVar :: Typeable a => Env -> Var a -> a
 lookUpVar env v = case lookUpVarMaybe env v of
   Nothing -> error $ "Variable " ++ show v ++ " is not bound at type " ++ show (typeRep v) ++ "!"
   Just a -> a
@@ -505,7 +492,7 @@ runActions
      , forall a. IsPerformResult e a
      )
   => Actions state
-  -> PropertyM m (Annotated state, Env m)
+  -> PropertyM m (Annotated state, Env)
 runActions (Actions_ rejected (Smart _ actions)) = do
   (finalState, env) <- runSteps initialAnnotatedState [] actions
   unless (null rejected) $
@@ -523,9 +510,9 @@ runSteps
      , forall a. IsPerformResult e a
      )
   => Annotated state
-  -> Env m
+  -> Env
   -> [Step state]
-  -> PropertyM m (Annotated state, Env m)
+  -> PropertyM m (Annotated state, Env)
 runSteps s env [] = return (s, reverse env)
 runSteps s env ((v := act) : as) = do
   pre $ computePrecondition s act
