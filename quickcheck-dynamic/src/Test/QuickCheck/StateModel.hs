@@ -238,7 +238,7 @@ type LookUp = forall a. Typeable a => Var a -> a
 
 type Env = [EnvEntry]
 
-data EnvEntry  where
+data EnvEntry where
   (:==) :: Typeable a => Var a -> a -> EnvEntry
 
 infix 5 :==
