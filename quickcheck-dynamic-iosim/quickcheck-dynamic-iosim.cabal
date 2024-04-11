@@ -57,8 +57,5 @@ library
   exposed-modules: Test.QuickCheck.StateModel.IOSim
   build-depends:
     , base                >=4.7 && <5
-    , io-classes
     , io-sim
     , QuickCheck
-    , quickcheck-dynamic
-    , stm
