@@ -56,6 +56,6 @@ library
   hs-source-dirs:  src
   exposed-modules: Test.QuickCheck.StateModel.IOSim
   build-depends:
-    , base                >=4.7 && <5
+    , base        >=4.7 && <5
     , io-sim
     , QuickCheck
