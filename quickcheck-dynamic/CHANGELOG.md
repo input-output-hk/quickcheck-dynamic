@@ -9,6 +9,16 @@ changes.
 
 ## UNRELEASED
 
+* Breaking removed `Realized`
+  - To migrate uses of `Realized` with `IOSim`, index the state type on the choice of `RunModel` monad
+    and index the relevant types:
+    ```
+    -- Turn:
+    data ModelState = State { threadId :: Var ThreadId }
+    -- Into:
+    data ModelState m = State { threadId :: Var (ThreadId m) }
+    ```
+
 ## 3.4.1 - 2024-03-22
 
 * [#70](https://github.com/input-output-hk/quickcheck-dynamic/pull/70) Expose `IsPerformResult` typeclass
