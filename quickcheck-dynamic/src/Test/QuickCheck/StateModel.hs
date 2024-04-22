@@ -146,7 +146,7 @@ class
 
   -- | Precondition for filtering an `Action` that can meaningfully run but is supposed to fail.
   -- An action will run as a _negative_ action if the `precondition` fails and `validFailingAction` succeeds.
-  -- A negative action should have _no effect_ on the model state. This may not be desierable in all
+  -- A negative action should have _no effect_ on the model state. This may not be desirable in all
   -- situations - in which case one can override this semantics for book-keeping in `failureNextState`.
   validFailingAction :: state -> Action state a -> Bool
   validFailingAction _ _ = False
@@ -195,10 +195,14 @@ class (forall a. Show (Action state a), Monad m) => RunModel state m where
   postconditionOnFailure :: (state, state) -> Action state a -> LookUp -> Either (Error state) a -> Property
   postconditionOnFailure _ _ _ _ = property True
 
-  -- | Allows the user to attach additional information to the `Property` at each step of the process.
+  -- | Allows the user to attach additional information to the `Property` after each succesful run of an action.
   -- This function is given the full transition that's been executed, including the start and ending
   -- `state`, the `Action`, the current environment to `Lookup` and the value produced by `perform`
   -- while executing this step.
+  --
+  -- This is just a convenience as this information can as well be attached
+  -- to the property defined in @'postcondition'@ or @'postconditonOnFailure'@
+  -- with the same result.
   monitoring :: (state, state) -> Action state a -> LookUp -> Either (Error state) a -> Property -> Property
   monitoring _ _ _ _ prop = prop
 
