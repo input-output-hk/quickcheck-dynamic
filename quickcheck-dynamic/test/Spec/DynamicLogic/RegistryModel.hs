@@ -128,21 +128,18 @@ instance RunModel RegState RegM where
     lift $ threadDelay 100
     pure $ Right ()
 
-  postcondition (s, _) (WhereIs name) env mtid = do
-    pure $ (env <$> Map.lookup name (regs s)) == mtid
-  postcondition _ _ _ _ = pure True
-
-  postconditionOnFailure (s, _) act@Register{} _ res = do
-    monitorPost $
-      tabulate
-        "Reason for -Register"
-        [why s act]
-    pure $ isLeft res
-  postconditionOnFailure _s _ _ _ = pure True
-
-  monitoring (_s, s') act@(showDictAction -> ShowDict) _ res =
-    counterexample (show res ++ " <- " ++ show act ++ "\n  -- State: " ++ show s')
+  postcondition (s, s') act@(WhereIs name) env mtid =
+    counterexample (show mtid ++ " <- " ++ show act ++ "\n  -- State: " ++ show s')
       . tabulate "Registry size" [show $ Map.size (regs s')]
+      $ (env <$> Map.lookup name (regs s)) === mtid
+  postcondition _ _ _ _ = property True
+
+  postconditionOnFailure (s, _) act@Register{} _ res =
+    tabulate
+      "Reason for -Register"
+      [why s act]
+      $ isLeft res
+  postconditionOnFailure _s _ _ _ = property True
 
 data ShowDict a where
   ShowDict :: Show a => ShowDict a
