@@ -32,8 +32,8 @@ data DynLogic s
     Stopping (DynLogic s)
   | -- | After a specific action the predicate should hold
     forall a.
-    (Eq (Action s a), Show (Action s a), Typeable a) =>
-    After (ActionWithPolarity s a) (Var a -> DynPred s)
+    (Eq (Action s Symbolic a), Show (Action s Symbolic a), Typeable a) =>
+    After (ActionWithPolarity s a) (Var Symbolic a -> DynPred s)
   | Error String (DynPred s)
   | -- | Adjust the probability of picking a branch
     Weight Double (DynLogic s)
@@ -65,18 +65,18 @@ afterAny :: (Annotated s -> DynFormula s) -> DynFormula s
 afterAny f = DynFormula $ \n -> AfterAny $ \s -> unDynFormula (f s) n
 
 afterPolar
-  :: (Typeable a, Eq (Action s a), Show (Action s a))
+  :: (Typeable a, Eq (Action s Symbolic a), Show (Action s Symbolic a))
   => ActionWithPolarity s a
-  -> (Var a -> Annotated s -> DynFormula s)
+  -> (Var Symbolic a -> Annotated s -> DynFormula s)
   -> DynFormula s
 afterPolar act f = DynFormula $ \n -> After act $ \x s -> unDynFormula (f x s) n
 
 -- | Given `f` must be `True` after /some/ action.
 -- `f` is passed the state resulting from executing the `Action`.
 after
-  :: (Typeable a, Eq (Action s a), Show (Action s a))
-  => Action s a
-  -> (Var a -> Annotated s -> DynFormula s)
+  :: (Typeable a, Eq (Action s Symbolic a), Show (Action s Symbolic a))
+  => Action s Symbolic a
+  -> (Var Symbolic a -> Annotated s -> DynFormula s)
   -> DynFormula s
 after act f = afterPolar (ActionWithPolarity act PosPolarity) f
 
@@ -84,8 +84,8 @@ after act f = afterPolar (ActionWithPolarity act PosPolarity) f
 -- `f` is passed the state resulting from executing the `Action`
 -- as a negative action.
 afterNegative
-  :: (Typeable a, Eq (Action s a), Show (Action s a))
-  => Action s a
+  :: (Typeable a, Eq (Action s Symbolic a), Show (Action s Symbolic a))
+  => Action s Symbolic a
   -> (Annotated s -> DynFormula s)
   -> DynFormula s
 afterNegative act f = afterPolar (ActionWithPolarity act NegPolarity) (const f)
@@ -127,7 +127,7 @@ withSize :: (Int -> DynFormula s) -> DynFormula s
 withSize f = DynFormula $ \n -> unDynFormula (f n) n
 
 -- | Prioritise doing this if we are
--- trying to stop generation.
+-- trying to stop Symbolic.
 toStop :: DynFormula s -> DynFormula s
 toStop (DynFormula f) = DynFormula $ Stopping . f
 
@@ -154,7 +154,7 @@ always p s = withSize $ \n -> toStop (p s) ||| p s ||| weight (fromIntegral n) (
 
 data FailingAction s
   = ErrorFail String
-  | forall a. (Typeable a, Eq (Action s a)) => ActionFail (ActionWithPolarity s a)
+  | forall a. (Typeable a, Eq (Action s Symbolic a)) => ActionFail (ActionWithPolarity s a)
 
 instance StateModel s => HasVariables (FailingAction s) where
   getAllVariables ErrorFail{} = mempty
@@ -329,7 +329,7 @@ usedVariables = go initialAnnotatedState
 -- properties at controlled times, so they are likely to fail if
 -- invoked at other times.
 class StateModel s => DynLogicModel s where
-  restricted :: Action s a -> Bool
+  restricted :: Action s Symbolic a -> Bool
   restricted _ = False
 
 restrictedPolar :: DynLogicModel s => ActionWithPolarity s a -> Bool
@@ -392,7 +392,7 @@ withDLScriptPrefix f k test =
 
 -- | Validate generated test case.
 --
--- Test case generation does not always produce a valid test case. In
+-- Test case Symbolic does not always produce a valid test case. In
 -- some cases, we did not find a suitable test case matching some
 -- `DynFormula` and we are `Stuck`, hence we want to discard the test
 -- case and start over ; in other cases we found a genuine issue with

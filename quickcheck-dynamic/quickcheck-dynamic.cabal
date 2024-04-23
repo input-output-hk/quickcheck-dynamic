@@ -83,6 +83,7 @@ library
     , mtl
     , QuickCheck
     , random
+    , singletons
 
 test-suite quickcheck-dynamic-test
   import:         lang

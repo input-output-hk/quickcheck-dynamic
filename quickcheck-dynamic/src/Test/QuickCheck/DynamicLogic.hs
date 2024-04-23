@@ -60,10 +60,10 @@ instance Monad (DL s) where
 instance MonadFail (DL s) where
   fail = errorDL
 
-action :: (Typeable a, Eq (Action s a), Show (Action s a)) => Action s a -> DL s (Var a)
+action :: (Typeable a, Eq (Action s Symbolic a), Show (Action s Symbolic a)) => Action s Symbolic a -> DL s (Var Symbolic a)
 action cmd = DL $ \_ k -> DL.after cmd k
 
-failingAction :: (Typeable a, Eq (Action s a), Show (Action s a)) => Action s a -> DL s ()
+failingAction :: (Typeable a, Eq (Action s Symbolic a), Show (Action s Symbolic a)) => Action s Symbolic a -> DL s ()
 failingAction cmd = DL $ \_ k -> DL.afterNegative cmd (k ())
 
 anyAction :: DL s ()
@@ -90,13 +90,13 @@ weight w = DL $ \s k -> DL.weight w (k () s)
 getSize :: DL s Int
 getSize = DL $ \s k -> DL.withSize $ \n -> k n s
 
-getModelStateDL :: DL s s
+getModelStateDL :: DL s (s Symbolic)
 getModelStateDL = DL $ \s k -> k (underlyingState s) s
 
 getVarContextDL :: DL s VarContext
 getVarContextDL = DL $ \s k -> k (vars s) s
 
-forAllVar :: forall a s. Typeable a => DL s (Var a)
+forAllVar :: forall a s. Typeable a => DL s (Var Symbolic a)
 forAllVar = do
   xs <- ctxAtType <$> getVarContextDL
   forAllQ $ elementsQ xs
@@ -114,7 +114,7 @@ errorDL name = DL $ \_ _ -> DL.errorDL name
 assert :: String -> Bool -> DL s ()
 assert name b = if b then return () else errorDL name
 
-assertModel :: String -> (s -> Bool) -> DL s ()
+assertModel :: String -> (s Symbolic -> Bool) -> DL s ()
 assertModel name p = assert name . p =<< getModelStateDL
 
 monitorDL :: (Property -> Property) -> DL s ()

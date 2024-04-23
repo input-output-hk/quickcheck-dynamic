@@ -12,6 +12,7 @@ import Test.QuickCheck.Extras (runPropertyReaderT)
 import Test.QuickCheck.Monadic (assert, monadicIO, monitor, pick)
 import Test.QuickCheck.StateModel (
   Actions,
+  Var (..),
   lookUpVarMaybe,
   mkVar,
   runActions,
@@ -55,14 +56,14 @@ prop_returnsFinalState :: Actions SimpleCounter -> Property
 prop_returnsFinalState actions@(Actions as) =
   monadicIO $ do
     ref <- lift $ newIORef (0 :: Int)
-    (s, _) <- runPropertyReaderT (runActions actions) ref
+    (s, _, _) <- runPropertyReaderT (runActions actions) ref
     assert $ count (underlyingState s) == length as
 
 prop_variablesIndicesAre1Based :: Actions SimpleCounter -> Property
 prop_variablesIndicesAre1Based actions@(Actions as) =
   noShrinking $ monadicIO $ do
     ref <- lift $ newIORef (0 :: Int)
-    (_, env) <- runPropertyReaderT (runActions actions) ref
+    (_, _, env) <- runPropertyReaderT (runActions actions) ref
     act <- pick $ choose (0, length as - 1)
     monitor $
       counterexample $
@@ -71,7 +72,7 @@ prop_variablesIndicesAre1Based actions@(Actions as) =
           , "Actions:  " <> show as
           , "Act:  " <> show act
           ]
-    assert $ null as || lookUpVarMaybe env (mkVar $ act + 1) == Just act
+    assert $ null as || lookUpVarMaybe env (mkVar $ act + 1) == Just (DynamicVar act)
 
 prop_failsOnPostcondition :: Actions FailingCounter -> Property
 prop_failsOnPostcondition actions =
