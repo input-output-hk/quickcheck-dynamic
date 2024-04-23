@@ -11,7 +11,6 @@ module Test.QuickCheck.StateModel (
   module Test.QuickCheck.StateModel.Variables,
   StateModel (..),
   RunModel (..),
-  PostconditionM (..),
   WithUsedVars (..),
   Annotated (..),
   Step (..),
@@ -25,8 +24,6 @@ module Test.QuickCheck.StateModel (
   Env,
   Generic,
   IsPerformResult,
-  monitorPost,
-  counterexamplePost,
   stateAfter,
   runActions,
   lookUpVar,
@@ -40,16 +37,14 @@ module Test.QuickCheck.StateModel (
 ) where
 
 import Control.Monad
-import Control.Monad.Reader
-import Control.Monad.Writer (WriterT, runWriterT, tell)
 import Data.Data
 import Data.List
-import Data.Monoid (Endo (..))
 import Data.Set qualified as Set
 import Data.Void
 import GHC.Generics
 import Test.QuickCheck as QC
 import Test.QuickCheck.DynamicLogic.SmartShrinking
+import Test.QuickCheck.Extras (liftProperty)
 import Test.QuickCheck.Monadic
 import Test.QuickCheck.StateModel.Variables
 
@@ -151,7 +146,7 @@ class
 
   -- | Precondition for filtering an `Action` that can meaningfully run but is supposed to fail.
   -- An action will run as a _negative_ action if the `precondition` fails and `validFailingAction` succeeds.
-  -- A negative action should have _no effect_ on the model state. This may not be desierable in all
+  -- A negative action should have _no effect_ on the model state. This may not be desirable in all
   -- situations - in which case one can override this semantics for book-keeping in `failureNextState`.
   validFailingAction :: state -> Action state a -> Bool
   validFailingAction _ _ = False
@@ -174,29 +169,6 @@ instance {-# OVERLAPPING #-} IsPerformResult Void a where
 instance {-# OVERLAPPABLE #-} (PerformResult e a ~ Either e a) => IsPerformResult e a where
   performResultToEither = id
 
-newtype PostconditionM m a = PostconditionM {runPost :: WriterT (Endo Property, Endo Property) m a}
-  deriving (Functor, Applicative, Monad)
-
-instance MonadTrans PostconditionM where
-  lift = PostconditionM . lift
-
-evaluatePostCondition :: Monad m => PostconditionM m Bool -> PropertyM m ()
-evaluatePostCondition post = do
-  (b, (Endo mon, Endo onFail)) <- run . runWriterT . runPost $ post
-  monitor mon
-  unless b $ monitor onFail
-  assert b
-
--- | Apply the property transformation to the property after evaluating
--- the postcondition. Useful for collecting statistics while avoiding
--- duplication between `monitoring` and `postcondition`.
-monitorPost :: Monad m => (Property -> Property) -> PostconditionM m ()
-monitorPost m = PostconditionM $ tell (Endo m, mempty)
-
--- | Acts as `Test.QuickCheck.counterexample` if the postcondition fails.
-counterexamplePost :: Monad m => String -> PostconditionM m ()
-counterexamplePost c = PostconditionM $ tell (mempty, Endo $ counterexample c)
-
 class (forall a. Show (Action state a), Monad m) => RunModel state m where
   -- | Perform an `Action` in some `state` in the `Monad` `m`.  This
   -- is the function that's used to exercise the actual stateful
@@ -213,20 +185,24 @@ class (forall a. Show (Action state a), Monad m) => RunModel state m where
   -- | Postcondition on the `a` value produced at some step.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
   -- to check the implementation produces expected values.
-  postcondition :: (state, state) -> Action state a -> LookUp -> a -> PostconditionM m Bool
-  postcondition _ _ _ _ = pure True
+  postcondition :: (state, state) -> Action state a -> LookUp -> a -> Property
+  postcondition _ _ _ _ = property True
 
   -- | Postcondition on the result of running a _negative_ `Action`.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
   -- to check the implementation produces e.g. the expected errors or to check that the SUT hasn't
   -- been updated during the execution of the negative action.
-  postconditionOnFailure :: (state, state) -> Action state a -> LookUp -> Either (Error state) a -> PostconditionM m Bool
-  postconditionOnFailure _ _ _ _ = pure True
+  postconditionOnFailure :: (state, state) -> Action state a -> LookUp -> Either (Error state) a -> Property
+  postconditionOnFailure _ _ _ _ = property True
 
-  -- | Allows the user to attach additional information to the `Property` at each step of the process.
+  -- | Allows the user to attach additional information to the `Property` after each succesful run of an action.
   -- This function is given the full transition that's been executed, including the start and ending
   -- `state`, the `Action`, the current environment to `Lookup` and the value produced by `perform`
   -- while executing this step.
+  --
+  -- This is just a convenience as this information can as well be attached
+  -- to the property defined in @'postcondition'@ or @'postconditonOnFailure'@
+  -- with the same result.
   monitoring :: (state, state) -> Action state a -> LookUp -> Either (Error state) a -> Property -> Property
   monitoring _ _ _ _ prop = prop
 
@@ -545,8 +521,8 @@ runSteps s env ((v := act) : as) = do
 
     positiveActionSucceeded ret val = do
       (s', env', stateTransition) <- computeNewState ret
-      evaluatePostCondition $
-        postcondition
+      liftProperty $
+        postcondition @state @m
           stateTransition
           action
           (lookUpVar env)
@@ -555,8 +531,8 @@ runSteps s env ((v := act) : as) = do
 
     negativeActionResult ret = do
       (s', env', stateTransition) <- computeNewState ret
-      evaluatePostCondition $
-        postconditionOnFailure
+      liftProperty $
+        postconditionOnFailure @state @m
           stateTransition
           action
           (lookUpVar env)
