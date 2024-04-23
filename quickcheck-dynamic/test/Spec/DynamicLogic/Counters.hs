@@ -11,17 +11,17 @@ import Test.QuickCheck.StateModel
 
 -- A very simple model with a single action that always succeed in
 -- predictable way. This model is useful for testing the runtime.
-newtype SimpleCounter = SimpleCounter {count :: Int}
+newtype SimpleCounter (phase :: Phase) = SimpleCounter {count :: Int}
   deriving (Eq, Show, Generic)
 
-deriving instance Eq (Action SimpleCounter a)
-deriving instance Show (Action SimpleCounter a)
-instance HasVariables (Action SimpleCounter a) where
+deriving instance Eq (Action SimpleCounter phase a)
+deriving instance Show (Action SimpleCounter phase a)
+instance HasVariables (Action SimpleCounter Symbolic a) where
   getAllVariables _ = mempty
 
 instance StateModel SimpleCounter where
-  data Action SimpleCounter a where
-    IncSimple :: Action SimpleCounter Int
+  data Action SimpleCounter phase a where
+    IncSimple :: Action SimpleCounter phase Int
 
   arbitraryAction _ _ = pure $ Some IncSimple
 
@@ -30,23 +30,25 @@ instance StateModel SimpleCounter where
   nextState SimpleCounter{count} IncSimple _ = SimpleCounter (count + 1)
 
 instance RunModel SimpleCounter (ReaderT (IORef Int) IO) where
-  perform _ IncSimple _ = do
+  perform IncSimple = do
     ref <- ask
     lift $ atomicModifyIORef' ref (\count -> (succ count, count))
 
+  toDynAction IncSimple _ = IncSimple
+
 -- A very simple model with a single action whose postcondition fails in a
 -- predictable way. This model is useful for testing the runtime.
-newtype FailingCounter = FailingCounter {failingCount :: Int}
+newtype FailingCounter (phase :: Phase) = FailingCounter {failingCount :: Int}
   deriving (Eq, Show, Generic)
 
-deriving instance Eq (Action FailingCounter a)
-deriving instance Show (Action FailingCounter a)
-instance HasVariables (Action FailingCounter a) where
+deriving instance Eq (Action FailingCounter Symbolic a)
+deriving instance Show (Action FailingCounter phase a)
+instance HasVariables (Action FailingCounter Symbolic a) where
   getAllVariables _ = mempty
 
 instance StateModel FailingCounter where
-  data Action FailingCounter a where
-    Inc' :: Action FailingCounter Int
+  data Action FailingCounter phase a where
+    Inc' :: Action FailingCounter phase Int
 
   arbitraryAction _ _ = pure $ Some Inc'
 
@@ -55,25 +57,27 @@ instance StateModel FailingCounter where
   nextState FailingCounter{failingCount} Inc' _ = FailingCounter (failingCount + 1)
 
 instance RunModel FailingCounter (ReaderT (IORef Int) IO) where
-  perform _ Inc' _ = do
+  perform Inc' = do
     ref <- ask
     lift $ atomicModifyIORef' ref (\count -> (succ count, count))
 
-  postcondition (_, FailingCounter{failingCount}) _ _ _ = property $ failingCount < 4
+  toDynAction Inc' _ = Inc'
+
+  postcondition (_, FailingCounter{failingCount}) _ _ = property $ failingCount < 4
 
 -- A generic but simple counter model
-data Counter = Counter Int
+data Counter (phase :: Phase) = Counter Int
   deriving (Show, Generic)
 
-deriving instance Show (Action Counter a)
-deriving instance Eq (Action Counter a)
-instance HasVariables (Action Counter a) where
+deriving instance Show (Action Counter phase a)
+deriving instance Eq (Action Counter phase a)
+instance HasVariables (Action Counter Symbolic a) where
   getAllVariables _ = mempty
 
 instance StateModel Counter where
-  data Action Counter a where
-    Inc :: Action Counter ()
-    Reset :: Action Counter Int
+  data Action Counter phase a where
+    Inc :: Action Counter phase ()
+    Reset :: Action Counter phase Int
 
   initialState = Counter 0
 
@@ -83,15 +87,18 @@ instance StateModel Counter where
   nextState _ Reset _ = Counter 0
 
 instance RunModel Counter (ReaderT (IORef Int) IO) where
-  perform _ Inc _ = do
+  perform Inc = do
     ref <- ask
     lift $ modifyIORef ref succ
-  perform _ Reset _ = do
+  perform Reset = do
     ref <- ask
     lift $ do
       n <- readIORef ref
       writeIORef ref 0
       pure n
 
-  postcondition (Counter n, _) Reset _ res = n === res
-  postcondition _ _ _ _ = property True
+  toDynAction Inc _ = Inc
+  toDynAction Reset _ = Reset
+
+  postcondition (Counter n, _) Reset res = n === res
+  postcondition _ _ _ = property True

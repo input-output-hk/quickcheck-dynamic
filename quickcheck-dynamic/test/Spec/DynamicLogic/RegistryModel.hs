@@ -1,3 +1,5 @@
+{-# LANGUAGE UndecidableInstances #-}
+
 module Spec.DynamicLogic.RegistryModel where
 
 import Control.Concurrent
@@ -22,27 +24,30 @@ import Test.QuickCheck.DynamicLogic
 import Test.QuickCheck.Extras
 import Test.QuickCheck.StateModel
 
-data RegState = RegState
-  { regs :: Map String (Var ThreadId)
-  , dead :: [Var ThreadId]
+data RegState (phase :: Phase) = RegState
+  { regs :: Map String (Var phase ThreadId)
+  , dead :: [Var phase ThreadId]
   }
-  deriving (Show, Generic)
+  deriving (Generic)
 
-deriving instance Show (Action RegState a)
-deriving instance Eq (Action RegState a)
+deriving instance Show (RegState Symbolic)
+deriving instance Show (RegState Dynamic)
 
-instance HasVariables (Action RegState a) where
+deriving instance Show (Var phase ThreadId) => Show (Action RegState phase a)
+deriving instance Eq (Var phase ThreadId) => Eq (Action RegState phase a)
+
+instance HasVariables (Action RegState Symbolic a) where
   getAllVariables (Register _ v) = getAllVariables v
   getAllVariables (KillThread v) = getAllVariables v
   getAllVariables _ = mempty
 
 instance StateModel RegState where
-  data Action RegState a where
-    Spawn :: Action RegState ThreadId
-    WhereIs :: String -> Action RegState (Maybe ThreadId)
-    Register :: String -> Var ThreadId -> Action RegState ()
-    Unregister :: String -> Action RegState ()
-    KillThread :: Var ThreadId -> Action RegState ()
+  data Action RegState phase a where
+    Spawn :: Action RegState phase ThreadId
+    WhereIs :: String -> Action RegState phase (Maybe ThreadId)
+    Register :: String -> Var phase ThreadId -> Action RegState phase ()
+    Unregister :: String -> Action RegState phase ()
+    KillThread :: Var phase ThreadId -> Action RegState phase ()
 
   type Error RegState = SomeException
 
@@ -100,51 +105,59 @@ instance StateModel RegState where
   nextState s (Register name tid) _step = s{regs = Map.insert name tid (regs s)}
   nextState s (Unregister name) _step =
     s{regs = Map.delete name (regs s)}
-  nextState s (KillThread tid) _ =
+  nextState s (KillThread tid :: Action RegState phase a) _ =
     s
       { dead = tid : dead s
-      , regs = Map.filter (/= tid) (regs s)
+      , regs = case sing @phase of
+          SDynamic -> Map.filter (/= tid) (regs s)
+          SSymbolic -> Map.filter (/= tid) (regs s)
       }
   nextState s WhereIs{} _ = s
 
 type RegM = ReaderT Registry IO
 
 instance RunModel RegState RegM where
-  perform _ Spawn _ = do
+  perform Spawn = do
     tid <- lift $ forkIO (threadDelay 10000000)
     pure $ Right tid
-  perform _ (Register name tid) env = do
+  perform (Register name (DynamicVar tid)) = do
     reg <- ask
-    lift $ try $ register reg name (env tid)
-  perform _ (Unregister name) _ = do
+    lift $ try $ register reg name tid
+  perform (Unregister name) = do
     reg <- ask
     lift $ try $ unregister reg name
-  perform _ (WhereIs name) _ = do
+  perform (WhereIs name) = do
     reg <- ask
     res <- lift $ whereis reg name
     pure $ Right res
-  perform _ (KillThread tid) env = do
-    lift $ killThread (env tid)
+  perform (KillThread (DynamicVar tid)) = do
+    lift $ killThread tid
     lift $ threadDelay 100
     pure $ Right ()
 
-  postcondition (s, s') act@(WhereIs name) env mtid =
+  toDynAction Spawn _ = Spawn
+  toDynAction (Register n v) l = Register n (l v)
+  toDynAction (Unregister n) _ = Unregister n
+  toDynAction (WhereIs n) _ = WhereIs n
+  toDynAction (KillThread v) l = KillThread (l v)
+
+  postcondition (s, s') act@(WhereIs name) mtid =
     counterexample (show mtid ++ " <- " ++ show act ++ "\n  -- State: " ++ show s')
       . tabulate "Registry size" [show $ Map.size (regs s')]
-      $ (env <$> Map.lookup name (regs s)) === mtid
-  postcondition _ _ _ _ = property True
+      $ Map.lookup name (regs s) === fmap DynamicVar mtid
+  postcondition _ _ _ = property True
 
-  postconditionOnFailure (s, _) act@Register{} _ res =
+  postconditionOnFailure (s, _) act@Register{} res =
     tabulate
       "Reason for -Register"
       [why s act]
       $ isLeft res
-  postconditionOnFailure _s _ _ _ = property True
+  postconditionOnFailure _s _ _ = property True
 
 data ShowDict a where
   ShowDict :: Show a => ShowDict a
 
-showDictAction :: forall a. Action RegState a -> ShowDict a
+showDictAction :: forall a phase. Action RegState phase a -> ShowDict a
 showDictAction Spawn{} = ShowDict
 showDictAction WhereIs{} = ShowDict
 showDictAction Register{} = ShowDict
@@ -154,7 +167,7 @@ showDictAction KillThread{} = ShowDict
 instance DynLogicModel RegState where
   restricted _ = False
 
-why :: RegState -> Action RegState a -> String
+why :: RegState Dynamic -> Action RegState Dynamic a -> String
 why s (Register name tid) =
   unwords $
     ["name already registered" | name `Map.member` regs s]
@@ -165,10 +178,10 @@ why _ _ = "(impossible)"
 arbitraryName :: Gen String
 arbitraryName = elements allNames
 
-probablyRegistered :: RegState -> Gen String
+probablyRegistered :: RegState phase -> Gen String
 probablyRegistered s = oneof $ map pure (Map.keys $ regs s) ++ [arbitraryName]
 
-probablyUnregistered :: RegState -> Gen String
+probablyUnregistered :: RegState phase -> Gen String
 probablyUnregistered s = elements $ allNames ++ (allNames \\ Map.keys (regs s))
 
 shrinkName :: String -> [String]
@@ -190,7 +203,7 @@ propDL d = forAllDL d prop_Registry
 
 -- DL helpers
 
-unregisterNameAndTid :: String -> Var ThreadId -> DL RegState ()
+unregisterNameAndTid :: String -> Var Symbolic ThreadId -> DL RegState ()
 unregisterNameAndTid name tid = do
   s <- getModelStateDL
   sequence_
@@ -199,7 +212,7 @@ unregisterNameAndTid name tid = do
     , name' == name || tid' == tid
     ]
 
-unregisterTid :: Var ThreadId -> DL RegState ()
+unregisterTid :: Var Symbolic ThreadId -> DL RegState ()
 unregisterTid tid = do
   s <- getModelStateDL
   sequence_
@@ -208,18 +221,18 @@ unregisterTid tid = do
     , tid' == tid
     ]
 
-getAlive :: DL RegState [Var ThreadId]
+getAlive :: DL RegState [Var Symbolic ThreadId]
 getAlive = do
   s <- getModelStateDL
   ctx <- getVarContextDL
   pure $ ctxAtType @ThreadId ctx \\ dead s
 
-pickThread :: DL RegState (Var ThreadId)
+pickThread :: DL RegState (Var Symbolic ThreadId)
 pickThread = do
   tids <- ctxAtType @ThreadId <$> getVarContextDL
   forAllQ $ elementsQ tids
 
-pickAlive :: DL RegState (Var ThreadId)
+pickAlive :: DL RegState (Var Symbolic ThreadId)
 pickAlive = do
   alive <- getAlive
   forAllQ $ elementsQ alive
