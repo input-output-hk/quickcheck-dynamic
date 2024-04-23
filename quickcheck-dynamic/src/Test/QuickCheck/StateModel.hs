@@ -38,6 +38,7 @@ module Test.QuickCheck.StateModel (
 
 import Control.Monad
 import Data.Data
+import Data.Kind (Type)
 import Data.List
 import Data.Set qualified as Set
 import Data.Void
@@ -73,10 +74,10 @@ import Test.QuickCheck.StateModel.Variables
 --    a negative action one can define `failureNextState` - but it is generally recommended to let this be
 --    as simple an action as possible.
 class
-  ( forall a. Show (Action state a)
-  , forall a. HasVariables (Action state a)
-  , Show state
-  , HasVariables state
+  ( forall a. Show (Action state Symbolic a)
+  , forall a. HasVariables (Action state Symbolic a)
+  , Show (state Symbolic)
+  , HasVariables (state Symbolic)
   ) =>
   StateModel state
   where
@@ -88,14 +89,17 @@ class
   --
   -- @
   --   data Action RegState a where
-  --     Spawn      ::                           Action RegState ThreadId
-  --     Register   :: String -> Var ThreadId -> Action RegState ()
-  --     KillThread :: Var ThreadId           -> Action RegState ()
+  --     Spawn      ::                                 Action RegState phase ThreadId
+  --     Register   :: String -> Var phase ThreadId -> Action RegState phase ()
+  --     KillThread :: Var phase ThreadId           -> Action RegState phase ()
   -- @
   --
   -- The @Spawn@ action should produce a @ThreadId@, whereas the @KillThread@ action does not return
   -- anything.
-  data Action state a
+  --
+  -- Note that the @phase@ type parameter should be given to any @'Var'@ inside
+  -- the actions.
+  data Action (state :: Phase -> Type) (phase :: Phase) a
 
   -- | The type of errors that actions can throw. If this is defined as anything
   -- other than `Void` `perform` is required to return `Either (Error state) a`
@@ -110,48 +114,55 @@ class
   --
   -- Default implementation uses a poor-man's string manipulation method to extract the
   -- constructor name from the value.
-  actionName :: Action state a -> String
+  actionName :: Action state Symbolic a -> String
   actionName = head . words . show
 
   -- | Generator for `Action` depending on `state`.
-  arbitraryAction :: VarContext -> state -> Gen (Any (Action state))
+  arbitraryAction :: VarContext -> state Symbolic -> Gen (Any (Action state Symbolic))
 
   -- | Shrinker for `Action`.
   -- Defaults to no-op but as usual, defining a good shrinker greatly enhances the usefulness
   -- of property-based testing.
-  shrinkAction :: Typeable a => VarContext -> state -> Action state a -> [Any (Action state)]
+  shrinkAction :: Typeable a => VarContext -> state Symbolic -> Action state Symbolic a -> [Any (Action state Symbolic)]
   shrinkAction _ _ _ = []
 
   -- | Initial state of generated traces.
-  initialState :: state
+  --
+  -- Note that this function should be able to generate both the 'Symbolic' and
+  -- 'Dynamic' initial states.
+  initialState :: state phase
 
   -- | Transition function for the model.
-  -- The `Var a` parameter is useful to keep reference to actual value of type `a` produced
-  -- by `perform`ing the `Action` inside the `state` so that further actions can use `Lookup`
-  -- to retrieve that data. This allows the model to be ignorant of those values yet maintain
-  -- some references that can be compared and looked for.
-  nextState :: Typeable a => state -> Action state a -> Var a -> state
+  -- The `Var phase a` parameter is useful to keep reference to actual value of
+  -- type `a` produced by `perform`ing the `Action` inside the `state` so that
+  -- further actions can retrieve that data. This allows the model to be
+  -- ignorant of those values yet maintain some references that can be compared
+  -- and looked for.
+  --
+  -- Should you need some basic instances for the variable such as @Eq@, @Ord@,
+  -- or @Show@, the @'SingI'@ constraint allows you to concretize the phase.
+  nextState :: (SingI phase, Typeable a) => state phase -> Action state phase a -> Var phase a -> state phase
   nextState s _ _ = s
 
   -- | Transition function for negative actions. Note that most negative testing applications
   -- should not require an implementation of this function!
-  failureNextState :: Typeable a => state -> Action state a -> state
+  failureNextState :: Typeable a => state phase -> Action state phase a -> state phase
   failureNextState s _ = s
 
   -- | Precondition for filtering generated `Action`.
   -- This function is applied before the action is performed, it is useful to refine generators that
   -- can produce more values than are useful.
-  precondition :: state -> Action state a -> Bool
+  precondition :: state Symbolic -> Action state Symbolic a -> Bool
   precondition _ _ = True
 
   -- | Precondition for filtering an `Action` that can meaningfully run but is supposed to fail.
   -- An action will run as a _negative_ action if the `precondition` fails and `validFailingAction` succeeds.
   -- A negative action should have _no effect_ on the model state. This may not be desirable in all
   -- situations - in which case one can override this semantics for book-keeping in `failureNextState`.
-  validFailingAction :: state -> Action state a -> Bool
+  validFailingAction :: state Symbolic -> Action state Symbolic a -> Bool
   validFailingAction _ _ = False
 
-deriving instance (forall a. Show (Action state a)) => Show (Any (Action state))
+deriving instance (forall a. Show (Action state Symbolic a)) => Show (Any (Action state Symbolic))
 
 -- | The result required of `perform` depending on the `Error` type
 -- of a state model. If there are no errors, `Error state = Void`, and
@@ -169,7 +180,7 @@ instance {-# OVERLAPPING #-} IsPerformResult Void a where
 instance {-# OVERLAPPABLE #-} (PerformResult e a ~ Either e a) => IsPerformResult e a where
   performResultToEither = id
 
-class (forall a. Show (Action state a), Monad m) => RunModel state m where
+class (forall a. Show (Action state Dynamic a), Monad m) => RunModel state m where
   -- | Perform an `Action` in some `state` in the `Monad` `m`.  This
   -- is the function that's used to exercise the actual stateful
   -- implementation, usually through various side-effects as permitted
@@ -180,20 +191,24 @@ class (forall a. Show (Action state a), Monad m) => RunModel state m where
   --
   -- The `Lookup` parameter provides an /environment/ to lookup `Var
   -- a` instances from previous steps.
-  perform :: Typeable a => state -> Action state a -> LookUp -> m (PerformResult (Error state) a)
+  perform :: Typeable a => Action state Dynamic a -> m (PerformResult (Error state) a)
+
+  -- | Convert a symbolic action to a dynamic one by means of the 'LookUp'
+  -- function.
+  toDynAction :: Action state Symbolic a -> LookUp -> Action state Dynamic a
 
   -- | Postcondition on the `a` value produced at some step.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
   -- to check the implementation produces expected values.
-  postcondition :: (state, state) -> Action state a -> LookUp -> a -> Property
-  postcondition _ _ _ _ = property True
+  postcondition :: (state Dynamic, state Dynamic) -> Action state Dynamic a -> a -> Property
+  postcondition _ _ _ = property True
 
   -- | Postcondition on the result of running a _negative_ `Action`.
-  -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
+  -- The resulting property is exercised when running the SUT. This is useful
   -- to check the implementation produces e.g. the expected errors or to check that the SUT hasn't
   -- been updated during the execution of the negative action.
-  postconditionOnFailure :: (state, state) -> Action state a -> LookUp -> Either (Error state) a -> Property
-  postconditionOnFailure _ _ _ _ = property True
+  postconditionOnFailure :: (state Dynamic, state Dynamic) -> Action state Dynamic a -> Either (Error state) a -> Property
+  postconditionOnFailure _ _ _ = property True
 
   -- | Allows the user to attach additional information to the `Property` after each succesful run of an action.
   -- This function is given the full transition that's been executed, including the start and ending
@@ -203,38 +218,38 @@ class (forall a. Show (Action state a), Monad m) => RunModel state m where
   -- This is just a convenience as this information can as well be attached
   -- to the property defined in @'postcondition'@ or @'postconditonOnFailure'@
   -- with the same result.
-  monitoring :: (state, state) -> Action state a -> LookUp -> Either (Error state) a -> Property -> Property
-  monitoring _ _ _ _ prop = prop
+  monitoring :: (state Dynamic, state Dynamic) -> Action state Dynamic a -> Either (Error state) a -> Property -> Property
+  monitoring _ _ _ prop = prop
 
   -- | Allows the user to attach additional information to the `Property` if a positive action fails.
-  monitoringFailure :: state -> Action state a -> LookUp -> Error state -> Property -> Property
-  monitoringFailure _ _ _ _ prop = prop
+  monitoringFailure :: state Dynamic -> Action state Dynamic a -> Error state -> Property -> Property
+  monitoringFailure _ _ _ prop = prop
 
-type LookUp = forall a. Typeable a => Var a -> a
+type LookUp = forall a. Typeable a => Var Symbolic a -> Var Dynamic a
 
 type Env = [EnvEntry]
 
 data EnvEntry where
-  (:==) :: Typeable a => Var a -> a -> EnvEntry
+  (:==) :: Typeable a => Var Symbolic a -> Var Dynamic a -> EnvEntry
 
 infix 5 :==
 
-pattern (:=?) :: forall a. Typeable a => Var a -> a -> EnvEntry
+pattern (:=?) :: forall a. Typeable a => Var Symbolic a -> Var Dynamic a -> EnvEntry
 pattern v :=? val <- (viewAtType -> Just (v, val))
 
-viewAtType :: forall a. Typeable a => EnvEntry -> Maybe (Var a, a)
-viewAtType ((v :: Var b) :== val)
+viewAtType :: forall a. Typeable a => EnvEntry -> Maybe (Var Symbolic a, Var Dynamic a)
+viewAtType ((v :: Var Symbolic b) :== val)
   | Just Refl <- eqT @a @b = Just (v, val)
   | otherwise = Nothing
 
-lookUpVarMaybe :: forall a. Typeable a => Env -> Var a -> Maybe a
+lookUpVarMaybe :: forall a. Typeable a => Env -> Var Symbolic a -> Maybe (Var Dynamic a)
 lookUpVarMaybe [] _ = Nothing
-lookUpVarMaybe (((v' :: Var b) :== a) : env) v =
+lookUpVarMaybe (((v' :: Var Symbolic b) :== a) : env) v =
   case eqT @a @b of
     Just Refl | v == v' -> Just a
     _ -> lookUpVarMaybe env v
 
-lookUpVar :: Typeable a => Env -> Var a -> a
+lookUpVar :: Typeable a => Env -> Var Symbolic a -> Var Dynamic a
 lookUpVar env v = case lookUpVarMaybe env v of
   Nothing -> error $ "Variable " ++ show v ++ " is not bound at type " ++ show (typeRep v) ++ "!"
   Just a -> a
@@ -250,27 +265,27 @@ instance Show Polarity where
   show PosPolarity = "+"
   show NegPolarity = "-"
 
-data ActionWithPolarity state a = Eq (Action state a) =>
+data ActionWithPolarity state a = Eq (Action state Symbolic a) =>
   ActionWithPolarity
-  { polarAction :: Action state a
+  { polarAction :: Action state Symbolic a
   , polarity :: Polarity
   }
 
-instance HasVariables (Action state a) => HasVariables (ActionWithPolarity state a) where
+instance HasVariables (Action state Symbolic a) => HasVariables (ActionWithPolarity state a) where
   getAllVariables = getAllVariables . polarAction
 
-deriving instance Eq (Action state a) => Eq (ActionWithPolarity state a)
+deriving instance Eq (Action state Symbolic a) => Eq (ActionWithPolarity state a)
 
 data Step state where
   (:=)
-    :: (Typeable a, Eq (Action state a), Show (Action state a))
-    => Var a
+    :: (Typeable a, Eq (Action state Symbolic a), Show (Action state Symbolic a))
+    => Var Symbolic a
     -> ActionWithPolarity state a
     -> Step state
 
 infix 5 :=
 
-instance (forall a. HasVariables (Action state a)) => HasVariables (Step state) where
+instance (forall a. HasVariables (Action state Symbolic a)) => HasVariables (Step state) where
   getAllVariables (var := act) = Set.insert (Some var) $ getAllVariables (polarAction act)
 
 funName :: Polarity -> String
@@ -383,18 +398,18 @@ instance forall state. StateModel state => Arbitrary (Actions state) where
 
 -- Running state models
 
-data Annotated state = Metadata
+data Annotated (state :: Phase -> Type) = Metadata
   { vars :: VarContext
-  , underlyingState :: state
+  , underlyingState :: state Symbolic
   }
 
-instance Show state => Show (Annotated state) where
+instance Show (state Symbolic) => Show (Annotated state) where
   show (Metadata ctx s) = show ctx ++ " |- " ++ show s
 
 initialAnnotatedState :: StateModel state => Annotated state
 initialAnnotatedState = Metadata mempty initialState
 
-actionWithPolarity :: (StateModel state, Eq (Action state a)) => Annotated state -> Action state a -> ActionWithPolarity state a
+actionWithPolarity :: (StateModel state, Eq (Action state Symbolic a)) => Annotated state -> Action state Symbolic a -> ActionWithPolarity state a
 actionWithPolarity s a =
   let p
         | precondition (underlyingState s) a = PosPolarity
@@ -414,7 +429,7 @@ computeNextState
   :: (StateModel state, Typeable a)
   => Annotated state
   -> ActionWithPolarity state a
-  -> Var a
+  -> Var Symbolic a
   -> Annotated state
 computeNextState s a v
   | polarity a == PosPolarity = Metadata (extendContext (vars s) v) (nextState (underlyingState s) (polarAction a) v)
@@ -468,13 +483,13 @@ runActions
      , forall a. IsPerformResult e a
      )
   => Actions state
-  -> PropertyM m (Annotated state, Env)
+  -> PropertyM m (Annotated state, state Dynamic, Env)
 runActions (Actions_ rejected (Smart _ actions)) = do
-  (finalState, env) <- runSteps initialAnnotatedState [] actions
+  (finalState, finalDynState, env) <- runSteps (initialAnnotatedState, initialState) [] actions
   unless (null rejected) $
     monitor $
       tabulate "Actions rejected by precondition" rejected
-  return (finalState, env)
+  return (finalState, finalDynState, env)
 
 -- | Core function to execute a sequence of `Step` given some initial `Env`ironment
 -- and `Annotated` state.
@@ -485,14 +500,14 @@ runSteps
      , e ~ Error state
      , forall a. IsPerformResult e a
      )
-  => Annotated state
+  => (Annotated state, state Dynamic)
   -> Env
   -> [Step state]
-  -> PropertyM m (Annotated state, Env)
-runSteps s env [] = return (s, reverse env)
-runSteps s env ((v := act) : as) = do
+  -> PropertyM m (Annotated state, state Dynamic, Env)
+runSteps (s, sd) env [] = return (s, sd, reverse env)
+runSteps (s, sd) env (((v :: Var Symbolic a) := act) : as) = do
   pre $ computePrecondition s act
-  ret <- run $ performResultToEither <$> perform (underlyingState s) action (lookUpVar env)
+  ret <- run $ performResultToEither <$> perform action'
   let name = show polar ++ actionName action
   monitor $ tabulate "Actions" [name]
   monitor $ tabulate "Action polarity" [show polar]
@@ -500,51 +515,48 @@ runSteps s env ((v := act) : as) = do
     (PosPolarity, Left err) ->
       positiveActionFailed err
     (PosPolarity, Right val) -> do
-      (s', env') <- positiveActionSucceeded ret val
-      runSteps s' env' as
+      (s', sd', env') <- positiveActionSucceeded ret val
+      runSteps (s', sd') env' as
     (NegPolarity, _) -> do
-      (s', env') <- negativeActionResult ret
-      runSteps s' env' as
+      (s', sd', env') <- negativeActionResult ret
+      runSteps (s', sd') env' as
   where
     polar = polarity act
 
     action = polarAction act
+    action' = toDynAction @state @m action (lookUpVar env)
 
     positiveActionFailed err = do
       monitor $
         monitoringFailure @state @m
-          (underlyingState s)
-          action
-          (lookUpVar env)
+          sd
+          action'
           err
       stop False
 
     positiveActionSucceeded ret val = do
-      (s', env', stateTransition) <- computeNewState ret
+      (s', sd', env') <- computeNewState ret
       liftProperty $
         postcondition @state @m
-          stateTransition
-          action
-          (lookUpVar env)
+          (sd, sd')
+          action'
           val
-      pure (s', env')
+      pure (s', sd', env')
 
     negativeActionResult ret = do
-      (s', env', stateTransition) <- computeNewState ret
+      (s', sd', env') <- computeNewState ret
       liftProperty $
         postconditionOnFailure @state @m
-          stateTransition
-          action
-          (lookUpVar env)
+          (sd, sd')
+          action'
           ret
-      pure (s', env')
+      pure (s', sd', env')
 
     computeNewState ret = do
       let var = unsafeCoerceVar v
           s' = computeNextState s act var
-          env'
-            | Right val <- ret = (var :== val) : env
-            | otherwise = env
-          stateTransition = (underlyingState s, underlyingState s')
-      monitor $ monitoring @state @m stateTransition action (lookUpVar env') ret
-      pure (s', env', stateTransition)
+          (env', sd')
+            | Right val <- ret = ((var :== DynamicVar val) : env, nextState sd action' (DynamicVar val))
+            | otherwise = (env, failureNextState sd action')
+      monitor $ monitoring @state @m (sd, sd') action' ret
+      pure (s', sd', env')

@@ -3,10 +3,11 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module Test.QuickCheck.StateModel.Variables (
-  Var,
   Any (..),
+  Var (..),
   HasVariables (..),
   HasNoVariables (..),
+  SymbolicVar,
   VarContext,
   mkVar,
   ctxAtType,
@@ -18,6 +19,14 @@ module Test.QuickCheck.StateModel.Variables (
   isEmptyCtx,
   unsafeCoerceVar,
   unsafeNextVarIndex,
+
+  -- * Phases
+  Phase (..),
+
+  -- ** Singletons
+  SingI,
+  SPhase (SDynamic, SSymbolic),
+  sing,
 ) where
 
 import Data.Data
@@ -28,31 +37,68 @@ import Data.Map qualified as Map
 import Data.Ord
 import Data.Set (Set)
 import Data.Set qualified as Set
+import Data.Singletons
 import GHC.Generics
 import GHC.TypeLits
 import GHC.Word
 import Test.QuickCheck as QC
 
+-- | The phases of testing
+--
+-- During generation of tests, we will use 'Symbolic' actions and variables. These variables
+-- represent the result of performing a call and should not be inspected.
+--
+-- During test execution, we wil use 'Dynamic' actions and variables, where these
+-- references are concretized in real values.
+data Phase = Symbolic | Dynamic
+
+data SPhase :: Phase -> Type where
+  SDynamic :: SPhase 'Dynamic
+  SSymbolic :: SPhase 'Symbolic
+
+type instance Sing @Phase = SPhase
+
+instance SingI Dynamic where
+  sing = SDynamic
+
+instance SingI Symbolic where
+  sing = SSymbolic
+
 -- | A symbolic variable for a value of type `a`
-newtype Var a = Var Int
+newtype SymbolicVar a = Var Int
   deriving (Eq, Ord, Typeable, Data)
 
-mkVar :: Int -> Var a
-mkVar = Var
+-- | A variable that will be 'Symbolic' or 'Dynamic'
+data Var phase a where
+  SymbolicVar :: SymbolicVar a -> Var Symbolic a
+  DynamicVar :: a -> Var Dynamic a
 
-instance Show (Var a) where
+deriving instance Eq (Var Symbolic a)
+deriving instance Ord (Var Symbolic a)
+deriving instance Show (Var Symbolic a)
+
+deriving instance Eq a => Eq (Var Dynamic a)
+deriving instance Ord a => Ord (Var Dynamic a)
+deriving instance Show a => Show (Var Dynamic a)
+
+mkVar :: Int -> Var Symbolic a
+mkVar = SymbolicVar . Var
+
+instance Show (SymbolicVar a) where
   show (Var i) = "var" ++ show i
 
 -- | This type class gives you a way to get all the symbolic variables that
 -- appear in a value.
 class HasVariables a where
-  getAllVariables :: a -> Set (Any Var)
+  getAllVariables :: a -> Set (Any (Var Symbolic))
 
 instance HasVariables a => HasVariables (Smart a) where
   getAllVariables (Smart _ a) = getAllVariables a
 
-instance Typeable a => HasVariables (Var a) where
+instance Typeable a => HasVariables (Var Symbolic a) where
   getAllVariables = Set.singleton . Some
+instance Typeable a => HasVariables (SymbolicVar a) where
+  getAllVariables = Set.singleton . Some . SymbolicVar
 
 instance (HasVariables k, HasVariables v) => HasVariables (Map k v) where
   getAllVariables = getAllVariables . Map.toList
@@ -94,22 +140,24 @@ instance (forall a. Ord (f a)) => Ord (Any f) where
       Just Refl -> compare a a'
       Nothing -> compare (typeRep a) (typeRep a')
 
-newtype VarContext = VarCtx (Set (Any Var))
-  deriving (Semigroup, Monoid) via Set (Any Var)
+newtype VarContext = VarCtx (Set (Any (Var Symbolic)))
+  deriving (Semigroup, Monoid) via Set (Any (Var Symbolic))
 
 instance Show VarContext where
   show (VarCtx vs) =
     "[" ++ intercalate ", " (map showBinding . sortBy (comparing getIdx) $ Set.toList vs) ++ "]"
     where
-      getIdx (Some (Var i)) = i
-      showBinding :: Any Var -> String
+      getIdx :: Any (Var Symbolic) -> Int
+      getIdx (Some (SymbolicVar (Var i))) = i
+
+      showBinding :: Any (Var Symbolic) -> String
       -- The use of typeRep here is on purpose to avoid printing `Var` unnecessarily.
       showBinding (Some v) = show v ++ " :: " ++ show (typeRep v)
 
 isEmptyCtx :: VarContext -> Bool
 isEmptyCtx (VarCtx ctx) = null ctx
 
-isWellTyped :: Typeable a => Var a -> VarContext -> Bool
+isWellTyped :: Typeable a => Var Symbolic a -> VarContext -> Bool
 isWellTyped v (VarCtx ctx) = not (null ctx) && Some v `Set.member` ctx
 
 -- TODO: check the invariant that no variable index is used
@@ -118,26 +166,26 @@ isWellTyped v (VarCtx ctx) = not (null ctx) && Some v `Set.member` ctx
 -- cause an issue, but it might be good practise to crash
 -- if the invariant is violated anyway as it is evidence that
 -- something is horribly broken at the use site).
-extendContext :: Typeable a => VarContext -> Var a -> VarContext
+extendContext :: Typeable a => VarContext -> Var Symbolic a -> VarContext
 extendContext (VarCtx ctx) v = VarCtx $ Set.insert (Some v) ctx
 
 allVariables :: HasVariables a => a -> VarContext
 allVariables = VarCtx . getAllVariables
 
-ctxAtType :: Typeable a => VarContext -> [Var a]
+ctxAtType :: Typeable a => VarContext -> [Var Symbolic a]
 ctxAtType (VarCtx vs) = [v | Some (cast -> Just v) <- Set.toList vs]
 
-arbitraryVar :: Typeable a => VarContext -> Gen (Var a)
+arbitraryVar :: Typeable a => VarContext -> Gen (Var Symbolic a)
 arbitraryVar = elements . ctxAtType
 
-shrinkVar :: Typeable a => VarContext -> Var a -> [Var a]
+shrinkVar :: Typeable a => VarContext -> Var Symbolic a -> [Var Symbolic a]
 shrinkVar ctx v = filter (< v) $ ctxAtType ctx
 
-unsafeCoerceVar :: Var a -> Var b
-unsafeCoerceVar (Var i) = Var i
+unsafeCoerceVar :: Var Symbolic a -> Var Symbolic b
+unsafeCoerceVar (SymbolicVar (Var i)) = SymbolicVar (Var i)
 
 unsafeNextVarIndex :: VarContext -> Int
-unsafeNextVarIndex (VarCtx vs) = 1 + maximum (0 : [i | Some (Var i) <- Set.toList vs])
+unsafeNextVarIndex (VarCtx vs) = 1 + maximum (0 : [i | Some (SymbolicVar (Var i)) <- Set.toList vs])
 
 -- NOTE: This trick is taken from this blog post:
 -- https://blog.csongor.co.uk/report-stuck-families/
@@ -159,7 +207,7 @@ instance
   getAllVariables = genericGetAllVariables . from
 
 class GenericHasVariables f where
-  genericGetAllVariables :: f k -> Set (Any Var)
+  genericGetAllVariables :: f k -> Set (Any (Var Symbolic))
 
 instance GenericHasVariables f => GenericHasVariables (M1 i c f) where
   genericGetAllVariables = genericGetAllVariables . unM1
