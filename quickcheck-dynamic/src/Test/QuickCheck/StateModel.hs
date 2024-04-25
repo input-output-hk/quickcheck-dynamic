@@ -11,7 +11,7 @@ module Test.QuickCheck.StateModel (
   module Test.QuickCheck.StateModel.Variables,
   StateModel (..),
   RunModel (..),
-  PostconditionM (..),
+  Postcondition (..),
   WithUsedVars (..),
   Annotated (..),
   Step (..),
@@ -25,8 +25,6 @@ module Test.QuickCheck.StateModel (
   Env,
   Generic,
   IsPerformResult,
-  monitorPost,
-  counterexamplePost,
   stateAfter,
   runActions,
   lookUpVar,
@@ -40,11 +38,8 @@ module Test.QuickCheck.StateModel (
 ) where
 
 import Control.Monad
-import Control.Monad.Reader
-import Control.Monad.Writer (WriterT, runWriterT, tell)
 import Data.Data
 import Data.List
-import Data.Monoid (Endo (..))
 import Data.Set qualified as Set
 import Data.Void
 import GHC.Generics
@@ -174,28 +169,20 @@ instance {-# OVERLAPPING #-} IsPerformResult Void a where
 instance {-# OVERLAPPABLE #-} (PerformResult e a ~ Either e a) => IsPerformResult e a where
   performResultToEither = id
 
-newtype PostconditionM m a = PostconditionM {runPost :: WriterT (Endo Property, Endo Property) m a}
-  deriving (Functor, Applicative, Monad)
+data Postcondition m
+  = PostBool Bool
+  | PostMonitor (Property -> Property) (Postcondition m)
+  | PostMonadic (m (Postcondition m))
 
-instance MonadTrans PostconditionM where
-  lift = PostconditionM . lift
+evalPostConditionM :: Monad m => Postcondition m -> PropertyM m ()
+evalPostConditionM (PostBool b) = assert b
+evalPostConditionM (PostMonitor m n) = monitor m >> evalPostConditionM n
+evalPostConditionM (PostMonadic m) = run m >>= evalPostConditionM
 
-evaluatePostCondition :: Monad m => PostconditionM m Bool -> PropertyM m ()
-evaluatePostCondition post = do
-  (b, (Endo mon, Endo onFail)) <- run . runWriterT . runPost $ post
-  monitor mon
-  unless b $ monitor onFail
-  assert b
-
--- | Apply the property transformation to the property after evaluating
--- the postcondition. Useful for collecting statistics while avoiding
--- duplication between `monitoring` and `postcondition`.
-monitorPost :: Monad m => (Property -> Property) -> PostconditionM m ()
-monitorPost m = PostconditionM $ tell (Endo m, mempty)
-
--- | Acts as `Test.QuickCheck.counterexample` if the postcondition fails.
-counterexamplePost :: Monad m => String -> PostconditionM m ()
-counterexamplePost c = PostconditionM $ tell (mempty, Endo $ counterexample c)
+evalPostCondition :: Monad n => Postcondition m -> PropertyM n ()
+evalPostCondition (PostBool b) = assert b
+evalPostCondition (PostMonitor m n) = monitor m >> evalPostCondition n
+evalPostCondition (PostMonadic _) = pure ()
 
 class (forall a. Show (Action state a), Monad m) => RunModel state m where
   -- | Perform an `Action` in some `state` in the `Monad` `m`.  This
@@ -213,15 +200,15 @@ class (forall a. Show (Action state a), Monad m) => RunModel state m where
   -- | Postcondition on the `a` value produced at some step.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
   -- to check the implementation produces expected values.
-  postcondition :: (state, state) -> Action state a -> LookUp -> a -> PostconditionM m Bool
-  postcondition _ _ _ _ = pure True
+  postcondition :: (state, state) -> Action state a -> LookUp -> a -> Postcondition m
+  postcondition _ _ _ _ = PostBool True
 
   -- | Postcondition on the result of running a _negative_ `Action`.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
   -- to check the implementation produces e.g. the expected errors or to check that the SUT hasn't
   -- been updated during the execution of the negative action.
-  postconditionOnFailure :: (state, state) -> Action state a -> LookUp -> Either (Error state) a -> PostconditionM m Bool
-  postconditionOnFailure _ _ _ _ = pure True
+  postconditionOnFailure :: (state, state) -> Action state a -> LookUp -> Either (Error state) a -> Postcondition m
+  postconditionOnFailure _ _ _ _ = PostBool True
 
   -- | Allows the user to attach additional information to the `Property` at each step of the process.
   -- This function is given the full transition that's been executed, including the start and ending
@@ -545,7 +532,7 @@ runSteps s env ((v := act) : as) = do
 
     positiveActionSucceeded ret val = do
       (s', env', stateTransition) <- computeNewState ret
-      evaluatePostCondition $
+      evalPostConditionM $
         postcondition
           stateTransition
           action
@@ -555,7 +542,7 @@ runSteps s env ((v := act) : as) = do
 
     negativeActionResult ret = do
       (s', env', stateTransition) <- computeNewState ret
-      evaluatePostCondition $
+      evalPostConditionM $
         postconditionOnFailure
           stateTransition
           action

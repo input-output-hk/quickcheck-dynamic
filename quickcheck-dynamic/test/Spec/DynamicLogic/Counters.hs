@@ -59,7 +59,7 @@ instance RunModel FailingCounter (ReaderT (IORef Int) IO) where
     ref <- ask
     lift $ atomicModifyIORef' ref (\count -> (succ count, count))
 
-  postcondition (_, FailingCounter{failingCount}) _ _ _ = pure $ failingCount < 4
+  postcondition (_, FailingCounter{failingCount}) _ _ _ = PostBool $ failingCount < 4
 
 -- A generic but simple counter model
 data Counter = Counter Int
@@ -93,5 +93,5 @@ instance RunModel Counter (ReaderT (IORef Int) IO) where
       writeIORef ref 0
       pure n
 
-  postcondition (Counter n, _) Reset _ res = pure $ n == res
-  postcondition _ _ _ _ = pure True
+  postcondition (Counter n, _) Reset _ res = PostBool $ n == res
+  postcondition _ _ _ _ = PostBool True
