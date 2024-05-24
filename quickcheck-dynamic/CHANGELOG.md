@@ -9,7 +9,7 @@ changes.
 
 ## UNRELEASED
 
-* Breaking removed `Realized`
+* **BREAKING**: Removed `Realized`
   - To migrate uses of `Realized` with `IOSim`, index the state type on the choice of `RunModel` monad
     and index the relevant types:
     ```
@@ -18,6 +18,8 @@ changes.
     -- Into:
     data ModelState m = State { threadId :: Var (ThreadId m) }
     ```
+* **BREAKING**: Moved `Error state` from `StateModel` to `RunModel` and indexed it on both the `state` and the monad `m`
+* **BREAKING**: Changed `PerformResult` from `PerformResult (Error state) a` to `PerformResult state m a`
 
 ## 3.4.1 - 2024-03-22
 
