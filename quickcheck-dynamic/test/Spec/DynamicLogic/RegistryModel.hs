@@ -44,8 +44,6 @@ instance StateModel RegState where
     Unregister :: String -> Action RegState ()
     KillThread :: Var ThreadId -> Action RegState ()
 
-  type Error RegState = SomeException
-
   precondition s (Register name tid) =
     name `Map.notMember` regs s
       && tid `notElem` Map.elems (regs s)
@@ -110,6 +108,8 @@ instance StateModel RegState where
 type RegM = ReaderT Registry IO
 
 instance RunModel RegState RegM where
+  type Error RegState RegM = SomeException
+
   perform _ Spawn _ = do
     tid <- lift $ forkIO (threadDelay 10000000)
     pure $ Right tid

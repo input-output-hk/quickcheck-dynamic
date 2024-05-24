@@ -43,6 +43,7 @@ import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.Writer (WriterT, runWriterT, tell)
 import Data.Data
+import Data.Kind
 import Data.List
 import Data.Monoid (Endo (..))
 import Data.Set qualified as Set
@@ -102,13 +103,6 @@ class
   -- anything.
   data Action state a
 
-  -- | The type of errors that actions can throw. If this is defined as anything
-  -- other than `Void` `perform` is required to return `Either (Error state) a`
-  -- instead of `a`.
-  type Error state
-
-  type Error state = Void
-
   -- | Display name for `Action`.
   -- This is useful to provide sensible statistics about the distribution of `Action`s run
   -- when checking a property.
@@ -158,22 +152,6 @@ class
 
 deriving instance (forall a. Show (Action state a)) => Show (Any (Action state))
 
--- | The result required of `perform` depending on the `Error` type
--- of a state model. If there are no errors, `Error state = Void`, and
--- so we don't need to specify if the action failed or not.
-type family PerformResult e a where
-  PerformResult Void a = a
-  PerformResult e a = Either e a
-
-class IsPerformResult e a where
-  performResultToEither :: PerformResult e a -> Either e a
-
-instance {-# OVERLAPPING #-} IsPerformResult Void a where
-  performResultToEither = Right
-
-instance {-# OVERLAPPABLE #-} (PerformResult e a ~ Either e a) => IsPerformResult e a where
-  performResultToEither = id
-
 newtype PostconditionM m a = PostconditionM {runPost :: WriterT (Endo Property, Endo Property) m a}
   deriving (Functor, Applicative, Monad)
 
@@ -197,7 +175,33 @@ monitorPost m = PostconditionM $ tell (Endo m, mempty)
 counterexamplePost :: Monad m => String -> PostconditionM m ()
 counterexamplePost c = PostconditionM $ tell (mempty, Endo $ counterexample c)
 
+-- | The result required of `perform` depending on the `Error` type.
+-- If there are no errors, `Error state = Void`, and
+-- so we don't need to specify if the action failed or not.
+type family PerformResult state (m :: Type -> Type) a where
+  PerformResult state m a = EitherIsh (Error state m) a
+
+type family EitherIsh e a where
+  EitherIsh Void a = a
+  EitherIsh e a = Either e a
+
+class IsPerformResult e a where
+  performResultToEither :: EitherIsh e a -> Either e a
+
+instance {-# OVERLAPPING #-} IsPerformResult Void a where
+  performResultToEither = Right
+
+instance {-# OVERLAPPABLE #-} (EitherIsh e a ~ Either e a) => IsPerformResult e a where
+  performResultToEither = id
+
 class (forall a. Show (Action state a), Monad m) => RunModel state m where
+  -- | The type of errors that actions can throw. If this is defined as anything
+  -- other than `Void` `perform` is required to return `Either (Error state) a`
+  -- instead of `a`.
+  type Error state m
+
+  type Error state m = Void
+
   -- | Perform an `Action` in some `state` in the `Monad` `m`.  This
   -- is the function that's used to exercise the actual stateful
   -- implementation, usually through various side-effects as permitted
@@ -208,7 +212,7 @@ class (forall a. Show (Action state a), Monad m) => RunModel state m where
   --
   -- The `Lookup` parameter provides an /environment/ to lookup `Var
   -- a` instances from previous steps.
-  perform :: Typeable a => state -> Action state a -> LookUp -> m (PerformResult (Error state) a)
+  perform :: Typeable a => state -> Action state a -> LookUp -> m (PerformResult state m a)
 
   -- | Postcondition on the `a` value produced at some step.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
@@ -220,18 +224,18 @@ class (forall a. Show (Action state a), Monad m) => RunModel state m where
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
   -- to check the implementation produces e.g. the expected errors or to check that the SUT hasn't
   -- been updated during the execution of the negative action.
-  postconditionOnFailure :: (state, state) -> Action state a -> LookUp -> Either (Error state) a -> PostconditionM m Bool
+  postconditionOnFailure :: (state, state) -> Action state a -> LookUp -> Either (Error state m) a -> PostconditionM m Bool
   postconditionOnFailure _ _ _ _ = pure True
 
   -- | Allows the user to attach additional information to the `Property` at each step of the process.
   -- This function is given the full transition that's been executed, including the start and ending
   -- `state`, the `Action`, the current environment to `Lookup` and the value produced by `perform`
   -- while executing this step.
-  monitoring :: (state, state) -> Action state a -> LookUp -> Either (Error state) a -> Property -> Property
+  monitoring :: (state, state) -> Action state a -> LookUp -> Either (Error state m) a -> Property -> Property
   monitoring _ _ _ _ prop = prop
 
   -- | Allows the user to attach additional information to the `Property` if a positive action fails.
-  monitoringFailure :: state -> Action state a -> LookUp -> Error state -> Property -> Property
+  monitoringFailure :: state -> Action state a -> LookUp -> Error state m -> Property -> Property
   monitoringFailure _ _ _ _ prop = prop
 
 type LookUp = forall a. Typeable a => Var a -> a
@@ -488,7 +492,7 @@ runActions
   :: forall state m e
    . ( StateModel state
      , RunModel state m
-     , e ~ Error state
+     , e ~ Error state m
      , forall a. IsPerformResult e a
      )
   => Actions state
@@ -506,7 +510,7 @@ runSteps
   :: forall state m e
    . ( StateModel state
      , RunModel state m
-     , e ~ Error state
+     , e ~ Error state m
      , forall a. IsPerformResult e a
      )
   => Annotated state
