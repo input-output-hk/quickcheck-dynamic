@@ -91,6 +91,9 @@ test-suite quickcheck-dynamic-test
   hs-source-dirs: test
   other-modules:
     Spec.DynamicLogic.Counters
+    Spec.CircularBuffer.Model
+    Spec.CircularBuffer.Buffer
+    Spec.DynamicLogic.CounterModel
     Spec.DynamicLogic.Registry
     Spec.DynamicLogic.RegistryModel
     Test.QuickCheck.DynamicLogic.QuantifySpec
@@ -98,12 +101,13 @@ test-suite quickcheck-dynamic-test
 
   ghc-options:    -rtsopts
   build-depends:
-    , base
-    , containers
-    , mtl
-    , QuickCheck
-    , quickcheck-dynamic
-    , stm
-    , tasty
-    , tasty-hunit
-    , tasty-quickcheck
+                  QuickCheck
+                , base
+                , containers
+                , mtl
+                , quickcheck-dynamic
+                , stm
+                , tasty
+                , tasty-hunit
+                , tasty-quickcheck
+                , vector
