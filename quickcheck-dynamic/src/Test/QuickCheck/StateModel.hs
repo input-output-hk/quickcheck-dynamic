@@ -32,7 +32,6 @@ module Test.QuickCheck.StateModel (
   lookUpVar,
   lookUpVarMaybe,
   viewAtType,
-  initialAnnotatedState,
   computeNextState,
   computePrecondition,
   computeArbitraryAction,
@@ -122,7 +121,7 @@ class
   shrinkAction _ _ _ = []
 
   -- | Initial state of generated traces.
-  initialState :: state
+  initialState :: Gen state
 
   -- | Transition function for the model.
   -- The `Var a` parameter is useful to keep reference to actual value of type `a` produced
@@ -201,6 +200,10 @@ class (forall a. Show (Action state a), Monad m) => RunModel state m where
   type Error state m
 
   type Error state m = Void
+
+  -- | Perform setup with the generated initial state before running actions
+  setup :: state -> m ()
+  setup _ = pure ()
 
   -- | Perform an `Action` in some `state` in the `Monad` `m`.  This
   -- is the function that's used to exercise the actual stateful
@@ -325,30 +328,34 @@ instance Eq (Step state) where
 -- We also collect a list of names of actions which were generated,
 -- but were then rejected by their precondition.
 
-data Actions state = Actions_ [String] (Smart [Step state])
+data Actions state = Actions_
+  { actionsRejected :: [String]
+  , actionsInitialState :: state
+  , actionsSteps :: Smart [Step state]
+  }
   deriving (Generic)
 
-pattern Actions :: [Step state] -> Actions state
-pattern Actions as <-
-  Actions_ _ (Smart _ as)
+pattern Actions :: state -> [Step state] -> Actions state
+pattern Actions state as <-
+  Actions_ _ state (Smart _ as)
   where
-    Actions as = Actions_ [] (Smart 0 as)
+    Actions state as = Actions_ [] state (Smart 0 as)
 
 {-# COMPLETE Actions #-}
 
 instance Semigroup (Actions state) where
-  Actions_ rs (Smart k as) <> Actions_ rs' (Smart _ as') = Actions_ (rs ++ rs') (Smart k (as <> as'))
+  Actions_ rs state (Smart k as) <> Actions_ rs' _ (Smart _ as') = Actions_ (rs ++ rs') state (Smart k (as <> as'))
 
-instance Eq (Actions state) where
-  Actions as == Actions as' = as == as'
+instance Eq state => Eq (Actions state) where
+  Actions state as == Actions state' as' = state == state' && as == as'
 
 instance StateModel state => Show (Actions state) where
-  show (Actions as) =
-    let as' = WithUsedVars (usedVariables (Actions as)) <$> as
-     in intercalate "\n" $ zipWith (++) ("do " : repeat "   ") (map show as' ++ ["pure ()"])
+  show (Actions state as) =
+    let as' = WithUsedVars (usedVariables (Actions state as)) <$> as
+     in intercalate "\n" $ ("-- initial state: " ++ show state) : zipWith (++) ("do " : repeat "   ") (map show as' ++ ["pure ()"])
 
 usedVariables :: forall state. StateModel state => Actions state -> VarContext
-usedVariables (Actions as) = go initialAnnotatedState as
+usedVariables (Actions state as) = go (Metadata mempty state) as
   where
     go :: Annotated state -> [Step state] -> VarContext
     go aState [] = allVariables (underlyingState aState)
@@ -359,8 +366,9 @@ usedVariables (Actions as) = go initialAnnotatedState as
 
 instance forall state. StateModel state => Arbitrary (Actions state) where
   arbitrary = do
-    (as, rejected) <- arbActions initialAnnotatedState 1
-    return $ Actions_ rejected (Smart 0 as)
+    state <- initialState
+    (as, rejected) <- arbActions (Metadata mempty state) 1
+    return $ Actions_ rejected state (Smart 0 as)
     where
       arbActions :: Annotated state -> Int -> Gen ([Step state], [String])
       arbActions s step = sized $ \n ->
@@ -392,8 +400,8 @@ instance forall state. StateModel state => Arbitrary (Actions state) where
                       then return (Just (Some act), rej)
                       else go (m + 1) n (actionName (polarAction act) : rej)
 
-  shrink (Actions_ rs as) =
-    map (Actions_ rs) (shrinkSmart (map (prune . map fst) . concatMap customActionsShrinker . shrinkList shrinker . withStates) as)
+  shrink (Actions_ rs state as) =
+    map (Actions_ rs state) (shrinkSmart (map (prune state . map fst) . concatMap customActionsShrinker . shrinkList shrinker . withStates state) as)
     where
       shrinker :: (Step state, Annotated state) -> [(Step state, Annotated state)]
       shrinker (v := act, s) = [(unsafeCoerceVar v := act', s) | Some act'@ActionWithPolarity{} <- computeShrinkAction s act]
@@ -418,9 +426,6 @@ data Annotated state = Metadata
 
 instance Show state => Show (Annotated state) where
   show (Metadata ctx s) = show ctx ++ " |- " ++ show s
-
-initialAnnotatedState :: StateModel state => Annotated state
-initialAnnotatedState = Metadata mempty initialState
 
 actionWithPolarity :: (StateModel state, Eq (Action state a)) => Annotated state -> Action state a -> ActionWithPolarity state a
 actionWithPolarity s a =
@@ -465,8 +470,8 @@ computeShrinkAction
 computeShrinkAction s (ActionWithPolarity a _) =
   [Some (actionWithPolarity s a') | Some a' <- shrinkAction (vars s) (underlyingState s) a]
 
-prune :: forall state. StateModel state => [Step state] -> [Step state]
-prune = loop initialAnnotatedState
+prune :: forall state. StateModel state => state -> [Step state] -> [Step state]
+prune state = loop (Metadata mempty state)
   where
     loop _s [] = []
     loop s ((var := act) : as)
@@ -475,15 +480,15 @@ prune = loop initialAnnotatedState
       | otherwise =
           loop s as
 
-withStates :: forall state. StateModel state => [Step state] -> [(Step state, Annotated state)]
-withStates = loop initialAnnotatedState
+withStates :: forall state. StateModel state => state -> [Step state] -> [(Step state, Annotated state)]
+withStates state = loop (Metadata mempty state)
   where
     loop _s [] = []
     loop s ((var := act) : as) =
       (var := act, s) : loop (computeNextState @state s act var) as
 
 stateAfter :: forall state. StateModel state => Actions state -> Annotated state
-stateAfter (Actions actions) = loop initialAnnotatedState actions
+stateAfter (Actions state actions) = loop (Metadata mempty state) actions
   where
     loop s [] = s
     loop s ((var := act) : as) = loop (computeNextState @state s act var) as
@@ -496,13 +501,14 @@ runActions
      , forall a. IsPerformResult e a
      )
   => Actions state
-  -> PropertyM m (Annotated state, Env)
-runActions (Actions_ rejected (Smart _ actions)) = do
-  (finalState, env) <- runSteps initialAnnotatedState [] actions
+  -> PropertyM m (state, Annotated state, Env)
+runActions (Actions_ rejected state (Smart _ actions)) = do
+  run $ setup state
+  (finalState, env) <- runSteps (Metadata mempty state) [] actions
   unless (null rejected) $
     monitor $
       tabulate "Actions rejected by precondition" rejected
-  return (finalState, env)
+  return (state, finalState, env)
 
 -- | Core function to execute a sequence of `Step` given some initial `Env`ironment
 -- and `Annotated` state.

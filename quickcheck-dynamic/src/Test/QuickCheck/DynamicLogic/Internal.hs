@@ -171,10 +171,10 @@ instance StateModel s => Show (FailingAction s) where
   show (ActionFail (ActionWithPolarity a pol)) = show pol ++ " : " ++ show a
 
 data DynLogicTest s
-  = BadPrecondition (TestSequence s) (FailingAction s) (Annotated s)
-  | Looping (TestSequence s)
-  | Stuck (TestSequence s) (Annotated s)
-  | DLScript (TestSequence s)
+  = BadPrecondition (Annotated s) (TestSequence s) (FailingAction s) (Annotated s)
+  | Looping (Annotated s) (TestSequence s)
+  | Stuck (Annotated s) (TestSequence s) (Annotated s)
+  | DLScript (Annotated s) (TestSequence s)
 
 data Witnesses r where
   Do :: r -> Witnesses r
@@ -295,8 +295,11 @@ prettyWitnesses (Witness a w) = ("_ <- forAllQ $ exactlyQ $ " ++ show a) : prett
 prettyWitnesses Do{} = []
 
 instance StateModel s => Show (DynLogicTest s) where
-  show (BadPrecondition ss bad s) =
-    prettyTestSequence (usedVariables ss <> allVariables bad) ss
+  show (BadPrecondition is ss bad s) =
+    "-- Initial state: "
+      ++ show s
+      ++ "\n"
+      ++ prettyTestSequence (usedVariables is ss <> allVariables bad) ss
       ++ "\n   -- In state: "
       ++ show s
       ++ "\n   "
@@ -309,12 +312,21 @@ instance StateModel s => Show (DynLogicTest s) where
           f
             | p == PosPolarity = "action"
             | otherwise = "failingAction"
-  show (Looping ss) = prettyTestSequence (usedVariables ss) ss ++ "\n   pure ()\n   -- Looping"
-  show (Stuck ss s) = prettyTestSequence (usedVariables ss) ss ++ "\n   pure ()\n   -- Stuck in state " ++ show s
-  show (DLScript ss) = prettyTestSequence (usedVariables ss) ss ++ "\n   pure ()\n"
+  show (Looping is ss) =
+    showTest is ss
+      ++ "\n   -- Looping"
+  show (Stuck is ss s) =
+    showTest is ss
+      ++ "\n   -- Stuck in state "
+      ++ show s
+  show (DLScript is ss) =
+    showTest is ss
 
-usedVariables :: forall s. StateModel s => TestSequence s -> VarContext
-usedVariables = go initialAnnotatedState
+showTest :: StateModel s => Annotated s -> TestSequence s -> String
+showTest is ss = "-- Initial state: " ++ show is ++ "\n" ++ prettyTestSequence (usedVariables is ss) ss ++ "\n   pure ()"
+
+usedVariables :: forall s. StateModel s => Annotated s -> TestSequence s -> VarContext
+usedVariables s = go s
   where
     go :: Annotated s -> TestSequence s -> VarContext
     go aState TestSeqStop = allVariables (underlyingState aState)
@@ -342,39 +354,42 @@ restrictedPolar (ActionWithPolarity a _) = restricted a
 -- `Actions` sequence into a proper `Property` that can be run by QuickCheck.
 forAllScripts
   :: (DynLogicModel s, Testable a)
-  => DynFormula s
+  => s
+  -- ^ The initial state
+  -> DynFormula s
   -> (Actions s -> a)
   -> Property
-forAllScripts = forAllMappedScripts id id
+forAllScripts s = forAllMappedScripts s id id
 
 -- | `Property` function suitable for formulae without choice.
 forAllUniqueScripts
   :: (DynLogicModel s, Testable a)
-  => Annotated s
+  => s
+  -- ^ The initial state
   -> DynFormula s
   -> (Actions s -> a)
   -> Property
 forAllUniqueScripts s f k =
   QC.withSize $ \sz ->
     let d = unDynFormula f sz
-        n = unsafeNextVarIndex $ vars s
-     in case generate chooseUniqueNextStep d n s 500 of
+     in case generate chooseUniqueNextStep d 1 (Metadata mempty s) 500 of
           Nothing -> counterexample "Generating Non-unique script in forAllUniqueScripts" False
           Just test -> validDLTest test . applyMonitoring d test . property $ k (scriptFromDL test)
 
 -- | Creates a `Property` from `DynFormula` with some specialised isomorphism for shrinking purpose.
 forAllMappedScripts
   :: (DynLogicModel s, Testable a)
-  => (rep -> DynLogicTest s)
+  => s
+  -> (rep -> DynLogicTest s)
   -> (DynLogicTest s -> rep)
   -> DynFormula s
   -> (Actions s -> a)
   -> Property
-forAllMappedScripts to from f k =
+forAllMappedScripts s to from f k =
   QC.withSize $ \n ->
     let d = unDynFormula f n
      in forAllShrinkBlind
-          (Smart 0 <$> sized ((from <$>) . generateDLTest d))
+          (Smart 0 <$> sized ((from <$>) . generateDLTest (Metadata mempty s) d))
           (shrinkSmart ((from <$>) . shrinkDLTest d . to))
           $ \(Smart _ script) ->
             withDLScript d k (to script)
@@ -405,17 +420,24 @@ validDLTest test prop =
     Stuck{} -> property Discard
     _other -> counterexample (show test) False
 
-generateDLTest :: DynLogicModel s => DynLogic s -> Int -> Gen (DynLogicTest s)
-generateDLTest d size = generate chooseNextStep d 0 (initialStateFor d) size
+generateDLTest :: DynLogicModel s => Annotated s -> DynLogic s -> Int -> Gen (DynLogicTest s)
+generateDLTest s d size = do
+  generate chooseNextStep d 0 s size
 
 onDLTestSeq :: (TestSequence s -> TestSequence s) -> DynLogicTest s -> DynLogicTest s
-onDLTestSeq f (BadPrecondition ss bad s) = BadPrecondition (f ss) bad s
-onDLTestSeq f (Looping ss) = Looping (f ss)
-onDLTestSeq f (Stuck ss s) = Stuck (f ss) s
-onDLTestSeq f (DLScript ss) = DLScript (f ss)
+onDLTestSeq f (BadPrecondition is ss bad s) = BadPrecondition is (f ss) bad s
+onDLTestSeq f (Looping is ss) = Looping is (f ss)
+onDLTestSeq f (Stuck is ss s) = Stuck is (f ss) s
+onDLTestSeq f (DLScript is ss) = DLScript is (f ss)
 
-consDLTest :: TestStep s -> DynLogicTest s -> DynLogicTest s
-consDLTest step = onDLTestSeq (step :>)
+setDLTestState :: Annotated s -> DynLogicTest s -> DynLogicTest s
+setDLTestState is (BadPrecondition _ ss bad s) = BadPrecondition is ss bad s
+setDLTestState is (Looping _ ss) = Looping is ss
+setDLTestState is (Stuck _ ss s) = Stuck is ss s
+setDLTestState is (DLScript _ ss) = DLScript is ss
+
+consDLTest :: Annotated s -> TestStep s -> DynLogicTest s -> DynLogicTest s
+consDLTest is step = setDLTestState is . onDLTestSeq (step :>)
 
 consDLTestW :: Witnesses () -> DynLogicTest s -> DynLogicTest s
 consDLTestW w = onDLTestSeq (addW w)
@@ -433,15 +455,15 @@ generate
   -> m (DynLogicTest s)
 generate chooseNextStepFun d n s size =
   if n > sizeLimit size
-    then return $ Looping TestSeqStop
+    then return $ Looping s TestSeqStop
     else do
       let preferred = if n > size then stopping d else noStopping d
-          useStep (BadAction (Witnesses ws bad)) _ = return $ BadPrecondition (TestSeqStopW ws) bad s
-          useStep StoppingStep _ = return $ DLScript TestSeqStop
+          useStep (BadAction (Witnesses ws bad)) _ = return $ BadPrecondition s (TestSeqStopW ws) bad s
+          useStep StoppingStep _ = return $ DLScript s TestSeqStop
           useStep (Stepping step d') _ =
             case discardWitnesses step of
               var := act ->
-                consDLTest step
+                consDLTest s step
                   <$> generate
                     chooseNextStepFun
                     d'
@@ -451,14 +473,12 @@ generate chooseNextStepFun d n s size =
           useStep NoStep alt = alt
       foldr
         (\step k -> do try <- chooseNextStepFun s n step; useStep try k)
-        (return $ Stuck TestSeqStop s)
+        (return $ Stuck s TestSeqStop s) -- NOTE: we will cons on this `TestSeqStop` so the `s` will not be the same before
+        -- and after state when we get out of this function.
         [preferred, noAny preferred, d, noAny d]
 
 sizeLimit :: Int -> Int
 sizeLimit size = 2 * size + 20
-
-initialStateFor :: StateModel s => DynLogic s -> Annotated s
-initialStateFor _ = initialAnnotatedState
 
 stopping :: DynLogic s -> DynLogic s
 stopping EmptySpec = EmptySpec
@@ -589,22 +609,28 @@ keepTryingUntil n g p = do
   if p x then return $ Just x else scale (+ 1) $ keepTryingUntil (n - 1) g p
 
 shrinkDLTest :: DynLogicModel s => DynLogic s -> DynLogicTest s -> [DynLogicTest s]
-shrinkDLTest _ (Looping _) = []
+shrinkDLTest _ (Looping _ _) = []
 shrinkDLTest d tc =
-  [ test | as' <- shrinkScript d (getScript tc), let pruned = pruneDLTest d as'
-                                                     test = makeTestFromPruned d pruned,
-  -- Don't shrink a non-executable test case to an executable one.
+  [ test
+  | as' <-
+      shrinkScript
+        (underlyingState $ getInitialState tc)
+        d
+        (getScript tc)
+  , let pruned = pruneDLTest (getInitialState tc) d as'
+        test = makeTestFromPruned (getInitialState tc) d pruned
+  , -- Don't shrink a non-executable test case to an executable one.
   case (tc, test) of
-    (DLScript _, _) -> True
-    (_, DLScript _) -> False
+    (DLScript _ _, _) -> True
+    (_, DLScript _ _) -> False
     _ -> True
   ]
 
 nextStateStep :: StateModel s => Step s -> Annotated s -> Annotated s
 nextStateStep (var := act) s = computeNextState s act var
 
-shrinkScript :: forall s. DynLogicModel s => DynLogic s -> TestSequence s -> [TestSequence s]
-shrinkScript = shrink' initialAnnotatedState
+shrinkScript :: forall s. DynLogicModel s => s -> DynLogic s -> TestSequence s -> [TestSequence s]
+shrinkScript is = shrink' (Metadata mempty is)
   where
     shrink' :: Annotated s -> DynLogic s -> TestSequence s -> [TestSequence s]
     shrink' s d ss = structural s d ss ++ nonstructural s d ss
@@ -648,8 +674,8 @@ shrinkWitness AfterAny{} _ = []
 
 -- The result of pruning a list of actions is a prefix of a list of actions that
 -- could have been generated by the dynamic logic.
-pruneDLTest :: forall s. DynLogicModel s => DynLogic s -> TestSequence s -> TestSequence s
-pruneDLTest dl = prune [dl] initialAnnotatedState
+pruneDLTest :: forall s. DynLogicModel s => Annotated s -> DynLogic s -> TestSequence s -> TestSequence s
+pruneDLTest is dl = prune [dl] is
   where
     prune [] _ _ = TestSeqStop
     prune _ _ TestSeqStop = TestSeqStop
@@ -710,27 +736,29 @@ demonicAlt ds = foldr1 (Alt Demonic) ds
 
 propPruningGeneratedScriptIsNoop :: DynLogicModel s => DynLogic s -> Property
 propPruningGeneratedScriptIsNoop d =
-  forAll (sized $ \n -> choose (1, max 1 n) >>= generateDLTest d) $ \test ->
-    let script = case test of
-          BadPrecondition s _ _ -> s
-          Looping s -> s
-          Stuck s _ -> s
-          DLScript s -> s
-     in script == pruneDLTest d script
+  forAll initialState $ \s ->
+    forAll (sized $ \n -> choose (1, max 1 n) >>= generateDLTest (Metadata mempty s) d) $ \test ->
+      getScript test == pruneDLTest (getInitialState test) d (getScript test)
+
+getInitialState :: DynLogicTest s -> Annotated s
+getInitialState (BadPrecondition is _ _ _) = is
+getInitialState (Looping is _) = is
+getInitialState (Stuck is _ _) = is
+getInitialState (DLScript is _) = is
 
 getScript :: DynLogicTest s -> TestSequence s
-getScript (BadPrecondition s _ _) = s
-getScript (Looping s) = s
-getScript (Stuck s _) = s
-getScript (DLScript s) = s
+getScript (BadPrecondition _ s _ _) = s
+getScript (Looping _ s) = s
+getScript (Stuck _ s _) = s
+getScript (DLScript _ s) = s
 
-makeTestFromPruned :: forall s. DynLogicModel s => DynLogic s -> TestSequence s -> DynLogicTest s
-makeTestFromPruned dl = make dl initialAnnotatedState
+makeTestFromPruned :: forall s. DynLogicModel s => Annotated s -> DynLogic s -> TestSequence s -> DynLogicTest s
+makeTestFromPruned st dl = make dl st
   where
     make d s TestSeqStop
-      | b : _ <- badActions @s d s = BadPrecondition TestSeqStop b s
-      | stuck d s = Stuck TestSeqStop s
-      | otherwise = DLScript TestSeqStop
+      | b : _ <- badActions @s d s = BadPrecondition s TestSeqStop b s
+      | stuck d s = Stuck s TestSeqStop s
+      | otherwise = DLScript s TestSeqStop
     make d s (TestSeqWitness a ss) =
       onDLTestSeq (TestSeqWitness a) $
         make
@@ -747,13 +775,7 @@ makeTestFromPruned dl = make dl initialAnnotatedState
 -- | If failed, return the prefix up to the failure. Also prunes the test in case the model has
 --   changed.
 unfailDLTest :: DynLogicModel s => DynLogic s -> DynLogicTest s -> DynLogicTest s
-unfailDLTest d test = makeTestFromPruned d $ pruneDLTest d steps
-  where
-    steps = case test of
-      BadPrecondition as _ _ -> as
-      Stuck as _ -> as
-      DLScript as -> as
-      Looping as -> as
+unfailDLTest d test = makeTestFromPruned (getInitialState test) d $ pruneDLTest (getInitialState test) d (getScript test)
 
 stuck :: DynLogicModel s => DynLogic s -> Annotated s -> Bool
 stuck EmptySpec _ = True
@@ -778,8 +800,8 @@ stuck (ForAll _ _) _ = False
 stuck (Monitor _ d) s = stuck d s
 
 scriptFromDL :: DynLogicTest s -> Actions s
-scriptFromDL (DLScript s) = Actions $ sequenceSteps s
-scriptFromDL _ = Actions []
+scriptFromDL (DLScript is s) = Actions (underlyingState is) $ sequenceSteps s
+scriptFromDL test = Actions (underlyingState $ getInitialState test) []
 
 sequenceSteps :: TestSequence s -> [Step s]
 sequenceSteps (TestSeq ss) =
@@ -818,8 +840,8 @@ badActions (ForAll _ _) _ = []
 badActions (Monitor _ d) s = badActions d s
 
 applyMonitoring :: DynLogicModel s => DynLogic s -> DynLogicTest s -> Property -> Property
-applyMonitoring d (DLScript s) p =
-  case findMonitoring d initialAnnotatedState s of
+applyMonitoring d (DLScript is s) p =
+  case findMonitoring d is s of
     Just f -> f p
     Nothing -> p
 applyMonitoring _ Stuck{} p = p

@@ -92,7 +92,7 @@ instance StateModel RegState where
   shrinkAction ctx _ (KillThread tid) =
     [Some (KillThread tid') | tid' <- shrinkVar ctx tid]
 
-  initialState = RegState mempty []
+  initialState = pure $ RegState mempty []
 
   nextState s Spawn _ = s
   nextState s (Register name tid) _step = s{regs = Map.insert name tid (regs s)}

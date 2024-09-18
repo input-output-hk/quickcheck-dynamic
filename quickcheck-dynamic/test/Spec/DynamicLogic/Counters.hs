@@ -25,11 +25,15 @@ instance StateModel SimpleCounter where
 
   arbitraryAction _ _ = pure $ Some IncSimple
 
-  initialState = SimpleCounter 0
+  initialState = SimpleCounter <$> choose (1, 10)
 
   nextState SimpleCounter{count} IncSimple _ = SimpleCounter (count + 1)
 
 instance RunModel SimpleCounter (ReaderT (IORef Int) IO) where
+  setup st = do
+    ref <- ask
+    lift $ writeIORef ref (count st)
+
   perform _ IncSimple _ = do
     ref <- ask
     lift $ atomicModifyIORef' ref (\count -> (succ count, count))
@@ -50,7 +54,7 @@ instance StateModel FailingCounter where
 
   arbitraryAction _ _ = pure $ Some Inc'
 
-  initialState = FailingCounter 0
+  initialState = pure $ FailingCounter 0
 
   nextState FailingCounter{failingCount} Inc' _ = FailingCounter (failingCount + 1)
 
@@ -75,7 +79,7 @@ instance StateModel Counter where
     Inc :: Action Counter ()
     Reset :: Action Counter Int
 
-  initialState = Counter 0
+  initialState = pure $ Counter 0
 
   arbitraryAction _ _ = frequency [(5, pure $ Some Inc), (1, pure $ Some Reset)]
 
