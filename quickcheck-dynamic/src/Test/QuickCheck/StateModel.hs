@@ -1,5 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 -- | Model-Based Testing library for use with Haskell QuickCheck.
@@ -25,6 +26,7 @@ module Test.QuickCheck.StateModel (
   Env,
   Generic,
   IsPerformResult,
+  MoreActions (..),
   monitorPost,
   counterexamplePost,
   stateAfter,
@@ -358,39 +360,7 @@ usedVariables (Actions as) = go initialAnnotatedState as
         <> go (computeNextState aState act var) steps
 
 instance forall state. StateModel state => Arbitrary (Actions state) where
-  arbitrary = do
-    (as, rejected) <- arbActions initialAnnotatedState 1
-    return $ Actions_ rejected (Smart 0 as)
-    where
-      arbActions :: Annotated state -> Int -> Gen ([Step state], [String])
-      arbActions s step = sized $ \n ->
-        let w = n `div` 2 + 1
-         in frequency
-              [ (1, return ([], []))
-              ,
-                ( w
-                , do
-                    (mact, rej) <- satisfyPrecondition
-                    case mact of
-                      Just (Some act@ActionWithPolarity{}) -> do
-                        let var = mkVar step
-                        (as, rejected) <- arbActions (computeNextState s act var) (step + 1)
-                        return ((var := act) : as, rej ++ rejected)
-                      Nothing ->
-                        return ([], [])
-                )
-              ]
-        where
-          satisfyPrecondition = sized $ \n -> go n (2 * n) [] -- idea copied from suchThatMaybe
-          go m n rej
-            | m > n = return (Nothing, rej)
-            | otherwise = do
-                a <- resize m $ computeArbitraryAction s
-                case a of
-                  Some act ->
-                    if computePrecondition s act
-                      then return (Just (Some act), rej)
-                      else go (m + 1) n (actionName (polarAction act) : rej)
+  arbitrary = generateActionsWithOptions defaultGenActionsOptions
 
   shrink (Actions_ rs as) =
     map (Actions_ rs) (shrinkSmart (map (prune . map fst) . concatMap customActionsShrinker . shrinkList shrinker . withStates) as)
@@ -408,6 +378,57 @@ instance forall state. StateModel state => Arbitrary (Actions state) where
               | binding p = map (p :) (go ps)
               | otherwise = ps : map (p :) (go ps)
          in go acts
+
+newtype MoreActions state = MoreActions {getMoreActions :: Actions state}
+
+instance Show (Actions state) => Show (MoreActions state) where
+  show = show . getMoreActions
+
+instance StateModel state => Arbitrary (MoreActions state) where
+  arbitrary = MoreActions <$> generateActionsWithOptions (defaultGenActionsOptions{genOptLengthMult = 10})
+  shrink (MoreActions as) = MoreActions <$> shrink as
+
+-- NOTE: indexed on state for forwards compatibility, e.g. when we
+-- want to give an explicit initial state
+data GenActionsOptions state = GenActionsOptions {genOptLengthMult :: Int}
+
+defaultGenActionsOptions :: GenActionsOptions state
+defaultGenActionsOptions = GenActionsOptions{genOptLengthMult = 1}
+
+generateActionsWithOptions :: forall state. StateModel state => GenActionsOptions state -> Gen (Actions state)
+generateActionsWithOptions GenActionsOptions{..} = do
+  (as, rejected) <- arbActions initialAnnotatedState 1
+  return $ Actions_ rejected (Smart 0 as)
+  where
+    arbActions :: Annotated state -> Int -> Gen ([Step state], [String])
+    arbActions s step = sized $ \n ->
+      let w = (genOptLengthMult * n) `div` 2 + 1
+       in frequency
+            [ (1, return ([], []))
+            ,
+              ( w
+              , do
+                  (mact, rej) <- satisfyPrecondition
+                  case mact of
+                    Just (Some act@ActionWithPolarity{}) -> do
+                      let var = mkVar step
+                      (as, rejected) <- arbActions (computeNextState s act var) (step + 1)
+                      return ((var := act) : as, rej ++ rejected)
+                    Nothing ->
+                      return ([], [])
+              )
+            ]
+      where
+        satisfyPrecondition = sized $ \n -> go n (2 * n) [] -- idea copied from suchThatMaybe
+        go m n rej
+          | m > n = return (Nothing, rej)
+          | otherwise = do
+              a <- resize m $ computeArbitraryAction s
+              case a of
+                Some act ->
+                  if computePrecondition s act
+                    then return (Just (Some act), rej)
+                    else go (m + 1) n (actionName (polarAction act) : rej)
 
 -- Running state models
 
