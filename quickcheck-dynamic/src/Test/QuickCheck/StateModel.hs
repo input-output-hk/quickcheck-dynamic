@@ -27,6 +27,7 @@ module Test.QuickCheck.StateModel (
   Generic,
   IsPerformResult,
   MoreActions (..),
+  GenActionsOptions (..),
   monitorPost,
   counterexamplePost,
   stateAfter,
@@ -39,6 +40,8 @@ module Test.QuickCheck.StateModel (
   computePrecondition,
   computeArbitraryAction,
   computeShrinkAction,
+  generateActionsWithOptions,
+  defaultGenActionsOptions,
 ) where
 
 import Control.Monad
@@ -379,6 +382,9 @@ instance forall state. StateModel state => Arbitrary (Actions state) where
               | otherwise = ps : map (p :) (go ps)
          in go acts
 
+-- | Introduce 10x more actions into every trace during testing. Can be used as
+-- `prop_Something . getMoreActions` to increase coverage when long actions sequences
+-- are necessary.
 newtype MoreActions state = MoreActions {getMoreActions :: Actions state}
 
 instance Show (Actions state) => Show (MoreActions state) where
@@ -395,6 +401,8 @@ data GenActionsOptions state = GenActionsOptions {genOptLengthMult :: Int}
 defaultGenActionsOptions :: GenActionsOptions state
 defaultGenActionsOptions = GenActionsOptions{genOptLengthMult = 1}
 
+-- | Generate arbitrary actions with the `GenActionsOptions`. More flexible than using the type-based
+-- modifiers.
 generateActionsWithOptions :: forall state. StateModel state => GenActionsOptions state -> Gen (Actions state)
 generateActionsWithOptions GenActionsOptions{..} = do
   (as, rejected) <- arbActions initialAnnotatedState 1
