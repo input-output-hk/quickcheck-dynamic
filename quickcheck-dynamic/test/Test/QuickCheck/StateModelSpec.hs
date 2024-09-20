@@ -12,9 +12,9 @@ import Test.QuickCheck.Extras (runPropertyReaderT)
 import Test.QuickCheck.Monadic (assert, monadicIO, monitor, pick)
 import Test.QuickCheck.StateModel (
   Actions,
-  MoreActions (..),
   lookUpVarMaybe,
   mkVar,
+  moreActions,
   runActions,
   underlyingState,
   viewAtType,
@@ -86,6 +86,4 @@ prop_failsOnPostcondition actions =
 
 prop_longSequences :: Property
 prop_longSequences =
-  checkCoverage $
-    forAll (arbitrary @(MoreActions SimpleCounter)) $ \(MoreActions (Actions steps)) ->
-      cover 50 (100 < length steps) "Long sequences" True
+  checkCoverage $ moreActions 10 $ \(Actions steps :: Actions SimpleCounter) -> cover 50 (100 < length steps) "Long sequences" True

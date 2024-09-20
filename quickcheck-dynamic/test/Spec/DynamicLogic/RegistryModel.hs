@@ -267,7 +267,7 @@ tests =
   testGroup
     "registry model example"
     [ testProperty "prop_Registry" $ prop_Registry
-    , testProperty "prop_Registry . getMoreActions" $ withMaxSuccess 50 . prop_Registry . getMoreActions
+    , testProperty "prop_Registry . getMoreActions" $ moreActions 10 $ withMaxSuccess 50 . prop_Registry
     , testProperty "canRegister" $ propDL canRegister
     , testProperty "canRegisterNoUnregister" $ expectFailure $ propDL canRegisterNoUnregister
     ]

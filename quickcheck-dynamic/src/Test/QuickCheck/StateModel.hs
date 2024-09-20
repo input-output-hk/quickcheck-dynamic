@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -26,8 +27,7 @@ module Test.QuickCheck.StateModel (
   Env,
   Generic,
   IsPerformResult,
-  MoreActions (..),
-  GenActionsOptions (..),
+  QCDOptions (..),
   monitorPost,
   counterexamplePost,
   stateAfter,
@@ -41,7 +41,9 @@ module Test.QuickCheck.StateModel (
   computeArbitraryAction,
   computeShrinkAction,
   generateActionsWithOptions,
-  defaultGenActionsOptions,
+  shrinkActionsWithOptions,
+  defaultQCDOptions,
+  moreActions,
 ) where
 
 import Control.Monad
@@ -363,54 +365,56 @@ usedVariables (Actions as) = go initialAnnotatedState as
         <> go (computeNextState aState act var) steps
 
 instance forall state. StateModel state => Arbitrary (Actions state) where
-  arbitrary = generateActionsWithOptions defaultGenActionsOptions
+  arbitrary = generateActionsWithOptions defaultQCDOptions
+  shrink = shrinkActionsWithOptions defaultQCDOptions
 
-  shrink (Actions_ rs as) =
-    map (Actions_ rs) (shrinkSmart (map (prune . map fst) . concatMap customActionsShrinker . shrinkList shrinker . withStates) as)
-    where
-      shrinker :: (Step state, Annotated state) -> [(Step state, Annotated state)]
-      shrinker (v := act, s) = [(unsafeCoerceVar v := act', s) | Some act'@ActionWithPolarity{} <- computeShrinkAction s act]
+data QCDProperty state = QCDProperty
+  { runQCDProperty :: Actions state -> Property
+  , qcdPropertyOptions :: QCDOptions state
+  }
 
-      customActionsShrinker :: [(Step state, Annotated state)] -> [[(Step state, Annotated state)]]
-      customActionsShrinker acts =
-        let usedVars = mconcat [getAllVariables a <> getAllVariables (underlyingState s) | (_ := a, s) <- acts]
-            binding (v := _, _) = Some v `Set.member` usedVars
-            -- Remove at most one non-binding action
-            go [] = [[]]
-            go (p : ps)
-              | binding p = map (p :) (go ps)
-              | otherwise = ps : map (p :) (go ps)
-         in go acts
+instance StateModel state => Testable (QCDProperty state) where
+  property QCDProperty{..} =
+    forAllShrink
+      (generateActionsWithOptions qcdPropertyOptions)
+      (shrinkActionsWithOptions qcdPropertyOptions)
+      runQCDProperty
 
--- | Introduce 10x more actions into every trace during testing. Can be used as
--- `prop_Something . getMoreActions` to increase coverage when long actions sequences
--- are necessary.
-newtype MoreActions state = MoreActions {getMoreActions :: Actions state}
+class QCDProp state p | p -> state where
+  qcdProperty :: p -> QCDProperty state
 
-instance Show (Actions state) => Show (MoreActions state) where
-  show = show . getMoreActions
+instance QCDProp state (QCDProperty state) where
+  qcdProperty = id
 
-instance StateModel state => Arbitrary (MoreActions state) where
-  arbitrary = MoreActions <$> generateActionsWithOptions (defaultGenActionsOptions{genOptLengthMult = 10})
-  shrink (MoreActions as) = MoreActions <$> shrink as
+instance QCDProp state (Actions state -> Property) where
+  qcdProperty p = QCDProperty p defaultQCDOptions
+
+modifyOptions :: QCDProperty state -> (QCDOptions state -> QCDOptions state) -> QCDProperty state
+modifyOptions p f =
+  let opts = qcdPropertyOptions p
+   in p{qcdPropertyOptions = f opts}
+
+moreActions :: QCDProp state p => Rational -> p -> QCDProperty state
+moreActions r p =
+  modifyOptions (qcdProperty p) $ \opts -> opts{genOptLengthMult = genOptLengthMult opts * r}
 
 -- NOTE: indexed on state for forwards compatibility, e.g. when we
 -- want to give an explicit initial state
-data GenActionsOptions state = GenActionsOptions {genOptLengthMult :: Int}
+data QCDOptions state = QCDOptions {genOptLengthMult :: Rational}
 
-defaultGenActionsOptions :: GenActionsOptions state
-defaultGenActionsOptions = GenActionsOptions{genOptLengthMult = 1}
+defaultQCDOptions :: QCDOptions state
+defaultQCDOptions = QCDOptions{genOptLengthMult = 1}
 
 -- | Generate arbitrary actions with the `GenActionsOptions`. More flexible than using the type-based
 -- modifiers.
-generateActionsWithOptions :: forall state. StateModel state => GenActionsOptions state -> Gen (Actions state)
-generateActionsWithOptions GenActionsOptions{..} = do
+generateActionsWithOptions :: forall state. StateModel state => QCDOptions state -> Gen (Actions state)
+generateActionsWithOptions QCDOptions{..} = do
   (as, rejected) <- arbActions initialAnnotatedState 1
   return $ Actions_ rejected (Smart 0 as)
   where
     arbActions :: Annotated state -> Int -> Gen ([Step state], [String])
     arbActions s step = sized $ \n ->
-      let w = (genOptLengthMult * n) `div` 2 + 1
+      let w = round (genOptLengthMult * fromIntegral n) `div` 2 + 1
        in frequency
             [ (1, return ([], []))
             ,
@@ -437,6 +441,24 @@ generateActionsWithOptions GenActionsOptions{..} = do
                   if computePrecondition s act
                     then return (Just (Some act), rej)
                     else go (m + 1) n (actionName (polarAction act) : rej)
+
+shrinkActionsWithOptions :: forall state. StateModel state => QCDOptions state -> Actions state -> [Actions state]
+shrinkActionsWithOptions _ (Actions_ rs as) =
+  map (Actions_ rs) (shrinkSmart (map (prune . map fst) . concatMap customActionsShrinker . shrinkList shrinker . withStates) as)
+  where
+    shrinker :: (Step state, Annotated state) -> [(Step state, Annotated state)]
+    shrinker (v := act, s) = [(unsafeCoerceVar v := act', s) | Some act'@ActionWithPolarity{} <- computeShrinkAction s act]
+
+    customActionsShrinker :: [(Step state, Annotated state)] -> [[(Step state, Annotated state)]]
+    customActionsShrinker acts =
+      let usedVars = mconcat [getAllVariables a <> getAllVariables (underlyingState s) | (_ := a, s) <- acts]
+          binding (v := _, _) = Some v `Set.member` usedVars
+          -- Remove at most one non-binding action
+          go [] = [[]]
+          go (p : ps)
+            | binding p = map (p :) (go ps)
+            | otherwise = ps : map (p :) (go ps)
+       in go acts
 
 -- Running state models
 
