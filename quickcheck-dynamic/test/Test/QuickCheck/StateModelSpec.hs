@@ -52,17 +52,18 @@ prop_counter as = monadicIO $ do
   assert True
 
 prop_returnsFinalState :: Actions SimpleCounter -> Property
-prop_returnsFinalState actions@(Actions as) =
+prop_returnsFinalState actions@(Actions _ as) =
   monadicIO $ do
     ref <- lift $ newIORef (0 :: Int)
-    (s, _) <- runPropertyReaderT (runActions actions) ref
-    assert $ count (underlyingState s) == length as
+    (is, s, _) <- runPropertyReaderT (runActions actions) ref
+    assert $ count (underlyingState s) - count is == length as
 
 prop_variablesIndicesAre1Based :: Actions SimpleCounter -> Property
-prop_variablesIndicesAre1Based actions@(Actions as) =
+prop_variablesIndicesAre1Based (Actions _ []) = property True
+prop_variablesIndicesAre1Based actions@(Actions _ as) =
   noShrinking $ monadicIO $ do
     ref <- lift $ newIORef (0 :: Int)
-    (_, env) <- runPropertyReaderT (runActions actions) ref
+    (is, _, env) <- runPropertyReaderT (runActions actions) ref
     act <- pick $ choose (0, length as - 1)
     monitor $
       counterexample $
@@ -71,7 +72,7 @@ prop_variablesIndicesAre1Based actions@(Actions as) =
           , "Actions:  " <> show as
           , "Act:  " <> show act
           ]
-    assert $ null as || lookUpVarMaybe env (mkVar $ act + 1) == Just act
+    assert $ lookUpVarMaybe env (mkVar $ act + 1) == Just (act + count is)
 
 prop_failsOnPostcondition :: Actions FailingCounter -> Property
 prop_failsOnPostcondition actions =

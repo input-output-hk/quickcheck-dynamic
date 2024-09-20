@@ -9,6 +9,16 @@ changes.
 
 ## UNRELEASED
 
+* **BREAKING**: The `Actions` pattern now has a field for the initial state of
+  the actions sequence and the `runActions` function returns a triple with the
+  intial state, environment, and final state.
+
+* **BREAKING**: Made `initialState` `Gen state` instead of a `state` and
+  introduced `setup :: state -> m ()` to `RunModel`.
+  - To migrate an existing model simply replace `initialState = MyState{..}`
+    with `initialState = pure $ MyState{..}` and everything else should work
+    straight-forwardly.
+
 * **BREAKING**: Removed `Realized`
   - To migrate uses of `Realized` with `IOSim`, index the state type on the choice of `RunModel` monad
     and index the relevant types:

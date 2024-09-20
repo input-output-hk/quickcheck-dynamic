@@ -27,6 +27,9 @@ module Test.QuickCheck.DynamicLogic (
   forAllDL,
   forAllMappedDL,
   forAllUniqueDL,
+  forAllDLS,
+  forAllMappedDLS,
+  forAllUniqueDLS,
   DL.DynLogicModel (..),
   module Test.QuickCheck.DynamicLogic.Quantify,
 ) where
@@ -131,22 +134,23 @@ forAllNonVariableQ :: QuantifyConstraints (HasNoVariables a) => Quantification a
 forAllNonVariableQ q = DL $ \s k -> DL.forAllQ (hasNoVariablesQ q) $ \(HasNoVariables x) -> k x s
 
 runDL :: Annotated s -> DL s () -> DL.DynFormula s
-runDL s dl = unDL dl s $ \_ _ -> DL.passTest
+runDL s dl = (unDL dl s $ \_ _ -> DL.passTest)
 
 forAllUniqueDL
   :: (DL.DynLogicModel s, Testable a)
-  => Annotated s
-  -> DL s ()
+  => DL s ()
   -> (Actions s -> a)
   -> Property
-forAllUniqueDL initState d = DL.forAllUniqueScripts initState (runDL initState d)
+forAllUniqueDL d p =
+  forAllBlind initialState $ \st -> forAllUniqueDLS st d p
 
 forAllDL
   :: (DL.DynLogicModel s, Testable a)
   => DL s ()
   -> (Actions s -> a)
   -> Property
-forAllDL d = DL.forAllScripts (runDL initialAnnotatedState d)
+forAllDL d p =
+  forAllBlind initialState $ \st -> forAllDLS st d p
 
 forAllMappedDL
   :: (DL.DynLogicModel s, Testable a)
@@ -157,4 +161,34 @@ forAllMappedDL
   -> (srep -> a)
   -> Property
 forAllMappedDL to from fromScript d prop =
-  DL.forAllMappedScripts to from (runDL initialAnnotatedState d) (prop . fromScript)
+  forAll initialState $ \st -> forAllMappedDLS st to from fromScript d prop
+
+forAllUniqueDLS
+  :: (DL.DynLogicModel s, Testable a)
+  => s
+  -> DL s ()
+  -> (Actions s -> a)
+  -> Property
+forAllUniqueDLS st d p =
+  DL.forAllUniqueScripts st (runDL (Metadata mempty st) d) p
+
+forAllDLS
+  :: (DL.DynLogicModel s, Testable a)
+  => s
+  -> DL s ()
+  -> (Actions s -> a)
+  -> Property
+forAllDLS st d p =
+  DL.forAllScripts st (runDL (Metadata mempty st) d) p
+
+forAllMappedDLS
+  :: (DL.DynLogicModel s, Testable a)
+  => s
+  -> (rep -> DL.DynLogicTest s)
+  -> (DL.DynLogicTest s -> rep)
+  -> (Actions s -> srep)
+  -> DL s ()
+  -> (srep -> a)
+  -> Property
+forAllMappedDLS st to from fromScript d prop =
+  DL.forAllMappedScripts st to from (runDL (Metadata mempty st) d) (prop . fromScript)
