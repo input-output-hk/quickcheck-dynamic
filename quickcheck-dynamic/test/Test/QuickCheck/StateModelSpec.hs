@@ -7,7 +7,7 @@ import Control.Monad.Reader (lift)
 import Data.IORef (newIORef)
 import Data.List (isInfixOf)
 import Spec.DynamicLogic.Counters (Counter (..), FailingCounter, SimpleCounter (..))
-import Test.QuickCheck (Property, Result (..), Testable, arbitrary, chatty, checkCoverage, choose, counterexample, cover, forAll, noShrinking, property, stdArgs)
+import Test.QuickCheck (Property, Result (..), Testable, chatty, checkCoverage, choose, counterexample, cover, noShrinking, property, stdArgs)
 import Test.QuickCheck.Extras (runPropertyReaderT)
 import Test.QuickCheck.Monadic (assert, monadicIO, monitor, pick)
 import Test.QuickCheck.StateModel (
@@ -40,7 +40,7 @@ tests =
         Failure{output} <- captureTerminal prop_failsOnPostcondition
         "do action $ Inc'" `isInfixOf` output @? "Output does not contain \"do action $ Inc'\": " <> output
     , testProperty
-        "MoreActions introduces long sequences of actions"
+        "moreActions introduces long sequences of actions"
         prop_longSequences
     ]
 
