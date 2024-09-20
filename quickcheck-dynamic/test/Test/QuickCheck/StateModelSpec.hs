@@ -7,11 +7,12 @@ import Control.Monad.Reader (lift)
 import Data.IORef (newIORef)
 import Data.List (isInfixOf)
 import Spec.DynamicLogic.Counters (Counter (..), FailingCounter, SimpleCounter (..))
-import Test.QuickCheck (Property, Result (..), Testable, chatty, choose, counterexample, noShrinking, property, stdArgs)
+import Test.QuickCheck (Property, Result (..), Testable, arbitrary, chatty, checkCoverage, choose, counterexample, cover, forAll, noShrinking, property, stdArgs)
 import Test.QuickCheck.Extras (runPropertyReaderT)
 import Test.QuickCheck.Monadic (assert, monadicIO, monitor, pick)
 import Test.QuickCheck.StateModel (
   Actions,
+  MoreActions (..),
   lookUpVarMaybe,
   mkVar,
   runActions,
@@ -38,6 +39,9 @@ tests =
     , testCase "prints counterexample as sequence of steps when postcondition fails" $ do
         Failure{output} <- captureTerminal prop_failsOnPostcondition
         "do action $ Inc'" `isInfixOf` output @? "Output does not contain \"do action $ Inc'\": " <> output
+    , testProperty
+        "MoreActions introduces long sequences of actions"
+        prop_longSequences
     ]
 
 captureTerminal :: Testable p => p -> IO Result
@@ -79,3 +83,9 @@ prop_failsOnPostcondition actions =
     ref <- lift $ newIORef (0 :: Int)
     runPropertyReaderT (runActions actions) ref
     assert True
+
+prop_longSequences :: Property
+prop_longSequences =
+  checkCoverage $
+    forAll (arbitrary @(MoreActions SimpleCounter)) $ \(MoreActions (Actions steps)) ->
+      cover 50 (100 < length steps) "Long sequences" True
