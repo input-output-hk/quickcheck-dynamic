@@ -409,27 +409,27 @@ defaultQCDOptions = QCDOptions{genOptLengthMult = 1}
 -- modifiers.
 generateActionsWithOptions :: forall state. StateModel state => QCDOptions state -> Gen (Actions state)
 generateActionsWithOptions QCDOptions{..} = do
-  (as, rejected) <- arbActions initialAnnotatedState 1
+  (as, rejected) <- arbActions [] [] initialAnnotatedState 1
   return $ Actions_ rejected (Smart 0 as)
   where
-    arbActions :: Annotated state -> Int -> Gen ([Step state], [String])
-    arbActions s step = sized $ \n ->
+    arbActions :: [Step state] -> [String] -> Annotated state -> Int -> Gen ([Step state], [String])
+    arbActions steps rej s step = sized $ \n -> do
       let w = round (genOptLengthMult * fromIntegral n) `div` 2 + 1
-       in frequency
-            [ (1, return ([], []))
-            ,
-              ( w
-              , do
-                  (mact, rej) <- satisfyPrecondition
-                  case mact of
-                    Just (Some act@ActionWithPolarity{}) -> do
-                      let var = mkVar step
-                      (as, rejected) <- arbActions (computeNextState s act var) (step + 1)
-                      return ((var := act) : as, rej ++ rejected)
-                    Nothing ->
-                      return ([], [])
-              )
-            ]
+      continue <- frequency [(1, pure False), (w, pure True)]
+      if continue
+        then do
+          (mact, rej') <- satisfyPrecondition
+          case mact of
+            Just (Some act@ActionWithPolarity{}) -> do
+              let var = mkVar step
+              arbActions
+                ((var := act) : steps)
+                (rej' ++ rej)
+                (computeNextState s act var)
+                (step + 1)
+            Nothing ->
+              return (reverse steps, rej)
+        else return (reverse steps, rej)
       where
         satisfyPrecondition = sized $ \n -> go n (2 * n) [] -- idea copied from suchThatMaybe
         go m n rej
