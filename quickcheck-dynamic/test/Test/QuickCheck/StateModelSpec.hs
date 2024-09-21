@@ -30,6 +30,7 @@ tests =
   testGroup
     "Running actions"
     [ testProperty "simple counter" $ prop_counter
+    , testProperty "simple_counter_moreActions" $ moreActions 30 prop_counter
     , testProperty "returns final state updated from actions" prop_returnsFinalState
     , testProperty "environment variables indices are 1-based " prop_variablesIndicesAre1Based
     , testCase "prints distribution of actions and polarity" $ do

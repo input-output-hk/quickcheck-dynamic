@@ -55,30 +55,31 @@ instance StateModel RegState where
   validFailingAction _ _ = True
 
   arbitraryAction ctx s =
-    frequency $
-      [
-        ( max 1 $ 10 - length (ctxAtType @ThreadId ctx)
-        , return $ Some Spawn
-        )
-      ,
-        ( 2 * Map.size (regs s)
-        , Some <$> (Unregister <$> probablyRegistered s)
-        )
-      ,
-        ( 10
-        , Some <$> (WhereIs <$> probablyRegistered s)
-        )
-      ]
-        ++ [ ( max 1 $ 3 - length (dead s)
-             , Some <$> (KillThread <$> arbitraryVar ctx)
-             )
-           | not . null $ ctxAtType @ThreadId ctx
-           ]
-        ++ [ ( max 1 $ 10 - Map.size (regs s)
-             , Some <$> (Register <$> probablyUnregistered s <*> arbitraryVar ctx)
-             )
-           | not . null $ ctxAtType @ThreadId ctx
-           ]
+    let threadIdCtx = ctxAtType @ThreadId ctx
+     in frequency $
+          [
+            ( max 1 $ 10 - length threadIdCtx
+            , return $ Some Spawn
+            )
+          ,
+            ( 2 * Map.size (regs s)
+            , Some <$> (Unregister <$> probablyRegistered s)
+            )
+          ,
+            ( 10
+            , Some <$> (WhereIs <$> probablyRegistered s)
+            )
+          ]
+            ++ [ ( max 1 $ 3 - length (dead s)
+                 , Some <$> (KillThread <$> arbitraryVar ctx)
+                 )
+               | not . null $ threadIdCtx
+               ]
+            ++ [ ( max 1 $ 10 - Map.size (regs s)
+                 , Some <$> (Register <$> probablyUnregistered s <*> arbitraryVar ctx)
+                 )
+               | not . null $ threadIdCtx
+               ]
 
   shrinkAction ctx _ (Register name tid) =
     [Some (Unregister name)]

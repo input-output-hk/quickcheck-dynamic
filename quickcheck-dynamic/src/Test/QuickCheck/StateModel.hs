@@ -413,23 +413,23 @@ generateActionsWithOptions QCDOptions{..} = do
   return $ Actions_ rejected (Smart 0 as)
   where
     arbActions :: [Step state] -> [String] -> Annotated state -> Int -> Gen ([Step state], [String])
-    arbActions steps rej s step = sized $ \n -> do
+    arbActions steps rejected s step = sized $ \n -> do
       let w = round (genOptLengthMult * fromIntegral n) `div` 2 + 1
       continue <- frequency [(1, pure False), (w, pure True)]
       if continue
         then do
-          (mact, rej') <- satisfyPrecondition
+          (mact, rej) <- satisfyPrecondition
           case mact of
             Just (Some act@ActionWithPolarity{}) -> do
               let var = mkVar step
               arbActions
                 ((var := act) : steps)
-                (rej' ++ rej)
+                (rej ++ rejected)
                 (computeNextState s act var)
                 (step + 1)
             Nothing ->
-              return (reverse steps, rej)
-        else return (reverse steps, rej)
+              return (reverse steps, rejected)
+        else return (reverse steps, rejected)
       where
         satisfyPrecondition = sized $ \n -> go n (2 * n) [] -- idea copied from suchThatMaybe
         go m n rej
@@ -549,6 +549,14 @@ runActions
   => Actions state
   -> PropertyM m (Annotated state, Env)
 runActions (Actions_ rejected (Smart _ actions)) = do
+  -- TODO: consider bucketing one level lower here - 0-10, 10-20, ... 100-200, 200-300, ... 1000-2000, ...
+  -- insted
+  let bucket n
+        | b <= 0 = "0 - 9"
+        | otherwise = show ((10 :: Integer) ^ b) ++ " - " ++ show ((10 :: Integer) ^ (b + 1) - 1)
+        where
+          b = round (logBase 10 (fromIntegral n :: Double)) :: Integer
+  monitor $ tabulate "# of actions" [show $ bucket $ length actions]
   (finalState, env) <- runSteps initialAnnotatedState [] actions
   unless (null rejected) $
     monitor $
