@@ -555,7 +555,7 @@ runActions (Actions_ rejected (Smart _ actions)) = do
         | b <= 0 = "0 - 9"
         | otherwise = show ((10 :: Integer) ^ b) ++ " - " ++ show ((10 :: Integer) ^ (b + 1) - 1)
         where
-          b = round (logBase 10 (fromIntegral n :: Double)) :: Integer
+          b = floor (logBase 10 (fromIntegral n :: Double)) :: Integer
   monitor $ tabulate "# of actions" [show $ bucket $ length actions]
   (finalState, env) <- runSteps initialAnnotatedState [] actions
   unless (null rejected) $
