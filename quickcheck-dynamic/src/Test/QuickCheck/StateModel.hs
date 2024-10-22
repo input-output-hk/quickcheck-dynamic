@@ -557,14 +557,17 @@ runActions (Actions_ rejected (Smart _ actions)) = do
             where
               d = div n 10
   monitor $ tabulate "# of actions" [show $ bucket $ length actions]
-  (finalState, env) <- runSteps initialAnnotatedState [] actions
+  (finalState, env, names, polars) <- runSteps initialAnnotatedState [] actions
+  monitor $ tabulate "Actions" names
+  monitor $ tabulate "Action polarity" $ map show polars
   unless (null rejected) $
     monitor $
       tabulate "Actions rejected by precondition" rejected
   return (finalState, env)
 
--- | Core function to execute a sequence of `Step` given some initial `Env`ironment
--- and `Annotated` state.
+-- | Core function to execute a sequence of `Step` given some initial `Env`ironment and `Annotated`
+-- state. Return the list of action names and polarities to work around
+-- https://github.com/nick8325/quickcheck/issues/416 causing repeated calls to tabulate being slow.
 runSteps
   :: forall state m e
    . ( StateModel state
@@ -575,23 +578,23 @@ runSteps
   => Annotated state
   -> Env
   -> [Step state]
-  -> PropertyM m (Annotated state, Env)
-runSteps s env [] = return (s, reverse env)
+  -> PropertyM m (Annotated state, Env, [String], [Polarity])
+runSteps s env [] = return (s, reverse env, [], [])
 runSteps s env ((v := act) : as) = do
   pre $ computePrecondition s act
   ret <- run $ performResultToEither <$> perform (underlyingState s) action (lookUpVar env)
   let name = show polar ++ actionName action
-  monitor $ tabulate "Actions" [name]
-  monitor $ tabulate "Action polarity" [show polar]
   case (polar, ret) of
     (PosPolarity, Left err) ->
       positiveActionFailed err
     (PosPolarity, Right val) -> do
       (s', env') <- positiveActionSucceeded ret val
-      runSteps s' env' as
+      (s'', env'', names, polars) <- runSteps s' env' as
+      pure (s'', env'', name : names, polar : polars)
     (NegPolarity, _) -> do
       (s', env') <- negativeActionResult ret
-      runSteps s' env' as
+      (s'', env'', names, polars) <- runSteps s' env' as
+      pure (s'', env'', name : names, polar : polars)
   where
     polar = polarity act
 
