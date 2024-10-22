@@ -549,10 +549,10 @@ runActions
   => Actions state
   -> PropertyM m (Annotated state, Env)
 runActions (Actions_ rejected (Smart _ actions)) = do
-  let bucket = \ n -> let (a, b) = go n in show a ++ " - " ++ show b
+  let bucket = \n -> let (a, b) = go n in show a ++ " - " ++ show b
         where
           go n
-            | n < 100   = (d * 10, d * 10 + 9)
+            | n < 100 = (d * 10, d * 10 + 9)
             | otherwise = let (a, b) = go d in (a * 10, b * 10 + 9)
             where
               d = div n 10
