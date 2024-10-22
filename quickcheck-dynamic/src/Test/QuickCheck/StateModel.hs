@@ -27,7 +27,7 @@ module Test.QuickCheck.StateModel (
   Env,
   Generic,
   IsPerformResult,
-  QCDOptions (..),
+  Options (..),
   monitorPost,
   counterexamplePost,
   stateAfter,
@@ -42,7 +42,7 @@ module Test.QuickCheck.StateModel (
   computeShrinkAction,
   generateActionsWithOptions,
   shrinkActionsWithOptions,
-  defaultQCDOptions,
+  defaultOptions,
   moreActions,
 ) where
 
@@ -365,12 +365,12 @@ usedVariables (Actions as) = go initialAnnotatedState as
         <> go (computeNextState aState act var) steps
 
 instance forall state. StateModel state => Arbitrary (Actions state) where
-  arbitrary = generateActionsWithOptions defaultQCDOptions
-  shrink = shrinkActionsWithOptions defaultQCDOptions
+  arbitrary = generateActionsWithOptions defaultOptions
+  shrink = shrinkActionsWithOptions defaultOptions
 
 data QCDProperty state = QCDProperty
   { runQCDProperty :: Actions state -> Property
-  , qcdPropertyOptions :: QCDOptions state
+  , qcdPropertyOptions :: Options state
   }
 
 instance StateModel state => Testable (QCDProperty state) where
@@ -386,35 +386,35 @@ class QCDProp state p | p -> state where
 instance QCDProp state (QCDProperty state) where
   qcdProperty = id
 
-instance QCDProp state (Actions state -> Property) where
-  qcdProperty p = QCDProperty p defaultQCDOptions
+instance Testable p => QCDProp state (Actions state -> p) where
+  qcdProperty p = QCDProperty (property . p) defaultOptions
 
-modifyOptions :: QCDProperty state -> (QCDOptions state -> QCDOptions state) -> QCDProperty state
+modifyOptions :: QCDProperty state -> (Options state -> Options state) -> QCDProperty state
 modifyOptions p f =
   let opts = qcdPropertyOptions p
    in p{qcdPropertyOptions = f opts}
 
 moreActions :: QCDProp state p => Rational -> p -> QCDProperty state
 moreActions r p =
-  modifyOptions (qcdProperty p) $ \opts -> opts{genOptLengthMult = genOptLengthMult opts * r}
+  modifyOptions (qcdProperty p) $ \opts -> opts{actionLengthMultiplier = actionLengthMultiplier opts * r}
 
 -- NOTE: indexed on state for forwards compatibility, e.g. when we
 -- want to give an explicit initial state
-data QCDOptions state = QCDOptions {genOptLengthMult :: Rational}
+data Options state = Options {actionLengthMultiplier :: Rational}
 
-defaultQCDOptions :: QCDOptions state
-defaultQCDOptions = QCDOptions{genOptLengthMult = 1}
+defaultOptions :: Options state
+defaultOptions = Options{actionLengthMultiplier = 1}
 
 -- | Generate arbitrary actions with the `GenActionsOptions`. More flexible than using the type-based
 -- modifiers.
-generateActionsWithOptions :: forall state. StateModel state => QCDOptions state -> Gen (Actions state)
-generateActionsWithOptions QCDOptions{..} = do
+generateActionsWithOptions :: forall state. StateModel state => Options state -> Gen (Actions state)
+generateActionsWithOptions Options{..} = do
   (as, rejected) <- arbActions [] [] initialAnnotatedState 1
   return $ Actions_ rejected (Smart 0 as)
   where
     arbActions :: [Step state] -> [String] -> Annotated state -> Int -> Gen ([Step state], [String])
     arbActions steps rejected s step = sized $ \n -> do
-      let w = round (genOptLengthMult * fromIntegral n) `div` 2 + 1
+      let w = round (actionLengthMultiplier * fromIntegral n) `div` 2 + 1
       continue <- frequency [(1, pure False), (w, pure True)]
       if continue
         then do
@@ -442,7 +442,7 @@ generateActionsWithOptions QCDOptions{..} = do
                     then return (Just (Some act), rej)
                     else go (m + 1) n (actionName (polarAction act) : rej)
 
-shrinkActionsWithOptions :: forall state. StateModel state => QCDOptions state -> Actions state -> [Actions state]
+shrinkActionsWithOptions :: forall state. StateModel state => Options state -> Actions state -> [Actions state]
 shrinkActionsWithOptions _ (Actions_ rs as) =
   map (Actions_ rs) (shrinkSmart (map (prune . map fst) . concatMap customActionsShrinker . shrinkList shrinker . withStates) as)
   where
