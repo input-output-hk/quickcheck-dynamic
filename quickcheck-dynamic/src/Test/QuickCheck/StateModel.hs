@@ -549,13 +549,13 @@ runActions
   => Actions state
   -> PropertyM m (Annotated state, Env)
 runActions (Actions_ rejected (Smart _ actions)) = do
-  -- TODO: consider bucketing one level lower here - 0-10, 10-20, ... 100-200, 200-300, ... 1000-2000, ...
-  -- insted
-  let bucket n
-        | b <= 0 = "0 - 9"
-        | otherwise = show ((10 :: Integer) ^ b) ++ " - " ++ show ((10 :: Integer) ^ (b + 1) - 1)
+  let bucket = \ n -> let (a, b) = go n in show a ++ " - " ++ show b
         where
-          b = floor (logBase 10 (fromIntegral n :: Double)) :: Integer
+          go n
+            | n < 100   = (d * 10, d * 10 + 9)
+            | otherwise = let (a, b) = go d in (a * 10, b * 10 + 9)
+            where
+              d = div n 10
   monitor $ tabulate "# of actions" [show $ bucket $ length actions]
   (finalState, env) <- runSteps initialAnnotatedState [] actions
   unless (null rejected) $
