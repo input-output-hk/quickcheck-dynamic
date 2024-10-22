@@ -20,6 +20,7 @@ changes.
     ```
 * **BREAKING**: Moved `Error state` from `StateModel` to `RunModel` and indexed it on both the `state` and the monad `m`
 * **BREAKING**: Changed `PerformResult` from `PerformResult (Error state) a` to `PerformResult state m a`
+* Added a `moreActions` property modifier to allow controlling the length of action sequences.
 
 ## 3.4.1 - 2024-03-22
 
