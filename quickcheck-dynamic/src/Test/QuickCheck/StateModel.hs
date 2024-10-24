@@ -1,5 +1,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 -- | Model-Based Testing library for use with Haskell QuickCheck.
@@ -25,6 +27,7 @@ module Test.QuickCheck.StateModel (
   Env,
   Generic,
   IsPerformResult,
+  Options (..),
   monitorPost,
   counterexamplePost,
   stateAfter,
@@ -37,6 +40,10 @@ module Test.QuickCheck.StateModel (
   computePrecondition,
   computeArbitraryAction,
   computeShrinkAction,
+  generateActionsWithOptions,
+  shrinkActionsWithOptions,
+  defaultOptions,
+  moreActions,
 ) where
 
 import Control.Monad
@@ -358,56 +365,100 @@ usedVariables (Actions as) = go initialAnnotatedState as
         <> go (computeNextState aState act var) steps
 
 instance forall state. StateModel state => Arbitrary (Actions state) where
-  arbitrary = do
-    (as, rejected) <- arbActions initialAnnotatedState 1
-    return $ Actions_ rejected (Smart 0 as)
-    where
-      arbActions :: Annotated state -> Int -> Gen ([Step state], [String])
-      arbActions s step = sized $ \n ->
-        let w = n `div` 2 + 1
-         in frequency
-              [ (1, return ([], []))
-              ,
-                ( w
-                , do
-                    (mact, rej) <- satisfyPrecondition
-                    case mact of
-                      Just (Some act@ActionWithPolarity{}) -> do
-                        let var = mkVar step
-                        (as, rejected) <- arbActions (computeNextState s act var) (step + 1)
-                        return ((var := act) : as, rej ++ rejected)
-                      Nothing ->
-                        return ([], [])
-                )
-              ]
-        where
-          satisfyPrecondition = sized $ \n -> go n (2 * n) [] -- idea copied from suchThatMaybe
-          go m n rej
-            | m > n = return (Nothing, rej)
-            | otherwise = do
-                a <- resize m $ computeArbitraryAction s
-                case a of
-                  Some act ->
-                    if computePrecondition s act
-                      then return (Just (Some act), rej)
-                      else go (m + 1) n (actionName (polarAction act) : rej)
+  arbitrary = generateActionsWithOptions defaultOptions
+  shrink = shrinkActionsWithOptions defaultOptions
 
-  shrink (Actions_ rs as) =
-    map (Actions_ rs) (shrinkSmart (map (prune . map fst) . concatMap customActionsShrinker . shrinkList shrinker . withStates) as)
-    where
-      shrinker :: (Step state, Annotated state) -> [(Step state, Annotated state)]
-      shrinker (v := act, s) = [(unsafeCoerceVar v := act', s) | Some act'@ActionWithPolarity{} <- computeShrinkAction s act]
+data QCDProperty state = QCDProperty
+  { runQCDProperty :: Actions state -> Property
+  , qcdPropertyOptions :: Options state
+  }
 
-      customActionsShrinker :: [(Step state, Annotated state)] -> [[(Step state, Annotated state)]]
-      customActionsShrinker acts =
-        let usedVars = mconcat [getAllVariables a <> getAllVariables (underlyingState s) | (_ := a, s) <- acts]
-            binding (v := _, _) = Some v `Set.member` usedVars
-            -- Remove at most one non-binding action
-            go [] = [[]]
-            go (p : ps)
-              | binding p = map (p :) (go ps)
-              | otherwise = ps : map (p :) (go ps)
-         in go acts
+instance StateModel state => Testable (QCDProperty state) where
+  property QCDProperty{..} =
+    forAllShrink
+      (generateActionsWithOptions qcdPropertyOptions)
+      (shrinkActionsWithOptions qcdPropertyOptions)
+      runQCDProperty
+
+class QCDProp state p | p -> state where
+  qcdProperty :: p -> QCDProperty state
+
+instance QCDProp state (QCDProperty state) where
+  qcdProperty = id
+
+instance Testable p => QCDProp state (Actions state -> p) where
+  qcdProperty p = QCDProperty (property . p) defaultOptions
+
+modifyOptions :: QCDProperty state -> (Options state -> Options state) -> QCDProperty state
+modifyOptions p f =
+  let opts = qcdPropertyOptions p
+   in p{qcdPropertyOptions = f opts}
+
+moreActions :: QCDProp state p => Rational -> p -> QCDProperty state
+moreActions r p =
+  modifyOptions (qcdProperty p) $ \opts -> opts{actionLengthMultiplier = actionLengthMultiplier opts * r}
+
+-- NOTE: indexed on state for forwards compatibility, e.g. when we
+-- want to give an explicit initial state
+data Options state = Options {actionLengthMultiplier :: Rational}
+
+defaultOptions :: Options state
+defaultOptions = Options{actionLengthMultiplier = 1}
+
+-- | Generate arbitrary actions with the `GenActionsOptions`. More flexible than using the type-based
+-- modifiers.
+generateActionsWithOptions :: forall state. StateModel state => Options state -> Gen (Actions state)
+generateActionsWithOptions Options{..} = do
+  (as, rejected) <- arbActions [] [] initialAnnotatedState 1
+  return $ Actions_ rejected (Smart 0 as)
+  where
+    arbActions :: [Step state] -> [String] -> Annotated state -> Int -> Gen ([Step state], [String])
+    arbActions steps rejected s step = sized $ \n -> do
+      let w = round (actionLengthMultiplier * fromIntegral n) `div` 2 + 1
+      continue <- frequency [(1, pure False), (w, pure True)]
+      if continue
+        then do
+          (mact, rej) <- satisfyPrecondition
+          case mact of
+            Just (Some act@ActionWithPolarity{}) -> do
+              let var = mkVar step
+              arbActions
+                ((var := act) : steps)
+                (rej ++ rejected)
+                (computeNextState s act var)
+                (step + 1)
+            Nothing ->
+              return (reverse steps, rejected)
+        else return (reverse steps, rejected)
+      where
+        satisfyPrecondition = sized $ \n -> go n (2 * n) [] -- idea copied from suchThatMaybe
+        go m n rej
+          | m > n = return (Nothing, rej)
+          | otherwise = do
+              a <- resize m $ computeArbitraryAction s
+              case a of
+                Some act ->
+                  if computePrecondition s act
+                    then return (Just (Some act), rej)
+                    else go (m + 1) n (actionName (polarAction act) : rej)
+
+shrinkActionsWithOptions :: forall state. StateModel state => Options state -> Actions state -> [Actions state]
+shrinkActionsWithOptions _ (Actions_ rs as) =
+  map (Actions_ rs) (shrinkSmart (map (prune . map fst) . concatMap customActionsShrinker . shrinkList shrinker . withStates) as)
+  where
+    shrinker :: (Step state, Annotated state) -> [(Step state, Annotated state)]
+    shrinker (v := act, s) = [(unsafeCoerceVar v := act', s) | Some act'@ActionWithPolarity{} <- computeShrinkAction s act]
+
+    customActionsShrinker :: [(Step state, Annotated state)] -> [[(Step state, Annotated state)]]
+    customActionsShrinker acts =
+      let usedVars = mconcat [getAllVariables a <> getAllVariables (underlyingState s) | (_ := a, s) <- acts]
+          binding (v := _, _) = Some v `Set.member` usedVars
+          -- Remove at most one non-binding action
+          go [] = [[]]
+          go (p : ps)
+            | binding p = map (p :) (go ps)
+            | otherwise = ps : map (p :) (go ps)
+       in go acts
 
 -- Running state models
 
@@ -498,14 +549,25 @@ runActions
   => Actions state
   -> PropertyM m (Annotated state, Env)
 runActions (Actions_ rejected (Smart _ actions)) = do
-  (finalState, env) <- runSteps initialAnnotatedState [] actions
+  let bucket = \n -> let (a, b) = go n in show a ++ " - " ++ show b
+        where
+          go n
+            | n < 100 = (d * 10, d * 10 + 9)
+            | otherwise = let (a, b) = go d in (a * 10, b * 10 + 9)
+            where
+              d = div n 10
+  monitor $ tabulate "# of actions" [show $ bucket $ length actions]
+  (finalState, env, names, polars) <- runSteps initialAnnotatedState [] actions
+  monitor $ tabulate "Actions" names
+  monitor $ tabulate "Action polarity" $ map show polars
   unless (null rejected) $
     monitor $
       tabulate "Actions rejected by precondition" rejected
   return (finalState, env)
 
--- | Core function to execute a sequence of `Step` given some initial `Env`ironment
--- and `Annotated` state.
+-- | Core function to execute a sequence of `Step` given some initial `Env`ironment and `Annotated`
+-- state. Return the list of action names and polarities to work around
+-- https://github.com/nick8325/quickcheck/issues/416 causing repeated calls to tabulate being slow.
 runSteps
   :: forall state m e
    . ( StateModel state
@@ -516,23 +578,23 @@ runSteps
   => Annotated state
   -> Env
   -> [Step state]
-  -> PropertyM m (Annotated state, Env)
-runSteps s env [] = return (s, reverse env)
+  -> PropertyM m (Annotated state, Env, [String], [Polarity])
+runSteps s env [] = return (s, reverse env, [], [])
 runSteps s env ((v := act) : as) = do
   pre $ computePrecondition s act
   ret <- run $ performResultToEither <$> perform (underlyingState s) action (lookUpVar env)
   let name = show polar ++ actionName action
-  monitor $ tabulate "Actions" [name]
-  monitor $ tabulate "Action polarity" [show polar]
   case (polar, ret) of
     (PosPolarity, Left err) ->
       positiveActionFailed err
     (PosPolarity, Right val) -> do
       (s', env') <- positiveActionSucceeded ret val
-      runSteps s' env' as
+      (s'', env'', names, polars) <- runSteps s' env' as
+      pure (s'', env'', name : names, polar : polars)
     (NegPolarity, _) -> do
       (s', env') <- negativeActionResult ret
-      runSteps s' env' as
+      (s'', env'', names, polars) <- runSteps s' env' as
+      pure (s'', env'', name : names, polar : polars)
   where
     polar = polarity act
 
