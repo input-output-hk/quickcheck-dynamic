@@ -1,6 +1,7 @@
 packages:
   quickcheck-dynamic
   quickcheck-dynamic-iosim
+  docs
 
 tests: true
 
