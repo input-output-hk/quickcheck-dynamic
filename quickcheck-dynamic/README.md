@@ -17,7 +17,7 @@ Plutus or Cardano.
   comments. Checkout [StateModel](https://hackage.haskell.org/package/quickcheck-dynamic/docs/src/Test.QuickCheck.StateModel.html)
   and [DynamicLogic](https://hackage.haskell.org/package/quickcheck-dynamic/docs/Test-QuickCheck-DynamicLogic.html) modules for
   some usage instructions.
-* For a concrete standalone example, have a look at the [`Registry`](https://github.com/input-output-hk/quickcheck-dynamic/blob/main/quickcheck-dynamic/test/Spec/DynamicLogic/Registry.hs) and [`RegistryModel`](https://github.com/input-output-hk/quickcheck-dynamic/blob/main/quickcheck-dynamic/test/Spec/DynamicLogic/RegistryModel.hs) module from the test suite, which model a multithreaded Thread registry inspired by the Erlang version of QuickCheck described in [this article](https://mengwangoxf.github.io/Papers/Erlang18.pdf)
+* For a concrete standalone example, have a look at the [`Registry`](https://github.com/input-output-hk/quickcheck-dynamic/blob/main/quickcheck-dynamic/test/Spec/DynamicLogic/Registry.hs) and [`RegistryModel`](https://github.com/input-output-hk/quickcheck-dynamic/blob/main/quickcheck-dynamic/test/Spec/DynamicLogic/RegistryModel.hs) module from the test suite, which respectively implement and model a multithreaded Thread registry inspired by the Erlang version of QuickCheck described in [this article](https://mengwangoxf.github.io/Papers/Erlang18.pdf)
 * For more documentation on how to quickcheck-dynamic is used to test
   Plutus DApps, check this
   [tutorial](https://plutus-apps.readthedocs.io/en/latest/plutus/tutorials/contract-models.html).
