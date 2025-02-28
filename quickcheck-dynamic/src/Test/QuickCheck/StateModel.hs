@@ -31,6 +31,7 @@ module Test.QuickCheck.StateModel (
   monitorPost,
   counterexamplePost,
   stateAfter,
+  runActionsFrom,
   runActions,
   lookUpVar,
   lookUpVarMaybe,
@@ -548,7 +549,19 @@ runActions
      )
   => Actions state
   -> PropertyM m (Annotated state, Env)
-runActions (Actions_ rejected (Smart _ actions)) = do
+runActions = runActionsFrom initialAnnotatedState
+
+runActionsFrom
+  :: forall state m e
+   . ( StateModel state
+     , RunModel state m
+     , e ~ Error state m
+     , forall a. IsPerformResult e a
+     )
+  => Annotated state
+  -> Actions state
+  -> PropertyM m (Annotated state, Env)
+runActionsFrom annotatedState (Actions_ rejected (Smart _ actions)) = do
   let bucket = \n -> let (a, b) = go n in show a ++ " - " ++ show b
         where
           go n
@@ -557,7 +570,7 @@ runActions (Actions_ rejected (Smart _ actions)) = do
             where
               d = div n 10
   monitor $ tabulate "# of actions" [show $ bucket $ length actions]
-  (finalState, env, names, polars) <- runSteps initialAnnotatedState [] actions
+  (finalState, env, names, polars) <- runSteps annotatedState [] actions
   monitor $ tabulate "Actions" names
   monitor $ tabulate "Action polarity" $ map show polars
   unless (null rejected) $
