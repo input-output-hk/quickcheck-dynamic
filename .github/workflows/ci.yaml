@@ -87,7 +87,7 @@ jobs:
         nix develop --accept-flake-config --command .github/workflows/ci-haddock.sh
 
     - name: Upload build & test artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: haddocks
         path: ./docs
