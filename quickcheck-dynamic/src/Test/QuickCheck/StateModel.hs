@@ -387,7 +387,7 @@ class QCDProp state p | p -> state where
 instance QCDProp state (QCDProperty state) where
   qcdProperty = id
 
-instance Testable p => QCDProp state (Actions state -> p) where
+instance (StateModel state, Testable p) => QCDProp state (Actions state -> p) where
   qcdProperty p = QCDProperty (property . p) defaultOptions
 
 modifyOptions :: QCDProperty state -> (Options state -> Options state) -> QCDProperty state
@@ -397,25 +397,23 @@ modifyOptions p f =
 
 moreActions :: QCDProp state p => Rational -> p -> QCDProperty state
 moreActions r p =
-  modifyOptions (qcdProperty p) $ \opts -> opts{actionLengthMultiplier = actionLengthMultiplier opts * r}
+  modifyOptions (qcdProperty p) $ \opts -> opts{oActionLengthMultiplier = oActionLengthMultiplier opts * r}
 
--- NOTE: indexed on state for forwards compatibility, e.g. when we
--- want to give an explicit initial state
-data Options state = Options {actionLengthMultiplier :: Rational}
+data Options state = Options {oActionLengthMultiplier :: Rational, oInitialAnnotatedState :: Annotated state}
 
-defaultOptions :: Options state
-defaultOptions = Options{actionLengthMultiplier = 1}
+defaultOptions :: StateModel state => Options state
+defaultOptions = Options{oActionLengthMultiplier = 1, oInitialAnnotatedState = initialAnnotatedState}
 
 -- | Generate arbitrary actions with the `GenActionsOptions`. More flexible than using the type-based
 -- modifiers.
 generateActionsWithOptions :: forall state. StateModel state => Options state -> Gen (Actions state)
 generateActionsWithOptions Options{..} = do
-  (as, rejected) <- arbActions [] [] initialAnnotatedState 1
+  (as, rejected) <- arbActions [] [] oInitialAnnotatedState 1
   return $ Actions_ rejected (Smart 0 as)
   where
     arbActions :: [Step state] -> [String] -> Annotated state -> Int -> Gen ([Step state], [String])
     arbActions steps rejected s step = sized $ \n -> do
-      let w = round (actionLengthMultiplier * fromIntegral n) `div` 2 + 1
+      let w = round (oActionLengthMultiplier * fromIntegral n) `div` 2 + 1
       continue <- frequency [(1, pure False), (w, pure True)]
       if continue
         then do
