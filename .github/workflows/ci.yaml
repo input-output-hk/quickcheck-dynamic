@@ -102,7 +102,7 @@ jobs:
         repository: input-output-hk/quickcheck-dynamic
 
     - name: Download generated documentation
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: haddocks
         path: docs
