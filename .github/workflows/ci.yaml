@@ -29,7 +29,7 @@ jobs:
           log-lines = 1000
 
     - name: Github cache ~/.cabal/packages, ~/.cabal/store and dist-newstyle
-      uses: actions/cache@v2.1.5
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cabal/packages
@@ -73,7 +73,7 @@ jobs:
           accept-flake-config = true
 
     - name: Github cache ~/.cabal/packages, ~/.cabal/store and dist-newstyle
-      uses: actions/cache@v2.1.5
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cabal/packages
@@ -87,7 +87,7 @@ jobs:
         nix develop --accept-flake-config --command .github/workflows/ci-haddock.sh
 
     - name: Upload build & test artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: haddocks
         path: ./docs
@@ -102,7 +102,7 @@ jobs:
         repository: input-output-hk/quickcheck-dynamic
 
     - name: Download generated documentation
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: haddocks
         path: docs
