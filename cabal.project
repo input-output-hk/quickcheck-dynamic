@@ -1,10 +1,6 @@
 packages:
   quickcheck-dynamic
-  quickcheck-dynamic-iosim
 
 tests: true
 
 test-show-details: direct
-
-allow-newer:
-  text
