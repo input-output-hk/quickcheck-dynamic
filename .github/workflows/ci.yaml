@@ -42,51 +42,26 @@ jobs:
 
     - name: Prepare nix shell
       run:
-        nix develop --accept-flake-config --build
-
-    - name: Build
-      run: |
-        nix develop --accept-flake-config --command cabal update
-        nix develop --accept-flake-config --command cabal build all --ghc-options=-Werror
-
-    - name: Test
-      run:
-        nix develop --accept-flake-config --command cabal test all
+        nix develop --build
 
     - name: Formatting
       run:
-        nix develop --accept-flake-config --command fourmolu --mode check .
+        nix develop --command fourmolu --mode check .
 
-  haddock:
-    name: "Haddock & benchmarks"
-    runs-on: ubuntu-latest
+    - name: Build
+      run: |
+        nix develop --command cabal update
+        nix develop --command cabal build all --ghc-options=-Werror
 
-    steps:
-    - uses: actions/checkout@v2.3.1
-      with:
-        repository: input-output-hk/quickcheck-dynamic
-
-    - name: Prepare nix
-      uses: cachix/install-nix-action@v22
-      with:
-        extra_nix_config: |
-          accept-flake-config = true
-
-    - name: Github cache ~/.cabal/packages, ~/.cabal/store and dist-newstyle
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cabal/packages
-          ~/.cabal/store
-          dist-newstyle
-        key: |
-          cabal-${{ runner.os }}-${{ hashFiles('cabal.project', 'default.nix', 'shell.nix') }}
+    - name: Test
+      run:
+        nix develop --command cabal test all
 
     - name: Documentation (Haddock)
       run: |
-        nix develop --accept-flake-config --command .github/workflows/ci-haddock.sh
+        nix develop --command .github/workflows/ci-haddock.sh
 
-    - name: Upload build & test artifacts
+    - name: Upload Documentation
       uses: actions/upload-artifact@v4
       with:
         name: haddocks
@@ -94,13 +69,9 @@ jobs:
 
   documentation:
     name: Documentation
-    needs: [haddock]
+    needs: [build-test]
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2.3.1
-      with:
-        repository: input-output-hk/quickcheck-dynamic
-
     - name: Download generated documentation
       uses: actions/download-artifact@v4
       with:

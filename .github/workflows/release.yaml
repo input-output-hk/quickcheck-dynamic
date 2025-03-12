@@ -25,7 +25,7 @@ jobs:
           log-lines = 1000
 
     - name: Github cache ~/.cabal/packages, ~/.cabal/store and dist-newstyle
-      uses: actions/cache@v2.1.5
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cabal/packages
@@ -36,16 +36,17 @@ jobs:
 
     - name: Prepare nix shell
       run:
-        nix develop --accept-flake-config --build
+        nix develop --build
 
     - name: Cabal check
       run: |
         cd quickcheck-dynamic
-        nix develop --accept-flake-config --command cabal check
+        nix develop --command cabal check
 
     - name: Package
-      run:
-        nix develop --accept-flake-config --command cabal sdist quickcheck-dynamic
+      run: |
+        nix develop --command cabal sdist quickcheck-dynamic
+        nix develop --command cabal haddock --haddock-for-hackage quickcheck-dynamic
 
     - name: Get the version
       id: get_version
@@ -54,5 +55,7 @@ jobs:
     - name: Upload distribution
       uses: actions/upload-artifact@v2
       with:
-        name: quickcheck-dynamic.tar.gz
-        path: ./dist-newstyle/sdist/quickcheck-dynamic-${{ steps.get_version.outputs.VERSION }}.tar.gz
+        name: distribution
+        path: |
+          ./dist-newstyle/sdist/quickcheck-dynamic-${{ steps.get_version.outputs.VERSION }}.tar.gz
+          ./dist-newstyle/quickcheck-dynamic-${{ steps.get_version.outputs.VERSION }}-docs.tar.gz
