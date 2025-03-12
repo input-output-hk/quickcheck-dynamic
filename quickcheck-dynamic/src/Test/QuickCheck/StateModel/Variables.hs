@@ -37,6 +37,10 @@ import Test.QuickCheck as QC
 newtype Var a = Var Int
   deriving (Eq, Ord, Typeable, Data)
 
+-- | Create a fresh symbolic variable with given identifier. While 'Var's are
+-- usually created by action generators, this function can be used for example
+-- to create a 'Var' in the 'initialState' of a 'StateModel'. A good default
+-- value for the identifier is '-1' as this will not be generated otherwise.
 mkVar :: Int -> Var a
 mkVar = Var
 
