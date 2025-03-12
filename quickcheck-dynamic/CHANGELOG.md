@@ -7,7 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 As a minor extension, we also keep a semantic version for the `UNRELEASED`
 changes.
 
-## UNRELEASED
+## 4.0.0 - 2025-03-12
 
 * **BREAKING**: Removed `Realized`
   - To migrate uses of `Realized` with `IOSim`, index the state type on the choice of `RunModel` monad

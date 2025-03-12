@@ -1,12 +1,12 @@
 cabal-version:      2.2
 name:               quickcheck-dynamic
-version:            3.4.1
+version:            4.0.0
 license:            Apache-2.0
 license-files:
   LICENSE
   NOTICE
 
-maintainer:         arnaud.bailly@iohk.io
+maintainer:         sebastian.nagel@iohk.io
 author:             Ulf Norell
 category:           Testing
 synopsis:           A library for stateful property-based testing
