@@ -7,10 +7,6 @@
 
 A library for testing stateful programs using [QuickCheck](https://hackage.haskell.org/package/QuickCheck) and [dynamic logic](https://en.wikipedia.org/wiki/Dynamic_logic_(modal_logic)).
 
-This repository hosts:
-* The core [quickcheck-dynamic](./quickcheck-dynamic) library providing tools for quickchecking stateful models,
-* Example of integrating [io-sim](https://github.com/input-output-hk/io-sim)'s Haskell runtime simulator and _quickcheck-dynamic_ to model and test complex multi-threaded application.
-
 ## Documentation
 
 * The original stateful testing approach is described in John Hughes' research paper: [https://www.cs.tufts.edu/~nr/cs257/archive/john-hughes/quviq-testing.pdf ](https://publications.lib.chalmers.se/records/fulltext/232550/local_232550.pdf)
