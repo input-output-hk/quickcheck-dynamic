@@ -10,7 +10,7 @@ import Data.Either
 import Data.List
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Test.QuickCheck
+import Test.QuickCheck hiding (Some (..))
 import Test.QuickCheck.Monadic hiding (assert)
 import Test.QuickCheck.Monadic qualified as QC
 import Test.Tasty hiding (after)

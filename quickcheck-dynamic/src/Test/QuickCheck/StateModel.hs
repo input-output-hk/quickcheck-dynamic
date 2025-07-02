@@ -56,7 +56,7 @@ import Data.Monoid (Endo (..))
 import Data.Set qualified as Set
 import Data.Void
 import GHC.Generics
-import Test.QuickCheck as QC
+import Test.QuickCheck as QC hiding (Some (..))
 import Test.QuickCheck.DynamicLogic.SmartShrinking
 import Test.QuickCheck.Monadic
 import Test.QuickCheck.StateModel.Variables

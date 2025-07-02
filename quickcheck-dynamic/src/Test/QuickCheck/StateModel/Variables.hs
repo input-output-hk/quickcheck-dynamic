@@ -31,7 +31,7 @@ import Data.Set qualified as Set
 import GHC.Generics
 import GHC.TypeLits
 import GHC.Word
-import Test.QuickCheck as QC
+import Test.QuickCheck as QC hiding (Some (..))
 
 -- | A symbolic variable for a value of type `a`
 newtype Var a = Var Int

@@ -4,7 +4,7 @@ import Control.Applicative
 import Control.Arrow (second)
 import Control.Monad
 import Data.Typeable
-import Test.QuickCheck hiding (generate)
+import Test.QuickCheck hiding (Some (..), generate)
 import Test.QuickCheck.DynamicLogic.CanGenerate
 import Test.QuickCheck.DynamicLogic.Quantify
 import Test.QuickCheck.DynamicLogic.SmartShrinking

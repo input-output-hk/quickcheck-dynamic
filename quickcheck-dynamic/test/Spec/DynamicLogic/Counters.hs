@@ -6,7 +6,7 @@ module Spec.DynamicLogic.Counters where
 
 import Control.Monad.Reader
 import Data.IORef
-import Test.QuickCheck
+import Test.QuickCheck hiding (Some (..))
 import Test.QuickCheck.StateModel
 
 -- A very simple model with a single action that always succeed in
