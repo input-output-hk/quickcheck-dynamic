@@ -52,7 +52,8 @@ import Data.Monoid (Endo (..))
 import Data.Set qualified as Set
 import Data.Void
 import GHC.Generics
-import Test.QuickCheck as QC
+import Test.QuickCheck (Arbitrary, Gen, Property, Smart (..), Testable, counterexample, forAllShrink, frequency, property, resize, shrinkList, sized, tabulate)
+import Test.QuickCheck qualified as QC
 import Test.QuickCheck.DynamicLogic.SmartShrinking
 import Test.QuickCheck.Monadic
 import Test.QuickCheck.StateModel.Variables

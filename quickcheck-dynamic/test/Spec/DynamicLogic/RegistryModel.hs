@@ -10,7 +10,8 @@ import Data.Either
 import Data.List
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Test.QuickCheck
+import Test.QuickCheck (Gen, Property)
+import Test.QuickCheck qualified as QC
 import Test.QuickCheck.Monadic hiding (assert)
 import Test.QuickCheck.Monadic qualified as QC
 import Test.Tasty hiding (after)
@@ -57,7 +58,7 @@ instance StateModel RegState where
   validFailingAction _ _ = True
 
   arbitraryAction ctx s =
-    frequency $
+    QC.frequency $
       [
         ( max 1 $ 10 - length (ctxAtType @ThreadId ctx)
         , return $ Some Spawn
@@ -134,15 +135,15 @@ instance RunModel RegState RegM where
 
   postconditionOnFailure (s, _) act@Register{} _ res = do
     monitorPost $
-      tabulate
+      QC.tabulate
         "Reason for -Register"
         [why s act]
     pure $ isLeft res
   postconditionOnFailure _s _ _ _ = pure True
 
   monitoring (_s, s') act@(showDictAction -> ShowDict) _ res =
-    counterexample (show res ++ " <- " ++ show act ++ "\n  -- State: " ++ show s')
-      . tabulate "Registry size" [show $ Map.size (regs s')]
+    QC.counterexample (show res ++ " <- " ++ show act ++ "\n  -- State: " ++ show s')
+      . QC.tabulate "Registry size" [show $ Map.size (regs s')]
 
 data ShowDict a where
   ShowDict :: Show (Realized RegM a) => ShowDict a
@@ -166,13 +167,13 @@ why s (Register name tid) =
 why _ _ = "(impossible)"
 
 arbitraryName :: Gen String
-arbitraryName = elements allNames
+arbitraryName = QC.elements allNames
 
 probablyRegistered :: RegState -> Gen String
-probablyRegistered s = oneof $ map pure (Map.keys $ regs s) ++ [arbitraryName]
+probablyRegistered s = QC.oneof $ map pure (Map.keys $ regs s) ++ [arbitraryName]
 
 probablyUnregistered :: RegState -> Gen String
-probablyUnregistered s = elements $ allNames ++ (allNames \\ Map.keys (regs s))
+probablyUnregistered s = QC.elements $ allNames ++ (allNames \\ Map.keys (regs s))
 
 shrinkName :: String -> [String]
 shrinkName name = [n | n <- allNames, n < name]
@@ -183,7 +184,7 @@ allNames = ["a", "b", "c", "d", "e"]
 prop_Registry :: Actions RegState -> Property
 prop_Registry s =
   monadicIO $ do
-    monitor $ counterexample "\nExecution\n"
+    monitor $ QC.counterexample "\nExecution\n"
     reg <- lift setupRegistry
     runPropertyReaderT (runActions s) reg
     QC.assert True
@@ -268,5 +269,5 @@ tests =
     "registry model example"
     [ testProperty "prop_Registry" $ prop_Registry
     , testProperty "canRegister" $ propDL canRegister
-    , testProperty "canRegisterNoUnregister" $ expectFailure $ propDL canRegisterNoUnregister
+    , testProperty "canRegisterNoUnregister" $ QC.expectFailure $ propDL canRegisterNoUnregister
     ]
