@@ -4,7 +4,8 @@ import Control.Applicative
 import Control.Arrow (second)
 import Control.Monad
 import Data.Typeable
-import Test.QuickCheck hiding (generate)
+import Test.QuickCheck (Gen, Property, Testable)
+import Test.QuickCheck qualified as QC
 import Test.QuickCheck.DynamicLogic.CanGenerate
 import Test.QuickCheck.DynamicLogic.Quantify
 import Test.QuickCheck.DynamicLogic.SmartShrinking
@@ -359,8 +360,8 @@ forAllUniqueScripts s f k =
     let d = unDynFormula f sz
         n = unsafeNextVarIndex $ vars s
      in case generate chooseUniqueNextStep d n s 500 of
-          Nothing -> counterexample "Generating Non-unique script in forAllUniqueScripts" False
-          Just test -> validDLTest test . applyMonitoring d test . property $ k (scriptFromDL test)
+          Nothing -> QC.counterexample "Generating Non-unique script in forAllUniqueScripts" False
+          Just test -> validDLTest test . applyMonitoring d test . QC.property $ k (scriptFromDL test)
 
 -- | Creates a `Property` from `DynFormula` with some specialised isomorphism for shrinking purpose.
 forAllMappedScripts
@@ -373,22 +374,22 @@ forAllMappedScripts
 forAllMappedScripts to from f k =
   QC.withSize $ \n ->
     let d = unDynFormula f n
-     in forAllShrinkBlind
-          (Smart 0 <$> sized ((from <$>) . generateDLTest d))
+     in QC.forAllShrinkBlind
+          (QC.Smart 0 <$> QC.sized ((from <$>) . generateDLTest d))
           (shrinkSmart ((from <$>) . shrinkDLTest d . to))
-          $ \(Smart _ script) ->
+          $ \(QC.Smart _ script) ->
             withDLScript d k (to script)
 
 withDLScript :: (DynLogicModel s, Testable a) => DynLogic s -> (Actions s -> a) -> DynLogicTest s -> Property
 withDLScript d k test =
-  validDLTest test . applyMonitoring d test . property $ k (scriptFromDL test)
+  validDLTest test . applyMonitoring d test . QC.property $ k (scriptFromDL test)
 
 withDLScriptPrefix :: (DynLogicModel s, Testable a) => DynFormula s -> (Actions s -> a) -> DynLogicTest s -> Property
 withDLScriptPrefix f k test =
   QC.withSize $ \n ->
     let d = unDynFormula f n
         test' = unfailDLTest d test
-     in validDLTest test' . applyMonitoring d test' . property $ k (scriptFromDL test')
+     in validDLTest test' . applyMonitoring d test' . QC.property $ k (scriptFromDL test')
 
 -- | Validate generated test case.
 --
@@ -401,9 +402,9 @@ withDLScriptPrefix f k test =
 validDLTest :: StateModel s => DynLogicTest s -> Property -> Property
 validDLTest test prop =
   case test of
-    DLScript{} -> counterexample (show test) prop
-    Stuck{} -> property Discard
-    _other -> counterexample (show test) False
+    DLScript{} -> QC.counterexample (show test) prop
+    Stuck{} -> QC.property QC.Discard
+    _other -> QC.counterexample (show test) False
 
 generateDLTest :: DynLogicModel s => DynLogic s -> Int -> Gen (DynLogicTest s)
 generateDLTest d size = generate chooseNextStep d 0 (initialStateFor d) size
@@ -516,7 +517,7 @@ nextSteps' gen (ForAll q f) = do
 nextSteps' gen (Monitor _f d) = nextSteps' gen d
 
 chooseOneOf :: [(Double, a)] -> Gen a
-chooseOneOf steps = frequency [(round (w / never), return s) | (w, s) <- steps]
+chooseOneOf steps = QC.frequency [(round (w / never), return s) | (w, s) <- steps]
 
 never :: Double
 never = 1.0e-9
@@ -586,7 +587,7 @@ keepTryingUntil :: Int -> Gen a -> (a -> Bool) -> Gen (Maybe a)
 keepTryingUntil 0 _ _ = return Nothing
 keepTryingUntil n g p = do
   x <- g
-  if p x then return $ Just x else scale (+ 1) $ keepTryingUntil (n - 1) g p
+  if p x then return $ Just x else QC.scale (+ 1) $ keepTryingUntil (n - 1) g p
 
 shrinkDLTest :: DynLogicModel s => DynLogic s -> DynLogicTest s -> [DynLogicTest s]
 shrinkDLTest _ (Looping _) = []
@@ -710,7 +711,7 @@ demonicAlt ds = foldr1 (Alt Demonic) ds
 
 propPruningGeneratedScriptIsNoop :: DynLogicModel s => DynLogic s -> Property
 propPruningGeneratedScriptIsNoop d =
-  forAll (sized $ \n -> choose (1, max 1 n) >>= generateDLTest d) $ \test ->
+  QC.forAll (QC.sized $ \n -> QC.choose (1, max 1 n) >>= generateDLTest d) $ \test ->
     let script = case test of
           BadPrecondition s _ _ -> s
           Looping s -> s
