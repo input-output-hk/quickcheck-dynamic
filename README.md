@@ -26,21 +26,23 @@ The following blog posts and talks provide some more in-depth educational materi
 
 ## Building
 
-### Without nix
+This package can be built using [Cabal](https://www.haskell.org/cabal/) and [GHC](https://www.haskell.org/ghc/).
 
-This package uses [Cabal](https://www.haskell.org/cabal/)-based build. To build from source:
+To build from source ensure both `ghc` and `cabal` executables are in your `PATH`:
 
-* Ensure both `ghc` and `cabal` executables are in your `PATH`.
-  * [ghcup](https://www.haskell.org/ghcup/) is a great way to manage Haskell toolchain.
+  * [ghcup](https://www.haskell.org/ghcup/) is a great way to manage Haskell toolchains
+  * [With nix](#with-nix) explains how to use nix for this
   * quickcheck-dynamic currently requires a GHC version > 8.10
-* Run
-  ```
-  cabal update && cabal build all
-  ```
-* To run tests:
-  ```
-  cabal test all
-  ```
+
+Then run:
+```
+cabal update && cabal build all
+```
+
+To run all tests:
+```
+cabal test all
+```
 
 ### With nix
 
@@ -48,14 +50,14 @@ This repository uses nix to provide a development and build environment.
 
 For instructions on how to install and configure nix (including how to enable access to our binary caches), refer to [this document](https://github.com/input-output-hk/iogx/blob/main/doc/nix-setup-guide.md).
 
-If you already have nix installed and configured, you may enter the development shell by running `nix develop`.
+If you already have nix installed and configured, you may obtain a suitable development shell by running:
+```
+nix develop github:input-output-hk/devx#ghc96
+```
 
-* To enter a shell providing a complete haskell toolchain:
-  ```
-  nix develop
-  ```
-  This can automated using [direnv](https://direnv.net/):
-  ```
-  direnv allow
-  ```
-* Then go back to [Without nix](#without-nix) instructions
+You can also use [direnv](https://direnv.net/) to export the tools to your shell environment:
+```
+direnv allow
+```
+
+Then go back to [Without nix](#without-nix) instructions.
