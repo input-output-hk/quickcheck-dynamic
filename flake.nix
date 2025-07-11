@@ -5,7 +5,7 @@
   inputs = {
 
     iogx = {
-      url = "github:input-output-hk/iogx";
+      url = "github:input-output-hk/iogx/6eb8822d6e12d1c88b2bf0280b405df0eebe7fe6";
       inputs.hackage.follows = "hackage";
       inputs.CHaP.follows = "CHaP";
       inputs.haskell-nix.follows = "haskell-nix";
@@ -31,7 +31,7 @@
   };
 
 
-  outputs = inputs: inputs.iogx.lib.mkFlake { 
+  outputs = inputs: inputs.iogx.lib.mkFlake {
     inherit inputs;
     repoRoot = ./.;
     systems = [ "x86_64-darwin" "x86_64-linux" "aarch64-darwin" ];
