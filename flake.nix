@@ -4,12 +4,9 @@
 
   inputs = {
 
-    iogx = {
-      url = "github:input-output-hk/iogx";
+    haskell-nix = {
+      url = "github:input-output-hk/haskell.nix";
       inputs.hackage.follows = "hackage";
-      inputs.CHaP.follows = "CHaP";
-      inputs.haskell-nix.follows = "haskell-nix";
-      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     nixpkgs.follows = "haskell-nix/nixpkgs";
@@ -24,20 +21,14 @@
       flake = false;
     };
 
-    haskell-nix = {
-      url = "github:input-output-hk/haskell.nix";
-      inputs.hackage.follows = "hackage";
-    };
+    pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
+
+    flake-utils.url = "github:numtide/flake-utils";
   };
 
-
-  outputs = inputs: inputs.iogx.lib.mkFlake { 
-    inherit inputs;
-    repoRoot = ./.;
-    systems = [ "x86_64-darwin" "x86_64-linux" "aarch64-darwin" ];
-    outputs = import ./nix/outputs.nix;
-  };
-
+  outputs = inputs: inputs.flake-utils.lib.eachDefaultSystem (system:
+    import ./nix/outputs.nix { inherit inputs system; }
+  );
 
   nixConfig = {
     extra-substituters = [
