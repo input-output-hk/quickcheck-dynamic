@@ -40,26 +40,25 @@ jobs:
         restore-keys: |
           cabal-${{ runner.os }}-${{ hashFiles('cabal.project', 'default.nix', 'shell.nix') }}
 
-    - name: Prepare nix shell
-      run:
-        nix develop --build
+    - name: Enter nix shell
+      uses: nicknovitski/nix-develop@v1
 
     - name: Formatting
       run:
-        nix develop --command fourmolu --mode check .
+        fourmolu --mode check .
 
     - name: Build
       run: |
-        nix develop --command cabal update
-        nix develop --command cabal build all --ghc-options=-Werror
+        cabal update
+        cabal build all --ghc-options=-Werror
 
     - name: Test
       run:
-        nix develop --command cabal test all
+        cabal test all
 
     - name: Documentation (Haddock)
       run: |
-        nix develop --command .github/workflows/ci-haddock.sh
+        .github/workflows/ci-haddock.sh
 
     - name: Upload Documentation
       uses: actions/upload-artifact@v4

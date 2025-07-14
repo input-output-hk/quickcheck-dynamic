@@ -34,19 +34,18 @@ jobs:
         key: |
           cabal-${{ runner.os }}-${{ hashFiles('cabal.project', 'default.nix', 'shell.nix') }}
 
-    - name: Prepare nix shell
-      run:
-        nix develop --build
+    - name: Enter nix shell
+      uses: nicknovitski/nix-develop@v1
 
     - name: Cabal check
       run: |
         cd quickcheck-dynamic
-        nix develop --command cabal check
+        cabal check
 
     - name: Package
       run: |
-        nix develop --command cabal sdist quickcheck-dynamic
-        nix develop --command cabal haddock --haddock-for-hackage quickcheck-dynamic
+        cabal sdist quickcheck-dynamic
+        cabal haddock --haddock-for-hackage quickcheck-dynamic
 
     - name: Get the version
       id: get_version
