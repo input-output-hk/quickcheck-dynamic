@@ -10,7 +10,7 @@ jobs:
     name: "Build & test"
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2.3.1
+    - uses: actions/checkout@v4
       with:
         repository: input-output-hk/quickcheck-dynamic
         # On pull_request events, we want to check out the latest commit of the
@@ -22,7 +22,7 @@ jobs:
         fetch-depth: 0
 
     - name: Prepare nix
-      uses: cachix/install-nix-action@v22
+      uses: cachix/install-nix-action@v31
       with:
         extra_nix_config: |
           accept-flake-config = true
