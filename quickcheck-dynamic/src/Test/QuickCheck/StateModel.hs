@@ -16,6 +16,8 @@ module Test.QuickCheck.StateModel (
   PostconditionM (..),
   WithUsedVars (..),
   Annotated (..),
+  IsPerformResult,
+  PerformResult,
   Step (..),
   Polarity (..),
   ActionWithPolarity (..),
@@ -26,7 +28,6 @@ module Test.QuickCheck.StateModel (
   pattern (:=?),
   Env,
   Generic,
-  IsPerformResult,
   Options (..),
   monitorPost,
   counterexamplePost,
@@ -44,11 +45,15 @@ module Test.QuickCheck.StateModel (
   shrinkActionsWithOptions,
   defaultOptions,
   moreActions,
+  showWithUsed,
+  performResultToEither,
+  bucket,
+  actionWithPolarity,
+  varsUsedInActions,
 ) where
 
 import Control.Monad
-import Control.Monad.Reader
-import Control.Monad.Writer (WriterT, runWriterT, tell)
+import Control.Monad.Writer
 import Data.Data
 import Data.Kind
 import Data.List
@@ -56,8 +61,7 @@ import Data.Monoid (Endo (..))
 import Data.Set qualified as Set
 import Data.Void
 import GHC.Generics
-import Test.QuickCheck (Arbitrary, Gen, Property, Smart (..), Testable, counterexample, forAllShrink, frequency, property, resize, shrinkList, sized, tabulate)
-import Test.QuickCheck qualified as QC
+import Test.QuickCheck hiding (Some)
 import Test.QuickCheck.DynamicLogic.SmartShrinking
 import Test.QuickCheck.Monadic
 import Test.QuickCheck.StateModel.Variables
@@ -160,15 +164,12 @@ class
 
 deriving instance (forall a. Show (Action state a)) => Show (Any (Action state))
 
-newtype PostconditionM m a = PostconditionM {runPost :: WriterT (Endo Property, Endo Property) m a}
+newtype PostconditionM a = PostconditionM {runPost :: Writer (Endo Property, Endo Property) a}
   deriving (Functor, Applicative, Monad)
 
-instance MonadTrans PostconditionM where
-  lift = PostconditionM . lift
-
-evaluatePostCondition :: Monad m => PostconditionM m Bool -> PropertyM m ()
+evaluatePostCondition :: Monad m => PostconditionM Bool -> PropertyM m ()
 evaluatePostCondition post = do
-  (b, (Endo mon, Endo onFail)) <- run . runWriterT . runPost $ post
+  let (b, (Endo mon, Endo onFail)) = runWriter . runPost $ post
   monitor mon
   unless b $ monitor onFail
   assert b
@@ -176,11 +177,11 @@ evaluatePostCondition post = do
 -- | Apply the property transformation to the property after evaluating
 -- the postcondition. Useful for collecting statistics while avoiding
 -- duplication between `monitoring` and `postcondition`.
-monitorPost :: Monad m => (Property -> Property) -> PostconditionM m ()
+monitorPost :: (Property -> Property) -> PostconditionM ()
 monitorPost m = PostconditionM $ tell (Endo m, mempty)
 
 -- | Acts as `Test.QuickCheck.counterexample` if the postcondition fails.
-counterexamplePost :: Monad m => String -> PostconditionM m ()
+counterexamplePost :: String -> PostconditionM ()
 counterexamplePost c = PostconditionM $ tell (mempty, Endo $ counterexample c)
 
 -- | The result required of `perform` depending on the `Error` type.
@@ -202,7 +203,7 @@ instance {-# OVERLAPPING #-} IsPerformResult Void a where
 instance {-# OVERLAPPABLE #-} (EitherIsh e a ~ Either e a) => IsPerformResult e a where
   performResultToEither = id
 
-class (forall a. Show (Action state a), Monad m) => RunModel state m where
+class (forall a. Show (Action state a), Show (Error state m), Monad m) => RunModel state m where
   -- | The type of errors that actions can throw. If this is defined as anything
   -- other than `Void` `perform` is required to return `Either (Error state) a`
   -- instead of `a`.
@@ -225,14 +226,14 @@ class (forall a. Show (Action state a), Monad m) => RunModel state m where
   -- | Postcondition on the `a` value produced at some step.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
   -- to check the implementation produces expected values.
-  postcondition :: (state, state) -> Action state a -> LookUp -> a -> PostconditionM m Bool
+  postcondition :: (state, state) -> Action state a -> LookUp -> a -> PostconditionM Bool
   postcondition _ _ _ _ = pure True
 
   -- | Postcondition on the result of running a _negative_ `Action`.
   -- The result is `assert`ed and will make the property fail should it be `False`. This is useful
   -- to check the implementation produces e.g. the expected errors or to check that the SUT hasn't
   -- been updated during the execution of the negative action.
-  postconditionOnFailure :: (state, state) -> Action state a -> LookUp -> Either (Error state m) a -> PostconditionM m Bool
+  postconditionOnFailure :: (state, state) -> Action state a -> LookUp -> Either (Error state m) a -> PostconditionM Bool
   postconditionOnFailure _ _ _ _ = pure True
 
   -- | Allows the user to attach additional information to the `Property` at each step of the process.
@@ -286,7 +287,8 @@ instance Show Polarity where
   show PosPolarity = "+"
   show NegPolarity = "-"
 
-data ActionWithPolarity state a = Eq (Action state a) =>
+data ActionWithPolarity state a
+  = Eq (Action state a) =>
   ActionWithPolarity
   { polarAction :: Action state a
   , polarity :: Polarity
@@ -299,7 +301,7 @@ deriving instance Eq (Action state a) => Eq (ActionWithPolarity state a)
 
 data Step state where
   (:=)
-    :: (Typeable a, Eq (Action state a), Show (Action state a))
+    :: (Typeable a, Show a, Eq (Action state a), Show (Action state a))
     => Var a
     -> ActionWithPolarity state a
     -> Step state
@@ -351,12 +353,15 @@ instance Eq (Actions state) where
   Actions as == Actions as' = as == as'
 
 instance StateModel state => Show (Actions state) where
-  show (Actions as) =
-    let as' = WithUsedVars (usedVariables (Actions as)) <$> as
-     in intercalate "\n" $ zipWith (++) ("do " : repeat "   ") (map show as' ++ ["pure ()"])
+  show = showWithUsed mempty
 
-usedVariables :: forall state. StateModel state => Actions state -> VarContext
-usedVariables (Actions as) = go initialAnnotatedState as
+showWithUsed :: StateModel state => VarContext -> Actions state -> String
+showWithUsed ctx (Actions as) =
+  let as' = WithUsedVars (ctx <> varsUsedInActions (Actions as)) <$> as
+   in intercalate "\n" $ zipWith (++) ("do " : repeat "   ") (map show as' ++ ["pure ()" | null as'])
+
+varsUsedInActions :: forall state. StateModel state => Actions state -> VarContext
+varsUsedInActions (Actions as) = go initialAnnotatedState as
   where
     go :: Annotated state -> [Step state] -> VarContext
     go aState [] = allVariables (underlyingState aState)
@@ -438,10 +443,10 @@ generateActionsWithOptions Options{..} = do
           | otherwise = do
               a <- resize m $ computeArbitraryAction s
               case a of
-                Some act ->
+                Some act@ActionWithPolarity{..} ->
                   if computePrecondition s act
                     then return (Just (Some act), rej)
-                    else go (m + 1) n (actionName (polarAction act) : rej)
+                    else go (m + 1) n (actionName polarAction : rej)
 
 shrinkActionsWithOptions :: forall state. StateModel state => Options state -> Actions state -> [Actions state]
 shrinkActionsWithOptions _ (Actions_ rs as) =
@@ -491,7 +496,7 @@ computePrecondition s (ActionWithPolarity a p) =
         && polarPrecondition
 
 computeNextState
-  :: (StateModel state, Typeable a)
+  :: (StateModel state, Typeable a, Show a)
   => Annotated state
   -> ActionWithPolarity state a
   -> Var a
@@ -550,13 +555,6 @@ runActions
   => Actions state
   -> PropertyM m (Annotated state, Env)
 runActions (Actions_ rejected (Smart _ actions)) = do
-  let bucket = \n -> let (a, b) = go n in show a ++ " - " ++ show b
-        where
-          go n
-            | n < 100 = (d * 10, d * 10 + 9)
-            | otherwise = let (a, b) = go d in (a * 10, b * 10 + 9)
-            where
-              d = div n 10
   monitor $ tabulate "# of actions" [show $ bucket $ length actions]
   (finalState, env, names, polars) <- runSteps initialAnnotatedState [] actions
   monitor $ tabulate "Actions" names
@@ -565,6 +563,16 @@ runActions (Actions_ rejected (Smart _ actions)) = do
     monitor $
       tabulate "Actions rejected by precondition" rejected
   return (finalState, env)
+
+bucket :: Int -> String
+bucket n = show a ++ " - " ++ show b
+  where
+    (a, b) = go n
+    go n
+      | n < 100 = (d * 10, d * 10 + 9)
+      | otherwise = let (a, b) = go d in (a * 10, b * 10 + 9)
+      where
+        d = div n 10
 
 -- | Core function to execute a sequence of `Step` given some initial `Env`ironment and `Annotated`
 -- state. Return the list of action names and polarities to work around
@@ -613,7 +621,7 @@ runSteps s env ((v := act) : as) = do
     positiveActionSucceeded ret val = do
       (s', env', stateTransition) <- computeNewState ret
       evaluatePostCondition $
-        postcondition
+        postcondition @state @m
           stateTransition
           action
           (lookUpVar env)
@@ -623,7 +631,7 @@ runSteps s env ((v := act) : as) = do
     negativeActionResult ret = do
       (s', env', stateTransition) <- computeNewState ret
       evaluatePostCondition $
-        postconditionOnFailure
+        postconditionOnFailure @state @m
           stateTransition
           action
           (lookUpVar env)

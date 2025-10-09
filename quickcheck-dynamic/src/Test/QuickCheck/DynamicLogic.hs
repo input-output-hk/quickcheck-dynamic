@@ -60,10 +60,10 @@ instance Monad (DL s) where
 instance MonadFail (DL s) where
   fail = errorDL
 
-action :: (Typeable a, Eq (Action s a), Show (Action s a)) => Action s a -> DL s (Var a)
+action :: (Typeable a, Show a, Eq (Action s a), Show (Action s a)) => Action s a -> DL s (Var a)
 action cmd = DL $ \_ k -> DL.after cmd k
 
-failingAction :: (Typeable a, Eq (Action s a), Show (Action s a)) => Action s a -> DL s ()
+failingAction :: (Typeable a, Show a, Eq (Action s a), Show (Action s a)) => Action s a -> DL s ()
 failingAction cmd = DL $ \_ k -> DL.afterNegative cmd (k ())
 
 anyAction :: DL s ()
@@ -96,7 +96,7 @@ getModelStateDL = DL $ \s k -> k (underlyingState s) s
 getVarContextDL :: DL s VarContext
 getVarContextDL = DL $ \s k -> k (vars s) s
 
-forAllVar :: forall a s. Typeable a => DL s (Var a)
+forAllVar :: forall a s. (Typeable a, Show a) => DL s (Var a)
 forAllVar = do
   xs <- ctxAtType <$> getVarContextDL
   forAllQ $ elementsQ xs
