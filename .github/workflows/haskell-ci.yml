@@ -66,7 +66,6 @@ jobs:
           restore-keys: ${{ matrix.os }}-${{ matrix.ghc-version }}-
       - run: cabal build all
       - run: cabal test all
-      - run: cabal haddock all
 
       - name: Documentation (Haddock)
         if: "${{ matrix.ghc-version == 'latest' }}"
