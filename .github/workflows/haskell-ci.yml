@@ -1,0 +1,63 @@
+name: Haskell-CI
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - 'main'
+  pull_request:
+    branches:
+      - 'main'
+  schedule:
+    - cron: 0 0 * * *
+  workflow_dispatch:
+    inputs:
+      nightly:
+        description: Run with the same settings as a nightly build
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-with-cabal:
+    name: Haskell-CI - Linux - ${{ matrix.ghc-version }}
+
+    strategy:
+      matrix:
+        ghc-version: [latest, 9.12, "9.10", 9.8, 9.6, 9.4, 9.2, 9.0, 8.10]
+        os: [ubuntu-latest]
+      fail-fast: false
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Set NIGHTLY environment variable if the job was triggered by the scheduler
+        if: "${{ github.event_name == 'schedule'
+              || contains(github.event.pull_request.title, 'nightly')
+              || contains(github.event.pull_request.title, 'NIGHTLY')
+              || github.event_name == 'workflow_dispatch' && github.event.inputs.nightly }}"
+        run: |
+          echo "NIGHTLY=true" >> $GITHUB_ENV
+
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: ${{matrix.ghc-version}}
+      - uses: actions/cache/restore@v4
+        with:
+          key: ${{ matrix.os }}-${{ matrix.ghc-version }}-${{ github.sha }}
+          path: ~/.cabal/store
+          restore-keys: ${{ matrix.os }}-${{ matrix.ghc-version }}-
+      - run: cabal install fourmolu-0.19.0.1
+      - run: fourmolu -c .
+      - run: cabal build all
+      - run: cabal test all
+      - run: cabal haddock all
+      - uses: actions/cache/save@v4
+        with:
+          key: ${{ matrix.os }}-${{ matrix.ghc-version }}-${{ github.sha }}
+          path: ~/.cabal/store
