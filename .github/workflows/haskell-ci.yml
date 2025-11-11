@@ -23,6 +23,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  check-formatting:
+    name: Check formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install fourmolu
+        run: |
+          wget https://github.com/fourmolu/fourmolu/releases/download/v0.17.0.0/fourmolu-0.17.0.0-linux-x86_64
+          chmod +x fourmolu-0.17.0.0-linux-x86_64
+          mv fourmolu-0.17.0.0-linux-x86_64 fourmolu
+      - run: ./fourmolu -c .
+
   test-with-cabal:
     name: Haskell-CI - Linux - ${{ matrix.ghc-version }}
 
@@ -52,12 +64,6 @@ jobs:
           key: ${{ matrix.os }}-${{ matrix.ghc-version }}-${{ github.sha }}
           path: ~/.cabal/store
           restore-keys: ${{ matrix.os }}-${{ matrix.ghc-version }}-
-      - name: install fourmolu
-        run: |
-          wget https://github.com/fourmolu/fourmolu/releases/download/v0.17.0.0/fourmolu-0.17.0.0-linux-x86_64
-          chmod +x fourmolu-0.17.0.0-linux-x86_64
-          mv fourmolu-0.17.0.0-linux-x86_64 fourmolu
-      - run: ./fourmolu -c .
       - run: cabal build all
       - run: cabal test all
       - run: cabal haddock all
