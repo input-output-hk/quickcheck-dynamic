@@ -35,26 +35,6 @@ jobs:
           mv fourmolu-0.17.0.0-linux-x86_64 fourmolu
       - run: ./fourmolu -c .
 
-  documentation:
-    name: Documentation
-    needs: [build-test]
-    runs-on: ubuntu-latest
-    steps:
-    - name: Download generated documentation
-      uses: actions/download-artifact@v4
-      with:
-        name: haddocks
-        path: docs
-
-    - name: Publish Documentation
-      if: github.event_name == 'push'
-      uses: peaceiris/actions-gh-pages@v3
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN || github.token }}
-        publish_dir: docs/
-        enable_jekyll: true
-        force_orphan: true
-
   test-with-cabal:
     name: Haskell-CI - Linux - ${{ matrix.ghc-version }}
 
@@ -87,7 +67,40 @@ jobs:
       - run: cabal build all
       - run: cabal test all
       - run: cabal haddock all
+
+      - name: Documentation (Haddock)
+        if: "${{ matrix.ghc-version == 'latest' }}"
+        run: |
+          .github/workflows/ci-haddock.sh
+
+      - name: Upload Documentation
+        if: "${{ matrix.ghc-version == 'latest' }}"
+        uses: actions/upload-artifact@v4
+        with:
+          name: haddocks
+          path: ./docs
+
       - uses: actions/cache/save@v4
         with:
           key: ${{ matrix.os }}-${{ matrix.ghc-version }}-${{ github.sha }}
           path: ~/.cabal/store
+
+  documentation:
+    name: Documentation
+    needs: [test-with-cabal]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download generated documentation
+      uses: actions/download-artifact@v4
+      with:
+        name: haddocks
+        path: docs
+
+    - name: Publish Documentation
+      if: github.event_name == 'push'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN || github.token }}
+        publish_dir: docs/
+        enable_jekyll: true
+        force_orphan: true
