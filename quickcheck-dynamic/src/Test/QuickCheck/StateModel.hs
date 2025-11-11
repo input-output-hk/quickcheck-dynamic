@@ -286,7 +286,8 @@ instance Show Polarity where
   show PosPolarity = "+"
   show NegPolarity = "-"
 
-data ActionWithPolarity state a = Eq (Action state a) =>
+data ActionWithPolarity state a
+  = Eq (Action state a) =>
   ActionWithPolarity
   { polarAction :: Action state a
   , polarity :: Polarity

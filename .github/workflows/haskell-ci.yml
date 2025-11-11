@@ -52,8 +52,12 @@ jobs:
           key: ${{ matrix.os }}-${{ matrix.ghc-version }}-${{ github.sha }}
           path: ~/.cabal/store
           restore-keys: ${{ matrix.os }}-${{ matrix.ghc-version }}-
-      - run: cabal install fourmolu-0.19.0.1
-      - run: fourmolu -c .
+      - name: install fourmolu
+        run: |
+          wget https://github.com/fourmolu/fourmolu/releases/download/v0.17.0.0/fourmolu-0.17.0.0-linux-x86_64
+          chmod +x fourmolu-0.17.0.0-linux-x86_64
+          mv fourmolu-0.17.0.0-linux-x86_64 fourmolu
+      - run: ./fourmolu -c .
       - run: cabal build all
       - run: cabal test all
       - run: cabal haddock all
