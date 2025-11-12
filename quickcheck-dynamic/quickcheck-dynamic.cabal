@@ -6,6 +6,7 @@ license-files:
   LICENSE
   NOTICE
 
+Tested-with: GHC >= 9.0 && < 9.13
 maintainer:         sebastian.nagel@iohk.io
 author:             Ulf Norell
 category:           Testing
