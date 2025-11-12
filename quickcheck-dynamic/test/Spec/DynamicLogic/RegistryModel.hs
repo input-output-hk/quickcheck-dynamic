@@ -259,14 +259,18 @@ prop_parRegistryIOSimPor (IOSimActions as) =
       runPropertyReaderT (runParActions $ as @s) reg
       pure ()
 
+-- NOTE: This is a hack to get around issues with old ghc versions
+data Exists where
+  Ex :: (forall s. IOSim s Property) -> Exists
+
 monadicIOSimPOR_ :: Testable a => (forall s. PropertyM (IOSim s) a) -> Property
-monadicIOSimPOR_ prop = forAllBlind prop' $ \p -> exploreSimTrace id p $ \_ tr ->
+monadicIOSimPOR_ prop = forAllBlind prop' $ \(Ex p) -> exploreSimTrace id p $ \_ tr ->
   either discard id $ traceResult False tr
   where
-    prop' :: Gen (forall s. IOSim s Property)
+    prop' :: Gen Exists
     prop' = do
       Capture eval <- capture
-      pure $ eval $ monadic' prop
+      pure $ Ex $ eval $ monadic' prop
 
 propDL :: DL (RegState IO) () -> Property
 propDL d = forAllDL d prop_Registry
