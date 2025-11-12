@@ -167,6 +167,8 @@ instance GoodMonad m => RunModel (RegState m) (RegM m) where
     counterexample (show res ++ " <- " ++ show act ++ "\n  -- State: " ++ show s')
       . tabulate "Registry size" [show $ Map.size (regs s')]
 
+-- NOTE: We rely on the default implementation of `performPar` here because
+-- `perform` doesn't actually look at the state.
 instance GoodMonad m => RunModelPar (RegState m) (RegM m)
 
 data ShowDict a where

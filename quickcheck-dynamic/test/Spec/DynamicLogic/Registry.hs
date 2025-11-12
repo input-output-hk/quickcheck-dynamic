@@ -11,6 +11,8 @@ import Data.List qualified as List
 
 data Reg m = Reg
   { registered :: [(String, ThreadId m)]
+  -- This is because IOSim doesn't have a way to tell if a thread is alive or
+  -- not
   , aliveThreads :: [ThreadId m]
   }
 
