@@ -1,0 +1,105 @@
+name: Haskell-CI
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - 'main'
+  pull_request:
+    branches:
+      - 'main'
+  schedule:
+    - cron: 0 0 * * *
+  workflow_dispatch:
+    inputs:
+      nightly:
+        description: Run with the same settings as a nightly build
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-formatting:
+    name: Check formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install fourmolu
+        run: |
+          wget https://github.com/fourmolu/fourmolu/releases/download/v0.17.0.0/fourmolu-0.17.0.0-linux-x86_64
+          chmod +x fourmolu-0.17.0.0-linux-x86_64
+          mv fourmolu-0.17.0.0-linux-x86_64 fourmolu
+      - run: ./fourmolu -c .
+
+  test-with-cabal:
+    name: Haskell-CI - Linux - ${{ matrix.ghc-version }}
+
+    strategy:
+      matrix:
+        ghc-version: [latest, 9.12, "9.10", 9.8, 9.6, 9.4, 9.2, 9.0, "8.10"]
+        os: [ubuntu-latest]
+      fail-fast: false
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Set NIGHTLY environment variable if the job was triggered by the scheduler
+        if: "${{ github.event_name == 'schedule'
+              || contains(github.event.pull_request.title, 'nightly')
+              || contains(github.event.pull_request.title, 'NIGHTLY')
+              || github.event_name == 'workflow_dispatch' && github.event.inputs.nightly }}"
+        run: |
+          echo "NIGHTLY=true" >> $GITHUB_ENV
+
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: ${{matrix.ghc-version}}
+      - uses: actions/cache/restore@v4
+        with:
+          key: ${{ matrix.os }}-${{ matrix.ghc-version }}-${{ github.sha }}
+          path: ~/.cabal/store
+          restore-keys: ${{ matrix.os }}-${{ matrix.ghc-version }}-
+      - run: cabal build all
+      - run: cabal test all
+
+      - name: Documentation (Haddock)
+        if: "${{ matrix.ghc-version == 'latest' }}"
+        run: |
+          .github/workflows/ci-haddock.sh
+
+      - name: Upload Documentation
+        if: "${{ matrix.ghc-version == 'latest' }}"
+        uses: actions/upload-artifact@v4
+        with:
+          name: haddocks
+          path: ./docs
+
+      - uses: actions/cache/save@v4
+        with:
+          key: ${{ matrix.os }}-${{ matrix.ghc-version }}-${{ github.sha }}
+          path: ~/.cabal/store
+
+  documentation:
+    name: Documentation
+    needs: [test-with-cabal]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download generated documentation
+      uses: actions/download-artifact@v4
+      with:
+        name: haddocks
+        path: docs
+
+    - name: Publish Documentation
+      if: github.event_name == 'push'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN || github.token }}
+        publish_dir: docs/
+        enable_jekyll: true
+        force_orphan: true

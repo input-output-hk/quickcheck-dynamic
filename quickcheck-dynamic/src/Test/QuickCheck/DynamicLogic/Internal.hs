@@ -592,9 +592,11 @@ keepTryingUntil n g p = do
 shrinkDLTest :: DynLogicModel s => DynLogic s -> DynLogicTest s -> [DynLogicTest s]
 shrinkDLTest _ (Looping _) = []
 shrinkDLTest d tc =
-  [ test | as' <- shrinkScript d (getScript tc), let pruned = pruneDLTest d as'
-                                                     test = makeTestFromPruned d pruned,
-  -- Don't shrink a non-executable test case to an executable one.
+  [ test
+  | as' <- shrinkScript d (getScript tc)
+  , let pruned = pruneDLTest d as'
+        test = makeTestFromPruned d pruned
+  , -- Don't shrink a non-executable test case to an executable one.
   case (tc, test) of
     (DLScript _, _) -> True
     (_, DLScript _) -> False
@@ -619,10 +621,10 @@ shrinkScript = shrink' initialAnnotatedState
       [TestSeqStep (unsafeCoerceVar var := act') ss | Some act'@ActionWithPolarity{} <- computeShrinkAction s act]
         ++ [ TestSeqStep step ss'
            | ss' <-
-              shrink'
-                (nextStateStep step s)
-                (stepDLStep d s step)
-                ss
+               shrink'
+                 (nextStateStep step s)
+                 (stepDLStep d s step)
+                 ss
            ]
     nonstructural _ _ TestSeqStop = []
 
