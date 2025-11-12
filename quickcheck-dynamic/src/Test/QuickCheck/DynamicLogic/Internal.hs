@@ -33,7 +33,7 @@ data DynLogic s
     Stopping (DynLogic s)
   | -- | After a specific action the predicate should hold
     forall a.
-    (Eq (Action s a), Show (Action s a), Typeable a) =>
+    (Eq (Action s a), Show (Action s a), Typeable a, Show a) =>
     After (ActionWithPolarity s a) (Var a -> DynPred s)
   | Error String (DynPred s)
   | -- | Adjust the probability of picking a branch
@@ -66,7 +66,7 @@ afterAny :: (Annotated s -> DynFormula s) -> DynFormula s
 afterAny f = DynFormula $ \n -> AfterAny $ \s -> unDynFormula (f s) n
 
 afterPolar
-  :: (Typeable a, Eq (Action s a), Show (Action s a))
+  :: (Typeable a, Show a, Eq (Action s a), Show (Action s a))
   => ActionWithPolarity s a
   -> (Var a -> Annotated s -> DynFormula s)
   -> DynFormula s
@@ -75,7 +75,7 @@ afterPolar act f = DynFormula $ \n -> After act $ \x s -> unDynFormula (f x s) n
 -- | Given `f` must be `True` after /some/ action.
 -- `f` is passed the state resulting from executing the `Action`.
 after
-  :: (Typeable a, Eq (Action s a), Show (Action s a))
+  :: (Typeable a, Show a, Eq (Action s a), Show (Action s a))
   => Action s a
   -> (Var a -> Annotated s -> DynFormula s)
   -> DynFormula s
@@ -85,7 +85,7 @@ after act f = afterPolar (ActionWithPolarity act PosPolarity) f
 -- `f` is passed the state resulting from executing the `Action`
 -- as a negative action.
 afterNegative
-  :: (Typeable a, Eq (Action s a), Show (Action s a))
+  :: (Typeable a, Show a, Eq (Action s a), Show (Action s a))
   => Action s a
   -> (Annotated s -> DynFormula s)
   -> DynFormula s

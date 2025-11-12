@@ -7,6 +7,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 As a minor extension, we also keep a semantic version for the `UNRELEASED`
 changes.
 
+## UNRELEASED
+
+* **BREAKING**: Removed `m` parameter from `PostConditionM` as this is not generally safe.
+* **BREAKING**: Additional `Show` constraint on the result of actions
+* A new module `Test.QuickCheck.ParallelActions` that implements testing linearizability of a model
+  when running in parallel.
+* Additional `Property` combinators `sometimes` and `always`
+
 ## 4.0.0 - 2025-03-12
 
 * **BREAKING**: Removed `Realized`

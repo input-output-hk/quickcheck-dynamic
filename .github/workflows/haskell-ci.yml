@@ -40,7 +40,7 @@ jobs:
 
     strategy:
       matrix:
-        ghc-version: [latest, 9.12, "9.10", 9.8, 9.6, 9.4, 9.2, 9.0, "8.10"]
+        ghc-version: [latest, 9.12, "9.10", 9.8, 9.6, 9.4, 9.2, 9.0]
         os: [ubuntu-latest]
       fail-fast: false
 

@@ -16,8 +16,11 @@ module Test.QuickCheck.StateModel.Variables (
   isWellTyped,
   allVariables,
   isEmptyCtx,
+  wellTypedIn,
+  unsafeVarIndex,
   unsafeCoerceVar,
   unsafeNextVarIndex,
+  unsafeIndexSet,
 ) where
 
 import Data.Data
@@ -35,7 +38,7 @@ import Test.QuickCheck (Gen, Smart (..), elements)
 
 -- | A symbolic variable for a value of type `a`
 newtype Var a = Var Int
-  deriving (Eq, Ord, Typeable, Data)
+  deriving (Eq, Ord, Data)
 
 -- | Create a fresh symbolic variable with given identifier. While 'Var's are
 -- usually created by action generators, this function can be used for example
@@ -55,7 +58,7 @@ class HasVariables a where
 instance HasVariables a => HasVariables (Smart a) where
   getAllVariables (Smart _ a) = getAllVariables a
 
-instance Typeable a => HasVariables (Var a) where
+instance (Typeable a, Show a) => HasVariables (Var a) where
   getAllVariables = Set.singleton . Some
 
 instance (HasVariables k, HasVariables v) => HasVariables (Map k v) where
@@ -84,7 +87,7 @@ deriving via HasNoVariables Word32 instance HasVariables Word32
 deriving via HasNoVariables Word64 instance HasVariables Word64
 
 data Any f where
-  Some :: (Typeable a, Eq (f a)) => f a -> Any f
+  Some :: (Typeable a, Show a, Eq (f a)) => f a -> Any f
 
 instance Eq (Any f) where
   Some (a :: f a) == Some (b :: f b) =
@@ -110,11 +113,17 @@ instance Show VarContext where
       -- The use of typeRep here is on purpose to avoid printing `Var` unnecessarily.
       showBinding (Some v) = show v ++ " :: " ++ show (typeRep v)
 
+unsafeIndexSet :: VarContext -> Set Int
+unsafeIndexSet (VarCtx ctx) = Set.map (\(Some v) -> unsafeVarIndex v) ctx
+
 isEmptyCtx :: VarContext -> Bool
 isEmptyCtx (VarCtx ctx) = null ctx
 
-isWellTyped :: Typeable a => Var a -> VarContext -> Bool
+isWellTyped :: (Typeable a, Show a) => Var a -> VarContext -> Bool
 isWellTyped v (VarCtx ctx) = not (null ctx) && Some v `Set.member` ctx
+
+wellTypedIn :: HasVariables a => a -> VarContext -> Bool
+wellTypedIn a ctx = all (\(Some v) -> v `isWellTyped` ctx) (getAllVariables a)
 
 -- TODO: check the invariant that no variable index is used
 -- twice at different types. This is generally not an issue
@@ -122,7 +131,7 @@ isWellTyped v (VarCtx ctx) = not (null ctx) && Some v `Set.member` ctx
 -- cause an issue, but it might be good practise to crash
 -- if the invariant is violated anyway as it is evidence that
 -- something is horribly broken at the use site).
-extendContext :: Typeable a => VarContext -> Var a -> VarContext
+extendContext :: (Typeable a, Show a) => VarContext -> Var a -> VarContext
 extendContext (VarCtx ctx) v = VarCtx $ Set.insert (Some v) ctx
 
 allVariables :: HasVariables a => a -> VarContext
@@ -139,6 +148,9 @@ shrinkVar ctx v = filter (< v) $ ctxAtType ctx
 
 unsafeCoerceVar :: Var a -> Var b
 unsafeCoerceVar (Var i) = Var i
+
+unsafeVarIndex :: Var a -> Int
+unsafeVarIndex (Var i) = i
 
 unsafeNextVarIndex :: VarContext -> Int
 unsafeNextVarIndex (VarCtx vs) = 1 + maximum (0 : [i | Some (Var i) <- Set.toList vs])

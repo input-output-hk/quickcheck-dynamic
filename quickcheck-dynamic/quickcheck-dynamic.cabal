@@ -6,6 +6,7 @@ license-files:
   LICENSE
   NOTICE
 
+Tested-with: GHC >= 9.0 && < 9.13
 maintainer:         sebastian.nagel@iohk.io
 author:             Ulf Norell
 category:           Testing
@@ -26,6 +27,9 @@ extra-source-files: CHANGELOG.md
 source-repository head
   type:     git
   location: https://github.com/input-output-hk/quickcheck-dynamic
+
+flag dev
+  default: False
 
 common lang
   default-language:   Haskell2010
@@ -62,6 +66,7 @@ common lang
     -Wall -Wnoncanonical-monad-instances -Wunused-packages
     -Wincomplete-uni-patterns -Wincomplete-record-updates
     -Wredundant-constraints -Widentities -Wno-unused-do-bind
+    -Wno-name-shadowing -Wno-x-partial
 
 library
   import:          lang
@@ -76,6 +81,23 @@ library
     Test.QuickCheck.Extras
     Test.QuickCheck.StateModel
     Test.QuickCheck.StateModel.Variables
+    Test.QuickCheck.ParallelActions
+
+  if flag(dev)
+    hs-source-dirs: test
+    exposed-modules:
+      Spec.DynamicLogic.Counters
+      Spec.DynamicLogic.Registry
+      Spec.DynamicLogic.RegistryModel
+      Test.QuickCheck.DynamicLogic.QuantifySpec
+      Test.QuickCheck.StateModelSpec
+    build-depends:
+      , io-classes
+      , io-sim
+      , stm
+      , tasty
+      , tasty-hunit
+      , tasty-quickcheck
 
   build-depends:
     , base        >=4.7 && <5
@@ -100,6 +122,8 @@ test-suite quickcheck-dynamic-test
   build-depends:
     , base
     , containers
+    , io-classes
+    , io-sim
     , mtl
     , QuickCheck
     , quickcheck-dynamic

@@ -4,10 +4,9 @@
 module Test.QuickCheck.StateModelSpec where
 
 import Control.Monad.Reader (lift)
-import Data.IORef (newIORef)
 import Data.List (isInfixOf)
-import Spec.DynamicLogic.Counters (Counter (..), FailingCounter, SimpleCounter (..))
-import Test.QuickCheck (Property, Result (..), Testable, chatty, checkCoverage, choose, counterexample, cover, noShrinking, property, stdArgs)
+import Spec.DynamicLogic.Counters (FailingCounter, SimpleCounter (..), prop_counter, prop_counter_parIOSimPor, setupCounterState)
+import Test.QuickCheck
 import Test.QuickCheck.Extras (runPropertyReaderT)
 import Test.QuickCheck.Monadic (assert, monadicIO, monitor, pick)
 import Test.QuickCheck.StateModel (
@@ -43,6 +42,9 @@ tests =
     , testProperty
         "moreActions introduces long sequences of actions"
         prop_longSequences
+    , testProperty
+        "IOSimPor finds counterexample in parallel counters"
+        $ expectFailure prop_counter_parIOSimPor
     ]
 
 captureTerminal :: Testable p => p -> IO Result
@@ -50,23 +52,17 @@ captureTerminal p =
   withState stdArgs{chatty = False} $ \st ->
     test st (property p)
 
-prop_counter :: Actions Counter -> Property
-prop_counter as = monadicIO $ do
-  ref <- lift $ newIORef (0 :: Int)
-  runPropertyReaderT (runActions as) ref
-  assert True
-
 prop_returnsFinalState :: Actions SimpleCounter -> Property
 prop_returnsFinalState actions@(Actions as) =
   monadicIO $ do
-    ref <- lift $ newIORef (0 :: Int)
+    ref <- lift $ setupCounterState
     (s, _) <- runPropertyReaderT (runActions actions) ref
     assert $ count (underlyingState s) == length as
 
 prop_variablesIndicesAre1Based :: Actions SimpleCounter -> Property
 prop_variablesIndicesAre1Based actions@(Actions as) =
   noShrinking $ monadicIO $ do
-    ref <- lift $ newIORef (0 :: Int)
+    ref <- lift setupCounterState
     (_, env) <- runPropertyReaderT (runActions actions) ref
     act <- pick $ choose (0, length as - 1)
     monitor $
@@ -81,7 +77,7 @@ prop_variablesIndicesAre1Based actions@(Actions as) =
 prop_failsOnPostcondition :: Actions FailingCounter -> Property
 prop_failsOnPostcondition actions =
   monadicIO $ do
-    ref <- lift $ newIORef (0 :: Int)
+    ref <- lift setupCounterState
     runPropertyReaderT (runActions actions) ref
     assert True
 

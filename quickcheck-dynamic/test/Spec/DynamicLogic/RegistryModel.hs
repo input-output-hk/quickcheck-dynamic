@@ -1,19 +1,28 @@
+{-# LANGUAGE ImpredicativeTypes #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
+
 module Spec.DynamicLogic.RegistryModel where
 
-import Control.Concurrent
-import Control.Exception
+import Control.Concurrent.Class.MonadSTM
+import Control.Monad.Class.MonadFork
+import Control.Monad.Class.MonadTest
+import Control.Monad.Class.MonadThrow
+import Control.Monad.Class.MonadTimer
+import Control.Monad.IOSim
 
 import GHC.Generics
+import Unsafe.Coerce
 
 import Control.Monad.Reader
 import Data.Either
 import Data.List
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Test.QuickCheck (Gen, Property)
-import Test.QuickCheck qualified as QC
+import Data.Typeable
+import Test.QuickCheck as QC hiding (Some)
+import Test.QuickCheck.Gen.Unsafe (Capture (..), capture)
 import Test.QuickCheck.Monadic hiding (assert)
-import Test.QuickCheck.Monadic qualified as QC
 import Test.Tasty hiding (after)
 
 import Test.Tasty.QuickCheck (testProperty)
@@ -21,29 +30,40 @@ import Test.Tasty.QuickCheck (testProperty)
 import Spec.DynamicLogic.Registry
 import Test.QuickCheck.DynamicLogic
 import Test.QuickCheck.Extras
+import Test.QuickCheck.ParallelActions
 import Test.QuickCheck.StateModel
 
-data RegState = RegState
-  { regs :: Map String (Var ThreadId)
-  , dead :: [Var ThreadId]
+type GoodMonad m =
+  ( Typeable (ThreadId m)
+  , Show (ThreadId m)
+  , MonadSTM m
+  , MonadFork m
+  , MonadDelay m
+  , MonadCatch m
+  , MonadThrow (STM m)
+  )
+
+data RegState m = RegState
+  { regs :: Map String (Var (ThreadId m))
+  , dead :: [Var (ThreadId m)]
   }
   deriving (Show, Generic)
 
-deriving instance Show (Action RegState a)
-deriving instance Eq (Action RegState a)
+deriving instance Show (Action (RegState m) a)
+deriving instance Eq (Action (RegState m) a)
 
-instance HasVariables (Action RegState a) where
+instance GoodMonad m => HasVariables (Action (RegState m) a) where
   getAllVariables (Register _ v) = getAllVariables v
   getAllVariables (KillThread v) = getAllVariables v
   getAllVariables _ = mempty
 
-instance StateModel RegState where
-  data Action RegState a where
-    Spawn :: Action RegState ThreadId
-    WhereIs :: String -> Action RegState (Maybe ThreadId)
-    Register :: String -> Var ThreadId -> Action RegState ()
-    Unregister :: String -> Action RegState ()
-    KillThread :: Var ThreadId -> Action RegState ()
+instance GoodMonad m => StateModel (RegState m) where
+  data Action (RegState m) a where
+    Spawn :: Action (RegState m) (ThreadId m)
+    WhereIs :: String -> Action (RegState m) (Maybe (ThreadId m))
+    Register :: String -> Var (ThreadId m) -> Action (RegState m) ()
+    Unregister :: String -> Action (RegState m) ()
+    KillThread :: Var (ThreadId m) -> Action (RegState m) ()
 
   precondition s (Register name tid) =
     name `Map.notMember` regs s
@@ -56,8 +76,8 @@ instance StateModel RegState where
   validFailingAction _ _ = True
 
   arbitraryAction ctx s =
-    let threadIdCtx = ctxAtType @ThreadId ctx
-     in QC.frequency $
+    let threadIdCtx = ctxAtType @(ThreadId m) ctx
+     in frequency $
           [
             ( max 1 $ 10 - length threadIdCtx
             , return $ Some Spawn
@@ -107,20 +127,21 @@ instance StateModel RegState where
       }
   nextState s WhereIs{} _ = s
 
-type RegM = ReaderT Registry IO
+type RegM m = ReaderT (Registry m) m
 
-instance RunModel RegState RegM where
-  type Error RegState RegM = SomeException
+instance GoodMonad m => RunModel (RegState m) (RegM m) where
+  type Error (RegState m) (RegM m) = String
 
   perform _ Spawn _ = do
-    tid <- lift $ forkIO (threadDelay 10000000)
+    reg <- ask
+    tid <- lift $ spawn reg (threadDelay 10000000)
     pure $ Right tid
   perform _ (Register name tid) env = do
     reg <- ask
-    lift $ try $ register reg name (env tid)
+    lift $ fmap (either (Left . displayException . toException @SomeException) Right) $ try $ register reg name (env tid)
   perform _ (Unregister name) _ = do
     reg <- ask
-    lift $ try $ unregister reg name
+    lift $ fmap (either (Left . displayException . toException @SomeException) Right) $ try $ unregister reg name
   perform _ (WhereIs name) _ = do
     reg <- ask
     res <- lift $ whereis reg name
@@ -136,30 +157,40 @@ instance RunModel RegState RegM where
 
   postconditionOnFailure (s, _) act@Register{} _ res = do
     monitorPost $
-      QC.tabulate
+      tabulate
         "Reason for -Register"
         [why s act]
     pure $ isLeft res
   postconditionOnFailure _s _ _ _ = pure True
 
   monitoring (_s, s') act@(showDictAction -> ShowDict) _ res =
-    QC.counterexample (show res ++ " <- " ++ show act ++ "\n  -- State: " ++ show s')
-      . QC.tabulate "Registry size" [show $ Map.size (regs s')]
+    counterexample (show res ++ " <- " ++ show act ++ "\n  -- State: " ++ show s')
+      . tabulate "Registry size" [show $ Map.size (regs s')]
+
+-- NOTE: We rely on the default implementation of `performPar` here because
+-- `perform` doesn't actually look at the state.
+instance GoodMonad m => RunModelPar (RegState m) (RegM m)
 
 data ShowDict a where
   ShowDict :: Show a => ShowDict a
 
-showDictAction :: forall a. Action RegState a -> ShowDict a
+showDictAction :: forall m a. GoodMonad m => Action (RegState m) a -> ShowDict a
 showDictAction Spawn{} = ShowDict
 showDictAction WhereIs{} = ShowDict
 showDictAction Register{} = ShowDict
 showDictAction Unregister{} = ShowDict
 showDictAction KillThread{} = ShowDict
 
-instance DynLogicModel RegState where
+instance GoodMonad m => DynLogicModel (RegState m) where
   restricted _ = False
 
-why :: RegState -> Action RegState a -> String
+instance Forking (IOSim s) where
+  forkThread io = do
+    t <- atomically newEmptyTMVar
+    forkIO $ io >>= atomically . putTMVar t
+    return $ atomically $ takeTMVar t
+
+why :: (RegState m) -> Action (RegState m) a -> String
 why s (Register name tid) =
   unwords $
     ["name already registered" | name `Map.member` regs s]
@@ -168,13 +199,13 @@ why s (Register name tid) =
 why _ _ = "(impossible)"
 
 arbitraryName :: Gen String
-arbitraryName = QC.elements allNames
+arbitraryName = elements allNames
 
-probablyRegistered :: RegState -> Gen String
-probablyRegistered s = QC.oneof $ map pure (Map.keys $ regs s) ++ [arbitraryName]
+probablyRegistered :: (RegState m) -> Gen String
+probablyRegistered s = oneof $ map pure (Map.keys $ regs s) ++ [arbitraryName]
 
-probablyUnregistered :: RegState -> Gen String
-probablyUnregistered s = QC.elements $ allNames ++ (allNames \\ Map.keys (regs s))
+probablyUnregistered :: (RegState m) -> Gen String
+probablyUnregistered s = elements $ allNames ++ (allNames \\ Map.keys (regs s))
 
 shrinkName :: String -> [String]
 shrinkName name = [n | n <- allNames, n < name]
@@ -182,20 +213,71 @@ shrinkName name = [n | n <- allNames, n < name]
 allNames :: [String]
 allNames = ["a", "b", "c", "d", "e"]
 
-prop_Registry :: Actions RegState -> Property
+prop_Registry :: Actions (RegState IO) -> Property
 prop_Registry s =
   monadicIO $ do
-    monitor $ QC.counterexample "\nExecution\n"
+    monitor $ counterexample "\nExecution\n"
     reg <- lift setupRegistry
     runPropertyReaderT (runActions s) reg
-    QC.assert True
+    return True
 
-propDL :: DL RegState () -> Property
+prop_parRegistry :: ParallelActions (RegState IO) -> Property
+prop_parRegistry as =
+  monadicIO $ do
+    reg <- lift setupRegistry
+    runPropertyReaderT (runParActions as) reg
+
+newtype IOSimActions = IOSimActions (forall s. ParallelActions (RegState (IOSim s)))
+
+instance Arbitrary IOSimActions where
+  arbitrary = do
+    Capture eval <- capture
+    pure $ IOSimActions (eval arbitrary)
+
+  shrink (IOSimActions acts) = [IOSimActions (unsafeCoerce acts) | acts <- shrink acts]
+
+instance Show IOSimActions where
+  show (IOSimActions acts) = show acts
+
+prop_parRegistryIOSim :: IOSimActions -> Property
+prop_parRegistryIOSim (IOSimActions as) = monadicIOSim_ prop
+  where
+    prop :: forall s. PropertyM (IOSim s) ()
+    prop = do
+      reg <- lift setupRegistry
+      runPropertyReaderT (runParActions $ as @s) reg
+      pure ()
+
+prop_parRegistryIOSimPor :: IOSimActions -> Property
+prop_parRegistryIOSimPor (IOSimActions as) =
+  monadicIOSimPOR_ prop
+  where
+    prop :: forall s. PropertyM (IOSim s) ()
+    prop = do
+      reg <- lift setupRegistry
+      lift exploreRaces
+      runPropertyReaderT (runParActions $ as @s) reg
+      pure ()
+
+-- NOTE: This is a hack to get around issues with old ghc versions
+data Exists where
+  Ex :: (forall s. IOSim s Property) -> Exists
+
+monadicIOSimPOR_ :: Testable a => (forall s. PropertyM (IOSim s) a) -> Property
+monadicIOSimPOR_ prop = forAllBlind prop' $ \(Ex p) -> exploreSimTrace id p $ \_ tr ->
+  either discard id $ traceResult False tr
+  where
+    prop' :: Gen Exists
+    prop' = do
+      Capture eval <- capture
+      pure $ Ex $ eval $ monadic' prop
+
+propDL :: DL (RegState IO) () -> Property
 propDL d = forAllDL d prop_Registry
 
 -- DL helpers
 
-unregisterNameAndTid :: String -> Var ThreadId -> DL RegState ()
+unregisterNameAndTid :: String -> Var (ThreadId m) -> DL (RegState m) ()
 unregisterNameAndTid name tid = do
   s <- getModelStateDL
   sequence_
@@ -204,7 +286,7 @@ unregisterNameAndTid name tid = do
     , name' == name || tid' == tid
     ]
 
-unregisterTid :: Var ThreadId -> DL RegState ()
+unregisterTid :: Var (ThreadId m) -> DL (RegState m) ()
 unregisterTid tid = do
   s <- getModelStateDL
   sequence_
@@ -213,50 +295,50 @@ unregisterTid tid = do
     , tid' == tid
     ]
 
-getAlive :: DL RegState [Var ThreadId]
+getAlive :: forall m. GoodMonad m => DL (RegState m) [Var (ThreadId m)]
 getAlive = do
   s <- getModelStateDL
   ctx <- getVarContextDL
-  pure $ ctxAtType @ThreadId ctx \\ dead s
+  pure $ ctxAtType @(ThreadId m) ctx \\ dead s
 
-pickThread :: DL RegState (Var ThreadId)
+pickThread :: forall m. GoodMonad m => DL (RegState m) (Var (ThreadId m))
 pickThread = do
-  tids <- ctxAtType @ThreadId <$> getVarContextDL
+  tids <- ctxAtType @(ThreadId m) <$> getVarContextDL
   forAllQ $ elementsQ tids
 
-pickAlive :: DL RegState (Var ThreadId)
+pickAlive :: GoodMonad m => DL (RegState m) (Var (ThreadId m))
 pickAlive = do
   alive <- getAlive
   forAllQ $ elementsQ alive
 
-pickFreshName :: DL RegState String
+pickFreshName :: DL (RegState m) String
 pickFreshName = do
   used <- Map.keys . regs <$> getModelStateDL
   forAllQ $ elementsQ (allNames \\ used)
 
 -- test that the registry never contains more than k processes
 
-regLimit :: Int -> DL RegState ()
+regLimit :: Int -> DL (RegState m) ()
 regLimit k = do
   anyActions_
   assertModel "Too many processes" $ \s -> Map.size (regs s) <= k
 
 -- test that we can register a pid that is not dead, if we unregister the name first.
 
-canRegisterAlive :: String -> DL RegState ()
+canRegisterAlive :: GoodMonad m => String -> DL (RegState m) ()
 canRegisterAlive name = do
   tid <- pickAlive
   unregisterNameAndTid name tid
   action $ Register name tid
   pure ()
 
-canRegister :: DL RegState ()
+canRegister :: GoodMonad m => DL (RegState m) ()
 canRegister = do
   anyActions_
   name <- pickFreshName
   canRegisterAlive name
 
-canRegisterNoUnregister :: DL RegState ()
+canRegisterNoUnregister :: GoodMonad m => DL (RegState m) ()
 canRegisterNoUnregister = do
   anyActions_
   name <- pickFreshName
@@ -269,7 +351,8 @@ tests =
   testGroup
     "registry model example"
     [ testProperty "prop_Registry" $ prop_Registry
-    , testProperty "moreActions 10 $ prop_Registry" $ moreActions 10 prop_Registry
+    , testProperty "moreActions 10 $ prop_Registry" $ moreActions 10 $ prop_Registry
     , testProperty "canRegister" $ propDL canRegister
-    , testProperty "canRegisterNoUnregister" $ QC.expectFailure $ propDL canRegisterNoUnregister
+    , testProperty "canRegisterNoUnregister" $ expectFailure $ propDL canRegisterNoUnregister
+    , testProperty "prop_parRegistryIOSimPor" $ expectFailure $ withMaxSuccess 1000 $ discardAfter 1000 $ prop_parRegistryIOSimPor
     ]
