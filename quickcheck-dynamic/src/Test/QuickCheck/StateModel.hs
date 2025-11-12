@@ -53,7 +53,7 @@ module Test.QuickCheck.StateModel (
 ) where
 
 import Control.Monad
-import Control.Monad.Writer
+import Control.Monad.Writer hiding (Any)
 import Data.Data
 import Data.Kind
 import Data.List
