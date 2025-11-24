@@ -354,5 +354,5 @@ tests =
     , testProperty "moreActions 10 $ prop_Registry" $ moreActions 10 $ prop_Registry
     , testProperty "canRegister" $ propDL canRegister
     , testProperty "canRegisterNoUnregister" $ expectFailure $ propDL canRegisterNoUnregister
-    , testProperty "prop_parRegistryIOSimPor" $ expectFailure $ withMaxSuccess 1000 $ discardAfter 1000 $ prop_parRegistryIOSimPor
+    , testProperty "prop_parRegistryIOSimPor" $ expectFailure $ withMaxSuccess 10000 $ discardAfter 1000 $ prop_parRegistryIOSimPor
     ]
