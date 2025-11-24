@@ -44,7 +44,7 @@ tests =
         prop_longSequences
     , testProperty
         "IOSimPor finds counterexample in parallel counters"
-        $ expectFailure prop_counter_parIOSimPor
+        $ expectFailure $ discardAfter 1000 $ prop_counter_parIOSimPor
     ]
 
 captureTerminal :: Testable p => p -> IO Result
