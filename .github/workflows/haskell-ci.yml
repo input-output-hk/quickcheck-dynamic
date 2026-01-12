@@ -64,7 +64,7 @@ jobs:
           key: ${{ matrix.os }}-${{ matrix.ghc-version }}-${{ github.sha }}
           path: ~/.cabal/store
           restore-keys: ${{ matrix.os }}-${{ matrix.ghc-version }}-
-      - if: ${{ matrix.ghc-version }} == latest
+      - if: ${{ matrix.ghc-version == 'latest' }}
         run: cabal configure --allow-newer=base
       - run: cabal build all
       - run: cabal test all
