@@ -31,6 +31,15 @@ source-repository head
 flag dev
   default: False
 
+-- TODO: this is a temporary measure while we wait
+-- for `io-sim` to update it's hackage bounds. Currently
+-- 1.10 erroneously specifies `>= 1.9` when that doesn't work
+-- on ghc 9.14.
+flag io-sim-1-10
+  description: Use io-sim 1.10 or later
+  default: True
+  manual: False
+
 common lang
   default-language:   Haskell2010
   default-extensions:
@@ -91,9 +100,15 @@ library
       Spec.DynamicLogic.RegistryModel
       Test.QuickCheck.DynamicLogic.QuantifySpec
       Test.QuickCheck.StateModelSpec
+    if flag(io-sim-1-10)
+      build-depends:
+        , io-classes >= 1.10
+        , io-sim     >= 1.10
+    else
+      build-depends:
+        , io-classes >= 1.1
+        , io-sim     >= 1.1 && < 1.10
     build-depends:
-      , io-classes
-      , io-sim
       , stm
       , tasty
       , tasty-hunit
@@ -122,8 +137,6 @@ test-suite quickcheck-dynamic-test
   build-depends:
     , base
     , containers
-    , io-classes
-    , io-sim
     , mtl
     , QuickCheck
     , quickcheck-dynamic
@@ -131,3 +144,11 @@ test-suite quickcheck-dynamic-test
     , tasty
     , tasty-hunit
     , tasty-quickcheck
+  if flag(io-sim-1-10)
+    build-depends:
+      , io-classes >= 1.10
+      , io-sim     >= 1.10
+  else
+    build-depends:
+      , io-classes >= 1.1
+      , io-sim     >= 1.1 && < 1.10
