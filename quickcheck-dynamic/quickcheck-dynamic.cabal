@@ -31,6 +31,10 @@ source-repository head
 flag dev
   default: False
 
+-- TODO: this is a temporary measure while we wait
+-- for `io-sim` to update it's hackage bounds. Currently
+-- 1.10 erroneously specifies `>= 1.9` when that doesn't work
+-- on ghc 9.14.
 flag io-sim-1-10
   description: Use io-sim 1.10 or later
   default: True
