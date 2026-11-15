@@ -27,6 +27,7 @@ module Test.QuickCheck.DynamicLogic (
   forAllDL,
   forAllMappedDL,
   forAllUniqueDL,
+  runDL,
   DL.DynLogicModel (..),
   module Test.QuickCheck.DynamicLogic.Quantify,
 ) where
@@ -130,6 +131,10 @@ forAllQ q = DL $ \s k -> DL.forAllQ q $ \x -> k x s
 forAllNonVariableQ :: QuantifyConstraints (HasNoVariables a) => Quantification a -> DL s a
 forAllNonVariableQ q = DL $ \s k -> DL.forAllQ (hasNoVariablesQ q) $ \(HasNoVariables x) -> k x s
 
+-- | The formula a `DL` program denotes, from the given starting state. With
+-- "Test.QuickCheck.DynamicLogic.Internal" it lets a client walk the program
+-- itself, e.g. to replay a recorded test case against the program as it is
+-- now (`forAllDL` is `forAllScripts` over @runDL initialAnnotatedState@).
 runDL :: Annotated s -> DL s () -> DL.DynFormula s
 runDL s dl = unDL dl s $ \_ _ -> DL.passTest
 
