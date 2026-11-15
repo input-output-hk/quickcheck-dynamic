@@ -14,6 +14,9 @@ changes.
 * A new module `Test.QuickCheck.ParallelActions` that implements testing linearizability of a model
   when running in parallel.
 * Additional `Property` combinators `sometimes` and `always`
+* Export `runDL` from `Test.QuickCheck.DynamicLogic`: the formula a `DL` program denotes, so a
+  client can walk it with `Test.QuickCheck.DynamicLogic.Internal` (to replay a recorded test case,
+  for example).
 
 ## 4.0.0 - 2025-03-12
 
